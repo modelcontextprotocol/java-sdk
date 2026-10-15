@@ -24,6 +24,7 @@ import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
 import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider;
@@ -42,11 +43,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 
 import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Timeout(15)
 class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationTests {
@@ -56,6 +59,8 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 	private static final String CUSTOM_SSE_ENDPOINT = "/somePath/sse";
 
 	private static final String CUSTOM_MESSAGE_ENDPOINT = "/otherPath/mcp/message";
+
+	protected static final int MAX_REQUEST_SIZE = 2048;
 
 	// Tomcat is started once for the whole class; each test swaps in its own transport
 	private static final TomcatTestUtil.DelegatingServlet MCP_SERVLET = new TomcatTestUtil.DelegatingServlet();
@@ -130,6 +135,51 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testRejectsWhenContentLengthHeaderExceedsLimit(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		String inputSchema = """
+					{
+						"type": "object",
+						"properties": {
+							"message": { "type": "string" }
+						},
+						"required": ["message"]
+					}
+				""";
+
+		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(McpSchema.Tool.builder("tool1", McpJsonDefaults.getMapper(), inputSchema)
+				.description("tool1 description")
+				.build())
+			.callHandler((exchange, request) -> McpSchema.CallToolResult.builder()
+				.addContent(McpSchema.TextContent.builder(request.arguments().get("message").toString()).build())
+				.build())
+			.build();
+
+		var mcpServer = prepareSyncServerBuilder()
+			.capabilities(McpSchema.ServerCapabilities.builder().tools(false).build())
+			.tools(tool1)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			String oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1);
+
+			mcpClient.initialize();
+			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
+
+			assertThatThrownBy(() -> mcpClient.callTool(
+					McpSchema.CallToolRequest.builder("tool1").arguments(Map.of("message", oversizedBody)).build()))
+				.isInstanceOf(RuntimeException.class)
+				.hasMessageContaining("413");
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@Test
