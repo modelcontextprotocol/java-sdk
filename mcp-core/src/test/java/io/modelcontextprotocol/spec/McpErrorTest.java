@@ -14,7 +14,7 @@ class McpErrorTest {
 		String uri = "file:///nonexistent.txt";
 		McpError mcpError = McpError.RESOURCE_NOT_FOUND.apply(uri);
 		assertNotNull(mcpError.getJsonRpcError());
-		assertEquals(-32002, mcpError.getJsonRpcError().code());
+		assertEquals(McpSchema.ErrorCodes.INVALID_PARAMS, mcpError.getJsonRpcError().code());
 		assertEquals("Resource not found", mcpError.getJsonRpcError().message());
 		assertEquals(Map.of("uri", uri), mcpError.getJsonRpcError().data());
 	}
