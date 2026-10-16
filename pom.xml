@@ -335,7 +335,7 @@
 						<configuration>
 							<publishingServerId>central</publishingServerId>
 							<excludeArtifacts>
-								mcp-parent,conformance-tests,client-jdk-http-client,client-spring-http-client,server-servlet
+								mcp-parent,conformance-tests,client-jdk-http-client,client-spring-http-client,server-servlet,server-servlet-modern
 							</excludeArtifacts>
 							<autoPublish>true</autoPublish>
 						</configuration>

@@ -42,7 +42,7 @@ jobs:
           ./mvnw --batch-mode \
             -Prelease \
             -Pjavadoc \
-            -pl '!conformance-tests,!conformance-tests/client-jdk-http-client,!conformance-tests/client-spring-http-client,!conformance-tests/server-servlet' \
+            -pl '!conformance-tests,!conformance-tests/client-jdk-http-client,!conformance-tests/client-spring-http-client,!conformance-tests/server-servlet,!conformance-tests/server-servlet-modern' \
             clean deploy
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
