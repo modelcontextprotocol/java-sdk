@@ -32,9 +32,6 @@ jobs:
         run: ./mvnw -pl mcp-test -am -Pjackson2 test
 
       # Deploy runs all previous maven goals, including test and verify
-      # Conformance tests are not published, and they break javadoc:aggregate: its forked
-      # compile lifecycle never produces mcp classes (compiled at prepare-package), so their
-      # dependency on mcp falls back to Maven Central, where the release does not exist yet.
       # Use the wrapper (Maven 3.9.x): with Maven 3.10, central-publishing 0.7.0 leaves
       # maven-metadata-local.xml files in the bundle, and Central rejects it.
       - name: Publish to Maven Central
@@ -42,7 +39,6 @@ jobs:
           ./mvnw --batch-mode \
             -Prelease \
             -Pjavadoc \
-            -pl '!conformance-tests,!conformance-tests/client-jdk-http-client,!conformance-tests/client-spring-http-client,!conformance-tests/server-servlet,!conformance-tests/server-servlet-modern' \
             clean deploy
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
