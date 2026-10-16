@@ -29,8 +29,12 @@ jobs:
         with:
           node-version: '20'
 
+      # Conformance tests are not published, and they break javadoc:aggregate: its forked
+      # compile lifecycle never produces mcp classes (compiled at prepare-package), so their
+      # dependency on mcp falls back to the local Maven repository, where the current
+      # snapshot may not exist (e.g. right after a version bump, on a Maven cache miss).
       - name: Generate Java docs
-        run: ./mvnw -Pjavadoc -B javadoc:aggregate
+        run: ./mvnw -Pjavadoc -B -pl '!conformance-tests,!conformance-tests/client-jdk-http-client,!conformance-tests/client-spring-http-client,!conformance-tests/server-servlet' javadoc:aggregate
 
       - name: Jackson 2 Integration Tests
         run: ./mvnw -pl mcp-test -am -Pjackson2 test
@@ -45,6 +49,7 @@ jobs:
             -Pjavadoc \
             -Prelease \
             --batch-mode \
+            -pl '!conformance-tests,!conformance-tests/client-jdk-http-client,!conformance-tests/client-spring-http-client,!conformance-tests/server-servlet' \
             --update-snapshots deploy \
             -Dmaven.repository.credentialScope=id
 
