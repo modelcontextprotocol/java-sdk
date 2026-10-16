@@ -29,9 +29,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Generate Java docs
-        run: ./mvnw -Pjavadoc -B javadoc:aggregate
-
       - name: Jackson 2 Integration Tests
         run: ./mvnw -pl mcp-test -am -Pjackson2 test
 
