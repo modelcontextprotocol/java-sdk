@@ -92,6 +92,12 @@ public class McpAsyncServer {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpAsyncServer.class);
 
+	/**
+	 * Maximum number of resource URIs a single session may subscribe to. Prevents a
+	 * client from growing the resource subscriptions map without bound.
+	 */
+	private static final int MAX_RESOURCE_SUBSCRIPTIONS_PER_SESSION = 1024;
+
 	private final McpServerTransportProviderBase mcpTransportProvider;
 
 	private final McpJsonMapper jsonMapper;
@@ -782,6 +788,25 @@ public class McpAsyncServer {
 					});
 			String uri = subscribeRequest.uri();
 			String sessionId = exchange.sessionId();
+
+			// Validate the URI against the registered resources and resource templates
+			// before accepting the subscription.
+			if (this.findResourceSpecification(uri).isEmpty() && this.findResourceTemplateSpecification(uri).isEmpty()) {
+				return Mono.error(RESOURCE_NOT_FOUND.apply(uri));
+			}
+
+			// Cap the number of resource subscriptions per session to prevent a client
+			// from growing the subscriptions map without bound.
+			long sessionSubscriptions = this.resourceSubscriptions.values()
+				.stream()
+				.filter(subscribedSessions -> subscribedSessions.contains(sessionId))
+				.count();
+			if (sessionSubscriptions >= MAX_RESOURCE_SUBSCRIPTIONS_PER_SESSION) {
+				return Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
+					.message("Resource subscription limit exceeded for session: " + sessionId)
+					.build());
+			}
+
 			this.resourceSubscriptions.computeIfAbsent(uri, k -> Collections.newSetFromMap(new ConcurrentHashMap<>()))
 				.add(sessionId);
 			logger.debug("Session {} subscribed to resource URI: {}", sessionId, uri);
