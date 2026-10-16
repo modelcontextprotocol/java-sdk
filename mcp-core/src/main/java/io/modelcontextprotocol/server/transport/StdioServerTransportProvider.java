@@ -12,9 +12,13 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -239,17 +243,17 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 
 								logger.debug("Received JSON message: {}", line);
 
+								McpSchema.JSONRPCMessage message;
 								try {
-									McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper,
-											line);
-									if (!this.inboundSink.tryEmitNext(message).isSuccess()) {
-										// logIfNotClosing("Failed to enqueue message");
-										break;
-									}
-
+									message = McpSchema.deserializeJsonRpcMessage(jsonMapper, line);
 								}
 								catch (Exception e) {
 									logIfNotClosing("Error processing inbound message", e);
+									sendInvalidMessageResponse(line);
+									continue;
+								}
+								if (!this.inboundSink.tryEmitNext(message).isSuccess()) {
+									// logIfNotClosing("Failed to enqueue message");
 									break;
 								}
 							}
@@ -275,6 +279,31 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 					}
 				});
 			}
+		}
+
+		private void sendInvalidMessageResponse(String line) {
+			Object id = null;
+			int code = McpSchema.ErrorCodes.PARSE_ERROR;
+			try {
+				// Reparse only failed messages as any JSON value, distinguishing syntax
+				// errors from valid JSON that failed envelope validation.
+				Object value = jsonMapper.readValue(line, Object.class);
+				code = McpSchema.ErrorCodes.INVALID_REQUEST;
+				if (value instanceof Map<?, ?> map) {
+					Object requestId = map.get("id");
+					if (requestId instanceof String || requestId instanceof Integer || requestId instanceof Long) {
+						id = requestId;
+					}
+				}
+			}
+			catch (IOException | IllegalArgumentException e) {
+				// The complete line is not valid JSON. Its request ID cannot be known.
+			}
+			String message = code == McpSchema.ErrorCodes.PARSE_ERROR ? "Parse error" : "Invalid Request";
+			// Use the normal outbound queue so errors cannot interleave with replies.
+			sendMessage(new InvalidMessageResponse(McpSchema.JSONRPC_VERSION, id,
+					new McpSchema.JSONRPCResponse.JSONRPCError(code, message)))
+				.block();
 		}
 
 		/**
@@ -365,6 +394,17 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 			}
 		}
 
+	}
+
+	/**
+	 * Transport-only error envelope for input that cannot be decoded as an MCP message.
+	 * Unlike ordinary MCP responses, it must retain an explicit null ID when the request
+	 * identifier cannot be established.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	private record InvalidMessageResponse(@JsonProperty("jsonrpc") String jsonrpc,
+			@JsonProperty("id") @JsonInclude(JsonInclude.Include.ALWAYS) Object id,
+			@JsonProperty("error") McpSchema.JSONRPCResponse.JSONRPCError error) implements JSONRPCMessage {
 	}
 
 }
