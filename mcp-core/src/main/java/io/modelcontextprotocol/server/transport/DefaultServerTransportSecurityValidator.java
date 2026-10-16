@@ -89,7 +89,7 @@ public final class DefaultServerTransportSecurityValidator
 			else if (allowed.endsWith(":*")) {
 				// Wildcard port pattern: "http://example.com:*"
 				String baseOrigin = allowed.substring(0, allowed.length() - 2);
-				if (origin.equals(baseOrigin) || origin.startsWith(baseOrigin + ":")) {
+				if (origin.equals(baseOrigin) || matchesWithPort(origin, baseOrigin)) {
 					return;
 				}
 			}
@@ -121,13 +121,35 @@ public final class DefaultServerTransportSecurityValidator
 			else if (allowed.endsWith(":*")) {
 				// Wildcard port pattern: "example.com:*"
 				String baseHost = allowed.substring(0, allowed.length() - 2);
-				if (host.equals(baseHost) || host.startsWith(baseHost + ":")) {
+				if (host.equals(baseHost) || matchesWithPort(host, baseHost)) {
 					return;
 				}
 			}
 		}
 
 		throw new ServerTransportSecurityException(421, "Invalid Host header");
+	}
+
+	/**
+	 * Checks that {@code value} is {@code base} followed by {@code ":"} and a non-empty,
+	 * ASCII-digits-only port. A bare prefix match would also accept values such as
+	 * {@code localhost:evil.com} or {@code localhost:@evil.com}.
+	 */
+	private static boolean matchesWithPort(String value, String base) {
+		if (!value.startsWith(base + ":")) {
+			return false;
+		}
+		int portStart = base.length() + 1;
+		if (portStart == value.length()) {
+			return false;
+		}
+		for (int i = portStart; i < value.length(); i++) {
+			char c = value.charAt(i);
+			if (c < '0' || c > '9') {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
