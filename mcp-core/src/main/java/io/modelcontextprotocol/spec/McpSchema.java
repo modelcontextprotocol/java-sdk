@@ -18,6 +18,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
@@ -5355,7 +5356,8 @@ public final class McpSchema {
 	 *
 	 * @param level The severity levels. The minimum log level is set by the client.
 	 * @param logger The logger that generated the message.
-	 * @param data JSON-serializable logging data.
+	 * @param data Logging data as text. The wire format may carry any JSON value; on
+	 * deserialization non-string values are coerced to their JSON text form.
 	 * @param meta See specification for notes on _meta usage
 	 * <p>
 	 * Note: {@code level} and {@code data} are required by the MCP specification.
@@ -5375,24 +5377,46 @@ public final class McpSchema {
 			Assert.notNull(data, "data must not be null");
 		}
 
+		/**
+		 * Coerce notification {@code data} to a string while keeping the public API as
+		 * {@link String}. The MCP spec allows any JSON value; servers such as FastMCP
+		 * send objects (for example {@code {"msg":"...","extra":null}}). Non-string
+		 * values are serialized to JSON text so deserialization does not fail.
+		 */
+		private static String coerceDataToString(Object data) {
+			if (data == null) {
+				return null;
+			}
+			if (data instanceof String stringData) {
+				return stringData;
+			}
+			try {
+				return McpJsonDefaults.getMapper().writeValueAsString(data);
+			}
+			catch (IOException ex) {
+				throw new IllegalArgumentException("Failed to serialize logging notification data to JSON text", ex);
+			}
+		}
+
 		@JsonCreator
 		static LoggingMessageNotification fromJson(@JsonProperty("level") LoggingLevel level,
-				@JsonProperty("logger") String loggerName, @JsonProperty("data") String data,
+				@JsonProperty("logger") String loggerName, @JsonProperty("data") Object data,
 				@JsonProperty("_meta") Map<String, Object> meta) {
-			if (level == null || data == null) {
+			String dataText = coerceDataToString(data);
+			if (level == null || dataText == null) {
 				List<String> missing = new ArrayList<>();
 				if (level == null) {
 					missing.add("level -> INFO");
 					level = LoggingLevel.INFO;
 				}
-				if (data == null) {
+				if (dataText == null) {
 					missing.add("data -> ''");
-					data = "";
+					dataText = "";
 				}
 				McpSchema.logger.warn("LoggingMessageNotification: missing required fields during deserialization: {}",
 						String.join(", ", missing));
 			}
-			return new LoggingMessageNotification(level, loggerName, data, meta);
+			return new LoggingMessageNotification(level, loggerName, dataText, meta);
 		}
 
 		// backwards compatibility constructor
