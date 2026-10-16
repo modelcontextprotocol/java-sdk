@@ -2,7 +2,11 @@ name: Publish Snapshot
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+      - 0.18.x
+      - 1.1.x
+      - 2.1.x
 
 jobs:
   build:
