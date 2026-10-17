@@ -498,7 +498,7 @@ class ResponseBodyHandlers {
 				// valueless `data:` line still marks the event as carrying data and gets
 				// dispatched with empty data. Servers send such an event to prime a
 				// stream, and dropping it leaves the request it answers hanging.
-				String value = line.substring(5).trim();
+				String value = fieldValue(line, 5);
 				// Measured before appending, so that an event carrying exactly
 				// maxSize of data is accepted: the trailing separator below is
 				// stripped again before the event is emitted.
@@ -509,7 +509,7 @@ class ResponseBodyHandlers {
 				data.append(value).append('\n');
 			}
 			else if (line.startsWith("id:")) {
-				String value = line.substring(3).trim();
+				String value = fieldValue(line, 3);
 				// The spec ignores an id carrying a NULL, and an empty id resets the last
 				// event ID, which leaves nothing to resume from.
 				if (value.indexOf('\0') == -1) {
@@ -517,7 +517,7 @@ class ResponseBodyHandlers {
 				}
 			}
 			else if (line.startsWith("event:")) {
-				String value = line.substring(6).trim();
+				String value = fieldValue(line, 6);
 				event = value.isEmpty() ? null : value;
 			}
 			else if (line.startsWith(":")) {
@@ -529,6 +529,15 @@ class ResponseBodyHandlers {
 				logger.debug("Ignoring unknown SSE field line: {}", line);
 			}
 			return Optional.empty();
+		}
+
+		private static String fieldValue(String line, int offset) {
+			// SSE removes only one optional U+0020 after the colon; all other
+			// leading and trailing whitespace belongs to the field value.
+			if (line.length() > offset && line.charAt(offset) == ' ') {
+				offset++;
+			}
+			return line.substring(offset);
 		}
 
 		/**
@@ -543,7 +552,9 @@ class ResponseBodyHandlers {
 			if (data.isEmpty()) {
 				return Optional.empty();
 			}
-			SseEvent result = new SseEvent(id, type != null ? type : DEFAULT_EVENT_TYPE, data.toString().trim());
+			// Remove only the final LF appended by the parser, preserving the payload.
+			SseEvent result = new SseEvent(id, type != null ? type : DEFAULT_EVENT_TYPE,
+					data.substring(0, data.length() - 1));
 			data.setLength(0);
 			return Optional.of(result);
 		}
