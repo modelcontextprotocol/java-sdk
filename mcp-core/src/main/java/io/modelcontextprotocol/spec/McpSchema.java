@@ -320,6 +320,7 @@ public final class McpSchema {
 
 		public JSONRPCResponse {
 			Assert.hasText(jsonrpc, "jsonrpc must not be empty");
+			Assert.isTrue(JSONRPC_VERSION.equals(jsonrpc), "jsonrpc must be 2.0");
 			Assert.notNull(id, "MCP responses MUST include an ID - null IDs are not allowed");
 			Assert.isTrue(id instanceof String || id instanceof Integer || id instanceof Long,
 					"MCP responses MUST have an ID that is either a string or integer");

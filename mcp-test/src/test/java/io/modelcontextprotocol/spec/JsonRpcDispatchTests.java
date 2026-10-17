@@ -6,6 +6,7 @@ package io.modelcontextprotocol.spec;
 
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.util.Map;
@@ -79,6 +80,28 @@ class JsonRpcDispatchTests {
 		assertThat(resp.error()).isNotNull();
 		assertThat(resp.error().code()).isEqualTo(-32601);
 		assertThat(resp.result()).isNull();
+	}
+
+	@Test
+	void rejectsSuccessResponseWithInvalidJsonRpcVersion() {
+		String json = """
+				{"jsonrpc":"1.0","id":"req-1","result":{"content":[{"type":"text","text":"hi"}]}}
+				""";
+
+		assertThatThrownBy(() -> McpSchema.deserializeJsonRpcMessage(mapper, json)).rootCause()
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("jsonrpc must be 2.0");
+	}
+
+	@Test
+	void rejectsErrorResponseWithInvalidJsonRpcVersion() {
+		String json = """
+				{"jsonrpc":"1.0","id":"req-1","error":{"code":-32601,"message":"Method not found"}}
+				""";
+
+		assertThatThrownBy(() -> McpSchema.deserializeJsonRpcMessage(mapper, json)).rootCause()
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("jsonrpc must be 2.0");
 	}
 
 	@Test
