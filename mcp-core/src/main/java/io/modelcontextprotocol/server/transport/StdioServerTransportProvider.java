@@ -174,7 +174,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		@Override
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
 
-			return Mono.zip(inboundReady.asMono(), outboundReady.asMono()).then(Mono.defer(() -> {
+			return Mono.when(inboundReady.asMono(), outboundReady.asMono()).then(Mono.defer(() -> {
 				try {
 					outboundSink.emitNext(message, Sinks.EmitFailureHandler.busyLooping(Duration.ofMillis(100)));
 					return Mono.empty();
