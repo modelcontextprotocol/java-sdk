@@ -434,6 +434,15 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			AsyncContext asyncContext = request.startAsync();
 			asyncContext.setTimeout(0);
 
+			// Commit the status line and headers now. They were only sent together with
+			// the
+			// first SSE event, so a client that waits for the response before it starts
+			// reading (Node's fetch/undici, mcp-remote) timed out on an idle server: the
+			// request was accepted but nothing was written until the server had something
+			// to say. Flushing here makes the stream visible immediately, the same way
+			// HttpServletMcpTransport does for the stateless transport.
+			response.flushBuffer();
+
 			HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
 					sessionId, asyncContext, response.getWriter());
 
