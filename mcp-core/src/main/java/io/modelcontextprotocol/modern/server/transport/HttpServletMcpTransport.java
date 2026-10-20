@@ -35,6 +35,7 @@ import io.modelcontextprotocol.modern.server.McpTransportResponse;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.server.transport.DefaultServerTransportSecurityValidator;
 import io.modelcontextprotocol.server.transport.HeaderAccessor;
+import io.modelcontextprotocol.server.transport.HttpServletRequestUtils;
 import io.modelcontextprotocol.server.transport.ServerHttpHeaderValidator;
 import io.modelcontextprotocol.server.transport.ServerTransportSecurityException;
 import io.modelcontextprotocol.util.Assert;
@@ -183,6 +184,11 @@ public class HttpServletMcpTransport extends HttpServlet {
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
+			return;
+		}
+		if (!HttpServletRequestUtils.isJsonContentType(request.getContentType())) {
+			response.sendError(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE,
+					"Unsupported Media Type: Content-Type must be application/json");
 			return;
 		}
 		if (request.getContentLengthLong() > this.requestMaxSize) {

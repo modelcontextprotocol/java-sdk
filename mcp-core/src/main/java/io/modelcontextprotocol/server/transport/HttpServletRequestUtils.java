@@ -16,7 +16,7 @@ import jakarta.servlet.http.HttpServletRequest;
  *
  * @author Daniel Garnier-Moiroux
  */
-final class HttpServletRequestUtils {
+public final class HttpServletRequestUtils {
 
 	private static final String APPLICATION_JSON = "application/json";
 
@@ -35,7 +35,7 @@ final class HttpServletRequestUtils {
 	 * @param contentType The {@code Content-Type} header value, may be {@code null}
 	 * @return {@code true} if the media type is {@code application/json}
 	 */
-	static boolean isJsonContentType(String contentType) {
+	public static boolean isJsonContentType(String contentType) {
 		if (contentType == null) {
 			return false;
 		}
