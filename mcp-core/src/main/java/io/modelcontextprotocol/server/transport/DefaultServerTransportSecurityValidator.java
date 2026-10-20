@@ -131,25 +131,25 @@ public final class DefaultServerTransportSecurityValidator
 	}
 
 	/**
-	 * Checks that {@code value} is {@code base} followed by {@code ":"} and a non-empty,
-	 * ASCII-digits-only port. A bare prefix match would also accept values such as
-	 * {@code localhost:evil.com} or {@code localhost:@evil.com}.
+	 * Checks that {@code actual} is {@code allowed} followed by {@code ":"} and a valid
+	 * port: 1 to 5 ASCII digits, in the range 1-65535.
 	 */
-	private static boolean matchesWithPort(String value, String base) {
-		if (!value.startsWith(base + ":")) {
+	private static boolean matchesWithPort(String actual, String allowed) {
+		if (!actual.startsWith(allowed + ":")) {
 			return false;
 		}
-		int portStart = base.length() + 1;
-		if (portStart == value.length()) {
+		String port = actual.substring(allowed.length() + 1);
+		if (port.isEmpty() || port.length() > 5) {
 			return false;
 		}
-		for (int i = portStart; i < value.length(); i++) {
-			char c = value.charAt(i);
+		for (int i = 0; i < port.length(); i++) {
+			char c = port.charAt(i);
 			if (c < '0' || c > '9') {
 				return false;
 			}
 		}
-		return true;
+		int portNumber = Integer.parseInt(port);
+		return portNumber >= 1 && portNumber <= 65535;
 	}
 
 	/**

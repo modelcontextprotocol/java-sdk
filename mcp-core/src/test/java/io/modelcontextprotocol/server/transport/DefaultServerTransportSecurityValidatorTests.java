@@ -121,10 +121,19 @@ class DefaultServerTransportSecurityValidatorTests {
 			}
 
 			@ParameterizedTest
-			@ValueSource(strings = { "http://localhost:evil.com", "http://localhost:3000.evil.com",
-					"http://localhost:@evil.com", "http://localhost:", "http://localhost:80a", "http://localhost: 80",
-					"http://localhost:8080/path" })
-			void nonNumericPortWithWildcard(String origin) {
+			@ValueSource(strings = { "http://localhost:1", "http://localhost:65535" })
+			void boundaryPortsWithWildcard(String origin) {
+				var accessor = originAccessor(origin);
+
+				assertThatCode(() -> wildcardValidator.validate(accessor)).doesNotThrowAnyException();
+			}
+
+			@ParameterizedTest
+			@ValueSource(strings = { "http://localhost:", "http://localhost:evil.com", "http://localhost:3000.evil.com",
+					"http://localhost:@evil.com", "http://localhost:80a", "http://localhost: 80",
+					"http://localhost:3000/path", "http://localhost:0", "http://localhost:65536",
+					"http://localhost:123456", "http://localhost:-1", "http://localhost:+80" })
+			void invalidPortWithWildcard(String origin) {
 				var accessor = originAccessor(origin);
 
 				assertThatThrownBy(() -> wildcardValidator.validate(accessor)).isEqualTo(INVALID_ORIGIN);
@@ -286,9 +295,18 @@ class DefaultServerTransportSecurityValidatorTests {
 			}
 
 			@ParameterizedTest
-			@ValueSource(strings = { "localhost:evil.com", "localhost:80.evil.com", "localhost:@evil.com", "localhost:",
-					"localhost:80a", "localhost: 80" })
-			void nonNumericPort(String host) {
+			@ValueSource(strings = { "localhost:1", "localhost:65535" })
+			void boundaryPorts(String host) {
+				var accessor = hostAccessor(host);
+
+				assertThatCode(() -> wildcardHostValidator.validate(accessor)).doesNotThrowAnyException();
+			}
+
+			@ParameterizedTest
+			@ValueSource(strings = { "localhost:", "localhost:evil.com", "localhost:3000.evil.com",
+					"localhost:@evil.com", "localhost:80a", "localhost: 80", "localhost:3000/path", "localhost:0",
+					"localhost:65536", "localhost:123456", "localhost:-1", "localhost:+80" })
+			void invalidPort(String host) {
 				var accessor = hostAccessor(host);
 
 				assertThatThrownBy(() -> wildcardHostValidator.validate(accessor)).isEqualTo(INVALID_HOST);
