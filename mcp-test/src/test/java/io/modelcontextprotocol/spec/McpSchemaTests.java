@@ -17,6 +17,7 @@ import net.javacrumbs.jsonunit.core.Option;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -2727,6 +2728,60 @@ public class McpSchemaTests {
 		assertThat(notification.level()).isEqualTo(McpSchema.LoggingLevel.INFO);
 		assertThat(notification.logger()).isEqualTo("my-logger");
 		assertThat(notification.data()).isEmpty();
+	}
+
+	@Test
+	void testLoggingMessageNotificationDeserializationWithNullData() throws Exception {
+		McpSchema.LoggingMessageNotification notification = JSON_MAPPER.readValue("""
+				{"level":"info","data":null}""", McpSchema.LoggingMessageNotification.class);
+
+		assertThat(notification.data()).isEmpty();
+	}
+
+	@Test
+	void testLoggingMessageNotificationDeserializationWithStringData() throws Exception {
+		McpSchema.LoggingMessageNotification notification = JSON_MAPPER.readValue("""
+				{"level":"warning","logger":"my-logger","data":"plain text"}""",
+				McpSchema.LoggingMessageNotification.class);
+
+		assertThat(notification.level()).isEqualTo(McpSchema.LoggingLevel.WARNING);
+		assertThat(notification.logger()).isEqualTo("my-logger");
+		assertThat(notification.data()).isEqualTo("plain text");
+	}
+
+	@Test
+	void testLoggingMessageNotificationDeserializationWithObjectData() throws Exception {
+		// FastMCP sends {"msg": ..., "extra": ...} for every ctx.log() call
+		McpSchema.LoggingMessageNotification notification = JSON_MAPPER.readValue("""
+				{
+				  "level": "info",
+				  "logger": "server",
+				  "data": {
+				    "msg": "working",
+				    "extra": {
+				      "user": "bob",
+				      "ids": [1, 2 ]
+				    }
+				  }
+				}""", McpSchema.LoggingMessageNotification.class);
+
+		assertThat(notification.level()).isEqualTo(McpSchema.LoggingLevel.INFO);
+		assertThat(notification.logger()).isEqualTo("server");
+		assertThat(notification.data()).isEqualTo("{msg=working, extra={user=bob, ids=[1, 2]}}");
+	}
+
+	@ParameterizedTest
+	@CsvSource(delimiter = '|', textBlock = """
+			[1,"two",true] | [1, two, true]
+			42             | 42
+			1.5            | 1.5
+			true           | true
+			""")
+	void testLoggingMessageNotificationDeserializationWithNonStringData(String data, String expected) throws Exception {
+		McpSchema.LoggingMessageNotification notification = JSON_MAPPER.readValue("""
+				{"level":"debug","data":%s}""".formatted(data), McpSchema.LoggingMessageNotification.class);
+
+		assertThat(notification.data()).isEqualTo(expected);
 	}
 
 	// --- Icon tests (SEP-973) ---

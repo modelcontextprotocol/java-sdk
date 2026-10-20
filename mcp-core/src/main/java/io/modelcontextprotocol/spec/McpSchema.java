@@ -5355,7 +5355,10 @@ public final class McpSchema {
 	 *
 	 * @param level The severity levels. The minimum log level is set by the client.
 	 * @param logger The logger that generated the message.
-	 * @param data JSON-serializable logging data.
+	 * @param data The logging data, as a string. The MCP specification allows any JSON
+	 * value; when a non-string value is received, it is converted with
+	 * {@link Object#toString()}. The resulting format is intended for human readers and
+	 * is not guaranteed to be valid JSON.
 	 * @param meta See specification for notes on _meta usage
 	 * <p>
 	 * Note: {@code level} and {@code data} are required by the MCP specification.
@@ -5377,8 +5380,9 @@ public final class McpSchema {
 
 		@JsonCreator
 		static LoggingMessageNotification fromJson(@JsonProperty("level") LoggingLevel level,
-				@JsonProperty("logger") String loggerName, @JsonProperty("data") String data,
+				@JsonProperty("logger") String loggerName, @JsonProperty("data") Object rawData,
 				@JsonProperty("_meta") Map<String, Object> meta) {
+			String data = rawData != null ? rawData.toString() : null;
 			if (level == null || data == null) {
 				List<String> missing = new ArrayList<>();
 				if (level == null) {
