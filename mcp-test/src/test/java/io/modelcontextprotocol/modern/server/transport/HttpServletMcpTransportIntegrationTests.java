@@ -67,6 +67,11 @@ class HttpServletMcpTransportIntegrationTests {
 
 	private static final Tool ECHO_TOOL = Tool.builder("echo", ToolsUtils.EMPTY_JSON_SCHEMA).build();
 
+	private static final Tool ROUTED_TOOL = Tool
+		.builder("routed", Map.of("type", "object", "properties",
+				Map.of("region", Map.of("type", "string", "x-mcp-header", "Region"))))
+		.build();
+
 	private static final int QUOTA_EXCEEDED = -32000;
 
 	private static final CountDownLatch LISTEN_CANCELLED = new CountDownLatch(1);
@@ -85,6 +90,9 @@ class HttpServletMcpTransportIntegrationTests {
 
 			@Override
 			public Mono<Tool> find(McpRequestContext ctx, String name) {
+				if ("routed".equals(name)) {
+					return Mono.just(ROUTED_TOOL);
+				}
 				return "does-not-exist".equals(name) ? Mono.empty()
 						: Mono.just(Tool.builder(name, ToolsUtils.EMPTY_JSON_SCHEMA).build());
 			}
@@ -93,6 +101,7 @@ class HttpServletMcpTransportIntegrationTests {
 			public Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, CallToolRequest request) {
 				McpAsyncResponse<CallToolOutcome> response = switch (request.name()) {
 					case "echo" -> McpAsyncResponse.result(text("echo:" + request.name()));
+					case "routed" -> McpAsyncResponse.result(text("routed:" + request.arguments().get("region")));
 					case "streamer" -> McpAsyncResponse
 						.streaming(notifier -> notifier.progress(1.0, 1.0, "done").thenReturn(text("streamed")));
 					case "slow-streamer" -> McpAsyncResponse
@@ -338,6 +347,50 @@ class HttpServletMcpTransportIntegrationTests {
 		@SuppressWarnings("unchecked")
 		Map<String, Object> error = (Map<String, Object>) parsed.get("error");
 		assertThat(((Number) error.get("code")).intValue()).isEqualTo(ErrorCodes.HEADER_MISMATCH);
+	}
+
+	private static HttpRequest.Builder callRouted(String region) throws IOException {
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("name", "routed");
+		params.put("arguments", Map.of("region", region));
+		return post("tools/call", params).header("Mcp-Name", "routed");
+	}
+
+	@Test
+	void matchingMcpParamHeaderIsAccepted() throws Exception {
+		HttpRequest request = callRouted(" us-west1").header("mcp-param-region", "=?base64?IHVzLXdlc3Qx?=").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(response.body()).contains("routed: us-west1").doesNotContain("\"error\"");
+	}
+
+	@Test
+	void mismatchedMcpParamHeaderIsRejected() throws Exception {
+		HttpRequest request = callRouted("us-west1").header("Mcp-Param-Region", "eu-west1").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThat(errorCode(response)).isEqualTo(ErrorCodes.HEADER_MISMATCH);
+	}
+
+	@Test
+	void missingMcpParamHeaderIsRejected() throws Exception {
+		HttpRequest request = callRouted("us-west1").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThat(errorCode(response)).isEqualTo(ErrorCodes.HEADER_MISMATCH);
+	}
+
+	@Test
+	void malformedBase64McpParamHeaderIsRejected() throws Exception {
+		HttpRequest request = callRouted("Hello").header("Mcp-Param-Region", "=?base64?SGVsbG8?=").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThat(errorCode(response)).isEqualTo(ErrorCodes.HEADER_MISMATCH);
 	}
 
 	@Test
