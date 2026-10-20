@@ -211,6 +211,9 @@ class HttpServletMcpTransportIntegrationTests {
 		assertThat(response.statusCode()).isEqualTo(200);
 		assertThat(response.headers().firstValue("Content-Type"))
 			.hasValueSatisfying(v -> assertThat(v).contains("text/event-stream"));
+		assertThat(response.headers().firstValue("Cache-Control")).contains("no-cache, no-transform");
+		assertThat(response.headers().firstValue("X-Accel-Buffering")).contains("no");
+		assertThat(response.headers().firstValue("Connection")).isEmpty();
 		assertThat(response.body()).contains("notifications/progress");
 		assertThat(response.body()).contains("\"result\"");
 	}

@@ -345,7 +345,7 @@ public class HttpServletMcpTransport extends HttpServlet {
 	private static PrintWriter startEventStream(HttpServletResponse response) throws IOException {
 		response.setContentType(TEXT_EVENT_STREAM);
 		response.setCharacterEncoding(UTF_8);
-		response.setHeader("Cache-Control", "no-cache");
+		response.setHeader("Cache-Control", "no-cache, no-transform");
 		response.setHeader("X-Accel-Buffering", "no");
 		response.setStatus(HttpServletResponse.SC_OK);
 		response.flushBuffer();
