@@ -41,7 +41,7 @@ public class HttpClientStreamableHttpSyncClientTests extends AbstractMcpSyncClie
 
 	@Override
 	protected McpClientTransport createMcpTransport() {
-		return HttpClientStreamableHttpTransport.builder(host).httpRequestCustomizer(requestCustomizer).build();
+		return HttpClientStreamableHttpTransport.builder(host).addHttpRequestCustomizer(requestCustomizer).build();
 	}
 
 	@BeforeAll

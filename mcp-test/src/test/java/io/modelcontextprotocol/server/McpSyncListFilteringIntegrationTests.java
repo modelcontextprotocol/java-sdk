@@ -78,7 +78,7 @@ class McpSyncListFilteringIntegrationTests<SYNC_TOOL_SPEC, ASYNC_TOOL_SPEC> {
 	void setUp() {
 		var clientTransport = HttpClientStreamableHttpTransport.builder(baseUrl)
 			.jsonMapper(McpJsonDefaults.getMapper())
-			.httpRequestCustomizer((builder, method, endpoint, body, context) -> requestCustomizer.customize(builder,
+			.addHttpRequestCustomizer((builder, method, endpoint, body, context) -> requestCustomizer.customize(builder,
 					method, endpoint, body, context))
 			.openConnectionOnStartup(true)
 			.build();

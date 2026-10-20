@@ -12,11 +12,15 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -175,6 +179,28 @@ class McpAsyncClientTest {
 				assertThat(client.getClientCapabilities().elicitation()).isNull();
 			}
 
+		}
+
+	}
+
+	@Nested
+	class Roots {
+
+		@Test
+		void addAndRemoveRootWithUnsetListChanged() {
+			McpClientTransport transport = mock(McpClientTransport.class);
+			when(transport.protocolVersions()).thenReturn(List.of("2024-11-05"));
+			var client = McpClient.async(transport)
+				.capabilities(McpSchema.ClientCapabilities.builder().roots(null).build())
+				.jsonSchemaValidator(mock(JsonSchemaValidator.class))
+				.build();
+
+			assertThat(client.getClientCapabilities().roots().listChanged()).isNull();
+
+			StepVerifier.create(client.addRoot(new McpSchema.Root("file:///added", "added"))).verifyComplete();
+			StepVerifier.create(client.removeRoot("file:///added")).verifyComplete();
+
+			verify(transport, never()).sendMessage(any());
 		}
 
 	}

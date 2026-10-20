@@ -104,14 +104,14 @@ public class SyncServerMcpTransportContextIntegrationTests {
 
 	private final McpSyncClient streamableClient = McpClient
 		.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-			.httpRequestCustomizer(clientRequestCustomizer)
+			.addHttpRequestCustomizer(clientRequestCustomizer)
 			.build())
 		.transportContextProvider(clientContextProvider)
 		.build();
 
 	private final McpSyncClient sseClient = McpClient
 		.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
-			.httpRequestCustomizer(clientRequestCustomizer)
+			.addHttpRequestCustomizer(clientRequestCustomizer)
 			.build())
 		.transportContextProvider(clientContextProvider)
 		.build();

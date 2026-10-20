@@ -36,7 +36,7 @@ enables standardized integration between AI models and tools.
 - Supports Synchronous and Asynchronous programming paradigms
 - Pluggable JSON serialization (Jackson 2.x and Jackson 3.x)
 - Pluggable authorization hooks for server security
-- DNS rebinding protection with Host/Origin header validation
+- DNS rebinding protection with Host/Origin header validation (opt-in, see [HTTP Transport Security](server.md#http-transport-security))
 
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides default STDIO, SSE, and Streamable HTTP client and server transport implementations without requiring external web frameworks.

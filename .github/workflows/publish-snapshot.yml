@@ -2,7 +2,11 @@ name: Publish Snapshot
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+      - 0.18.x
+      - 1.1.x
+      - 2.1.x
 
 jobs:
   build:
@@ -29,11 +33,8 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Generate Java docs
-        run: mvn -Pjavadoc -B javadoc:aggregate
-
       - name: Jackson 2 Integration Tests
-        run: mvn -pl mcp-test -am -Pjackson2 test
+        run: ./mvnw -pl mcp-test -am -Pjackson2 test
 
       - name: Build with Maven and deploy to Sonatype snapshot repository
         env:
@@ -41,7 +42,12 @@ jobs:
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
         run: |
-          mvn -Pjavadoc -Prelease --batch-mode --update-snapshots deploy
+          ./mvnw \
+            -Pjavadoc \
+            -Prelease \
+            --batch-mode \
+            --update-snapshots deploy \
+            -Dmaven.repository.credentialScope=id
 
       - name: Capture project version
-        run: echo PROJECT_VERSION=$(mvn help:evaluate -Dexpression=project.version --quiet -DforceStdout) >> $GITHUB_ENV
+        run: echo PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version --quiet -DforceStdout) >> $GITHUB_ENV

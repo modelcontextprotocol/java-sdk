@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -30,6 +31,7 @@ import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
@@ -48,7 +50,10 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -59,6 +64,7 @@ import reactor.test.scheduler.VirtualTimeScheduler;
 import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 /**
@@ -87,6 +93,8 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	// Sweeping is slower than keep-alive, so that a failed ping doesn't immediately
 	// result in a session sweep
 	private final Duration SESSION_SWEEP_INTERVAL = KEEP_ALIVE_INTERVAL.multipliedBy(2);
+
+	protected static final int MAX_REQUEST_SIZE = 2048;
 
 	private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -312,6 +320,106 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 
 		var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
 		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testRejectsWhenContentLengthHeaderExceedsLimit(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		String inputSchema = """
+					{
+						"type": "object",
+						"properties": {
+							"message": { "type": "string" }
+						},
+						"required": ["message"]
+					}
+				""";
+
+		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(McpSchema.Tool.builder("tool1", McpJsonDefaults.getMapper(), inputSchema)
+				.description("tool1 description")
+				.build())
+			.callHandler((exchange, request) -> McpSchema.CallToolResult.builder()
+				.addContent(McpSchema.TextContent.builder(request.arguments().get("message").toString()).build())
+				.build())
+			.build();
+
+		var mcpServer = prepareSyncServerBuilder()
+			.capabilities(McpSchema.ServerCapabilities.builder().tools(false).build())
+			.tools(tool1)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			String oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1);
+
+			mcpClient.initialize();
+			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
+
+			assertThatThrownBy(() -> mcpClient.callTool(
+					McpSchema.CallToolRequest.builder("tool1").arguments(Map.of("message", oversizedBody)).build()))
+				.isInstanceOf(RuntimeException.class)
+				.hasMessageContaining("413");
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "text/plain;charset=UTF-8", "application/x-www-form-urlencoded", "multipart/form-data" })
+	void rejectsInitializeWithNonJsonContentType(String contentType) throws Exception {
+		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+
+		// CORS-safelisted content types can be sent cross-origin by a browser without a
+		// preflight, so they must be rejected before a session is created
+		var initialize = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+			.header("Content-Type", contentType)
+			.header("Accept", "text/event-stream, application/json")
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"jsonrpc":"2.0","id":"init","method":"initialize","params":{
+					"protocolVersion":"2025-06-18","capabilities":{},
+					"clientInfo":{"name":"test-client","version":"1.0.0"}}}"""))
+			.build();
+
+		var response = httpClient.send(initialize, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
+		assertThat(response.body()).contains("Unsupported Media Type: Content-Type must be application/json");
+		assertThat(response.headers().firstValue(HttpHeaders.MCP_SESSION_ID)).isEmpty();
+	}
+
+	@Test
+	void rejectsToolCallWithNonJsonContentType() throws Exception {
+		var toolCalled = new AtomicBoolean();
+		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
+			.tools(McpServerFeatures.AsyncToolSpecification.builder()
+				.tool(McpSchema.Tool.builder("tool1", EMPTY_JSON_SCHEMA).build())
+				.callHandler((exchange, request) -> {
+					toolCalled.set(true);
+					return Mono.just(McpSchema.CallToolResult.builder().build());
+				})
+				.build())
+			.build();
+		var sessionId = initializeSession(httpClient);
+
+		var toolCall = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+			.header("Content-Type", "text/plain;charset=UTF-8")
+			.header("Accept", "text/event-stream, application/json")
+			.header(HttpHeaders.MCP_SESSION_ID, sessionId)
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"jsonrpc":"2.0","id":"call-1","method":"tools/call","params":{"name":"tool1","arguments":{}}}"""))
+			.build();
+
+		var response = httpClient.send(toolCall, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
+		assertThat(response.body()).contains("Unsupported Media Type: Content-Type must be application/json");
+		assertThat(toolCalled).isFalse();
 	}
 
 	@Test

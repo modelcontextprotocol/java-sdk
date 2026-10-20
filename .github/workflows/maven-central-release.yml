@@ -29,12 +29,14 @@ jobs:
       # Deploy runs the integration tests, but only with Jackson 3
       # We run Jackson 2 IT manually
       - name: Jackson 2 Integration Tests
-        run: mvn -pl mcp-test -am -Pjackson2 test
+        run: ./mvnw -pl mcp-test -am -Pjackson2 test
 
       # Deploy runs all previous maven goals, including test and verify
+      # Use the wrapper (Maven 3.9.x): with Maven 3.10, central-publishing 0.7.0 leaves
+      # maven-metadata-local.xml files in the bundle, and Central rejects it.
       - name: Publish to Maven Central
         run: |
-          mvn --batch-mode \
+          ./mvnw --batch-mode \
             -Prelease \
             -Pjavadoc \
             clean deploy

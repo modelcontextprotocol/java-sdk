@@ -18,7 +18,30 @@ import jakarta.servlet.http.HttpServletRequest;
  */
 final class HttpServletRequestUtils {
 
+	private static final String APPLICATION_JSON = "application/json";
+
 	private HttpServletRequestUtils() {
+	}
+
+	/**
+	 * Checks whether a {@code Content-Type} header value denotes
+	 * {@code application/json}. Only the media type is compared, case-insensitively;
+	 * parameters such as {@code charset} are ignored. This is not a substring search, so
+	 * a value like {@code text/plain; a=application/json} is rejected.
+	 * <p>
+	 * Requiring {@code application/json} prevents browsers from sending cross-origin
+	 * JSON-RPC messages as CORS "simple requests" (e.g. with {@code text/plain}), which
+	 * would otherwise reach the server without a preflight.
+	 * @param contentType The {@code Content-Type} header value, may be {@code null}
+	 * @return {@code true} if the media type is {@code application/json}
+	 */
+	static boolean isJsonContentType(String contentType) {
+		if (contentType == null) {
+			return false;
+		}
+		int parametersStart = contentType.indexOf(';');
+		String mediaType = parametersStart == -1 ? contentType : contentType.substring(0, parametersStart);
+		return APPLICATION_JSON.equalsIgnoreCase(mediaType.trim());
 	}
 
 	/**

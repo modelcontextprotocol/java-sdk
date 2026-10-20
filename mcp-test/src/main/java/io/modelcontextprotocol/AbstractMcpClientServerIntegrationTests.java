@@ -72,8 +72,6 @@ import static org.mockito.Mockito.mock;
 
 public abstract class AbstractMcpClientServerIntegrationTests {
 
-	protected static final int MAX_REQUEST_SIZE = 2048;
-
 	protected ConcurrentHashMap<String, McpClient.SyncSpec> clientBuilders = new ConcurrentHashMap<>();
 
 	abstract protected void prepareClients(int port, String mcpEndpoint);
@@ -1059,6 +1057,73 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 						.containsEntry("message", "do the thing")
 						.containsEntry("url", "https://example.com")
 						.containsEntry("elicitationId", "elicitation-1234");
+				});
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testToolErrorDoesNotSendCauseChain(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
+			.callHandler((exchange,
+					request) -> Mono.error(new IllegalStateException("Tool failed",
+							new IllegalArgumentException("connect to db.internal:5432 failed"))))
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample client", "0.0.0").build())
+			.build()) {
+
+			assertThatThrownBy(
+					() -> mcpClient.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build()))
+				.isInstanceOf(McpError.class)
+				.extracting("jsonRpcError")
+				.asInstanceOf(type(McpSchema.JSONRPCResponse.JSONRPCError.class))
+				.satisfies(error -> {
+					assertThat(error.code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+					assertThat(error.message()).isEqualTo("Tool failed");
+					assertThat(error.data()).isNull();
+				});
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testToolErrorWithoutMessage(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
+			.callHandler((exchange, request) -> Mono.error(new IllegalStateException()))
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample client", "0.0.0").build())
+			.build()) {
+
+			assertThatThrownBy(
+					() -> mcpClient.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build()))
+				.isInstanceOf(McpError.class)
+				.extracting("jsonRpcError")
+				.asInstanceOf(type(McpSchema.JSONRPCResponse.JSONRPCError.class))
+				.satisfies(error -> {
+					assertThat(error.code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+					assertThat(error.message()).isEqualTo("Internal error");
 				});
 		}
 		finally {
@@ -2357,51 +2422,6 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			mcpServer.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(resourceUri));
 
 			assertThat(notificationCount.get()).as("no notification should be received after unsubscribing").isZero();
-		}
-		finally {
-			mcpServer.closeGracefully();
-		}
-	}
-
-	// Bounded read
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("clientsForTesting")
-	void testRejectsWhenContentLengthHeaderExceedsLimit(String clientType) throws Exception {
-		var clientBuilder = clientBuilders.get(clientType);
-
-		String inputSchema = """
-					{
-						"type": "object",
-						"properties": {
-							"message": { "type": "string" }
-						},
-						"required": ["message"]
-					}
-				""";
-
-		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
-			.tool(Tool.builder("tool1", McpJsonDefaults.getMapper(), inputSchema)
-				.description("tool1 description")
-				.build())
-			.callHandler((exchange, request) -> CallToolResult.builder()
-				.addContent(TextContent.builder(request.arguments().get("message").toString()).build())
-				.build())
-			.build();
-
-		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(false).build())
-			.tools(tool1)
-			.build();
-
-		try (var mcpClient = clientBuilder.build()) {
-			String oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1);
-
-			mcpClient.initialize();
-			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
-
-			assertThatThrownBy(() -> mcpClient.callTool(
-					McpSchema.CallToolRequest.builder("tool1").arguments(Map.of("message", oversizedBody)).build()))
-				.isInstanceOf(RuntimeException.class)
-				.hasMessageContaining("413");
 		}
 		finally {
 			mcpServer.closeGracefully();
