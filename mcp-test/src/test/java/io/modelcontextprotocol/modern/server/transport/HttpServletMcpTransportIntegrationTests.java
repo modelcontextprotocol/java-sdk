@@ -44,6 +44,7 @@ import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
 import io.modelcontextprotocol.modern.server.feature.ToolsPage;
 import io.modelcontextprotocol.server.transport.DefaultServerTransportSecurityValidator;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.ToolsUtils;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
@@ -171,6 +172,27 @@ class HttpServletMcpTransportIntegrationTests {
 		meta.put(MetaKeys.PROTOCOL_VERSION, McpSchema.LATEST_PROTOCOL_VERSION);
 		meta.put(MetaKeys.CLIENT_CAPABILITIES, Map.of());
 		return meta;
+	}
+
+	@Test
+	void legacyInitializeWithoutMethodHeaderErrorNamesSupportedVersions() throws Exception {
+		Map<String, Object> params = Map.of("protocolVersion", ProtocolVersions.MCP_2025_11_25, "capabilities",
+				Map.of(), "clientInfo", Map.of("name", "legacy-client", "version", "1.0.0"));
+		HttpRequest request = rawPost(JSON_MAPPER
+			.writeValueAsString(Map.of("jsonrpc", "2.0", "id", 1, "method", "initialize", "params", params)));
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		Map<String, Object> parsed = JSON_MAPPER.readValue(response.body(), new TypeRef<Map<String, Object>>() {
+		});
+		assertThat(((Number) parsed.get("id")).intValue()).isEqualTo(1);
+		Map<?, ?> error = (Map<?, ?>) parsed.get("error");
+		assertThat(error.get("message")).isEqualTo("Unsupported protocol version: " + ProtocolVersions.MCP_2025_11_25
+				+ ". Supported versions: " + McpSchema.LATEST_PROTOCOL_VERSION);
+		Map<?, ?> data = (Map<?, ?>) error.get("data");
+		assertThat(data.get("supported")).isEqualTo(List.of(McpSchema.LATEST_PROTOCOL_VERSION));
+		assertThat(data.get("requested")).isEqualTo(ProtocolVersions.MCP_2025_11_25);
+		assertThat(errorCode(response)).isEqualTo(ErrorCodes.INVALID_PARAMS);
 	}
 
 	@Test

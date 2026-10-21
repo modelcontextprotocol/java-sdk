@@ -37,6 +37,7 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCMessage;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
+import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.server.McpTransportResponse;
@@ -45,9 +46,12 @@ import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.spec.json.gson.GsonMcpJsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -148,6 +152,50 @@ class StdioMcpTransportTests {
 				return Mono.empty();
 			}
 		};
+	}
+
+	@Test
+	void legacyInitializeErrorNamesSupportedVersions() throws Exception {
+		List<String> supportedVersions = List.of(McpSchema.LATEST_PROTOCOL_VERSION, "2099-01-01");
+		McpServer server = McpServer.builder()
+			.serverInfo(SERVER_INFO)
+			.jsonMapper(this.jsonMapper)
+			.supportedVersions(supportedVersions)
+			.build();
+		start(server);
+
+		send("initialize", 1, Map.of("protocolVersion", ProtocolVersions.MCP_2025_11_25, "capabilities", Map.of(),
+				"clientInfo", Map.of("name", "legacy-client", "version", "1.0.0")));
+
+		Map<String, Object> response = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
+		assertThat(((Number) response.get("id")).intValue()).isEqualTo(1);
+		assertThat(errorCode(response)).isEqualTo(ErrorCodes.INVALID_PARAMS);
+		Map<?, ?> error = (Map<?, ?>) response.get("error");
+		assertThat(error.get("message")).isEqualTo("Unsupported protocol version: " + ProtocolVersions.MCP_2025_11_25
+				+ ". Supported versions: " + String.join(", ", supportedVersions));
+		Map<?, ?> data = (Map<?, ?>) error.get("data");
+		assertThat(data.get("supported")).isEqualTo(supportedVersions);
+		assertThat(data.get("requested")).isEqualTo(ProtocolVersions.MCP_2025_11_25);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\"}",
+			"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}",
+			"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":42}}" })
+	void legacyInitializeWithoutRequestedVersionStillNamesSupportedVersions(String request) throws Exception {
+		start(McpServer.builder().serverInfo(SERVER_INFO).jsonMapper(this.jsonMapper).build());
+
+		sendRaw(request);
+
+		Map<String, Object> response = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
+		assertThat(((Number) response.get("id")).intValue()).isEqualTo(1);
+		assertThat(errorCode(response)).isEqualTo(ErrorCodes.INVALID_PARAMS);
+		Map<?, ?> error = (Map<?, ?>) response.get("error");
+		assertThat((String) error.get("message")).contains(McpSchema.LATEST_PROTOCOL_VERSION);
+		assertThat((String) error.get("message")).doesNotContain("null");
+		Map<?, ?> data = (Map<?, ?>) error.get("data");
+		assertThat(data.get("supported")).isEqualTo(List.of(McpSchema.LATEST_PROTOCOL_VERSION));
+		assertThat(data.get("requested")).isNull();
 	}
 
 	@Test

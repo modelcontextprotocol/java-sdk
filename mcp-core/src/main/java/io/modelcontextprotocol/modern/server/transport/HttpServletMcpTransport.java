@@ -389,6 +389,11 @@ public class HttpServletMcpTransport extends HttpServlet {
 	 * consistent with the body
 	 */
 	private String validateHeaders(HttpServletRequest request, JSONRPCRequest jsonRpcRequest) {
+		if ("initialize".equals(jsonRpcRequest.method())) {
+			// Let the request manager reject legacy initialization with its supported
+			// versions.
+			return null;
+		}
 		String methodHeader = request.getHeader("Mcp-Method");
 		if (methodHeader == null) {
 			return "Missing required header: Mcp-Method";

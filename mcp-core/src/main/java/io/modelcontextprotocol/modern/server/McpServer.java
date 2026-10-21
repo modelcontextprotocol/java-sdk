@@ -125,6 +125,15 @@ public final class McpServer implements McpRequestManager {
 	private Mono<McpTransportResponse> dispatch(McpTransportContext transportContext, JSONRPCRequest request,
 			boolean blocking) {
 		Object id = request.id();
+		if ("initialize".equals(request.method())) {
+			Object version = request.params() instanceof Map<?, ?> params ? params.get("protocolVersion") : null;
+			String requested = version instanceof String s ? s : null;
+			String message = (requested == null ? "Unsupported protocol version"
+					: "Unsupported protocol version: " + requested) + ". Supported versions: "
+					+ String.join(", ", this.supportedVersions);
+			return error(id, new JSONRPCError(ErrorCodes.INVALID_PARAMS, message,
+					new UnsupportedProtocolVersionData(this.supportedVersions, requested)));
+		}
 		if (request.params() == null) {
 			return invalidParams(id, "params is required");
 		}
