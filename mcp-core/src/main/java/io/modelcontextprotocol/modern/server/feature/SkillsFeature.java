@@ -29,8 +29,11 @@ import reactor.core.publisher.Mono;
 
 /**
  * The {@code skills/list} and {@code skills/get} feature of the Skills extension
- * (SEP-2640). It advertises the {@value SkillsSchema#EXTENSION_ID} extension; the skills'
- * files must be served as resources, so register a {@link ResourcesFeature} alongside it.
+ * (SEP-2640), plus {@code resources/directory/read} when the repository
+ * {@link McpAsyncSkillRepository#supportsDirectoryRead() supports it}. It advertises the
+ * {@value SkillsSchema#EXTENSION_ID} extension, with {@code directoryRead: true} in that
+ * case; the skills' files must be served as resources, so register a
+ * {@link ResourcesFeature} alongside it.
  */
 public final class SkillsFeature implements McpFeature {
 
