@@ -34,6 +34,7 @@ import io.modelcontextprotocol.modern.server.McpFeature;
 import io.modelcontextprotocol.modern.server.McpTransportResponse;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
+import io.modelcontextprotocol.modern.server.McpAsyncNotifier;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.McpSyncResponse;
 import io.modelcontextprotocol.modern.server.ModernTestFixtures;
@@ -319,6 +320,33 @@ class ToolsFeatureTests {
 		assertThat(deliveredWhenProgressReturned.get()).isEqualTo(1);
 		assertThat(delivered).hasSize(2);
 		assertThat(delivered.get(0)).isInstanceOf(JSONRPCNotification.class);
+		assertThat(greetingText(delivered.get(1))).isEqualTo("hello alice");
+	}
+
+	@Test
+	void notifierFactoryCustomizesSyncStreamingHandlers() {
+		AtomicReference<String> handlerThread = new AtomicReference<>();
+		List<JSONRPCMessage> delivered = new CopyOnWriteArrayList<>();
+		McpServer server = baseBuilder().notifierFactory((ctx, delegate) -> new McpAsyncNotifier() {
+			@Override
+			public Mono<Void> progress(double progress, Double total, String message) {
+				return delegate.notify("extension/progress", Map.of("requestId", ctx.requestId()));
+			}
+
+			@Override
+			public Mono<Void> notify(String method, Object params) {
+				return delegate.notify(method, params);
+			}
+		}).feature(tools(streamingGreetingRepo(ctx -> "alice", handlerThread, delivered, new AtomicInteger()))).build();
+
+		callStreaming(server.handleBlocking(McpTransportContext.EMPTY, callEcho()), delivered);
+
+		assertThat(handlerThread.get()).isEqualTo(Thread.currentThread().getName());
+		assertThat(delivered).hasSize(2);
+		assertThat(delivered.get(0)).isInstanceOfSatisfying(JSONRPCNotification.class, notification -> {
+			assertThat(notification.method()).isEqualTo("extension/progress");
+			assertThat(notification.params()).isEqualTo(Map.of("requestId", callEcho().id()));
+		});
 		assertThat(greetingText(delivered.get(1))).isEqualTo("hello alice");
 	}
 

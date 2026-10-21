@@ -8,7 +8,8 @@ import reactor.core.publisher.Mono;
 
 /**
  * Emits request-scoped notifications from inside the body of a streaming
- * {@link McpAsyncResponse}.
+ * {@link McpAsyncResponse}. Customize notification policy through
+ * {@link McpServer.Builder#notifierFactory}.
  *
  * @author Dariusz Jędrzejczyk
  */

@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
@@ -72,9 +73,12 @@ public final class McpServer implements McpRequestManager {
 
 	private final SubscriptionsFeature subscriptionsFeature;
 
+	private final BiFunction<McpRequestContext, McpAsyncNotifier, McpAsyncNotifier> notifierFactory;
+
 	private McpServer(Implementation serverInfo, List<String> supportedVersions, McpJsonMapper jsonMapper,
 			Map<String, McpFeature> features, Set<String> inputRequiredMethods, RequestStateCodec requestStateCodec,
-			SubscriptionsFeature subscriptionsFeature) {
+			SubscriptionsFeature subscriptionsFeature,
+			BiFunction<McpRequestContext, McpAsyncNotifier, McpAsyncNotifier> notifierFactory) {
 		this.serverInfo = serverInfo;
 		this.supportedVersions = supportedVersions;
 		this.jsonMapper = jsonMapper;
@@ -82,6 +86,7 @@ public final class McpServer implements McpRequestManager {
 		this.inputRequiredMethods = inputRequiredMethods;
 		this.requestStateCodec = requestStateCodec;
 		this.subscriptionsFeature = subscriptionsFeature;
+		this.notifierFactory = notifierFactory;
 	}
 
 	public static Builder builder() {
@@ -218,8 +223,11 @@ public final class McpServer implements McpRequestManager {
 		// Deferred: the body must not run before the transport has started the stream.
 		return Flux.defer(() -> {
 			Sinks.Many<JSONRPCNotification> sink = Sinks.many().unicast().onBackpressureBuffer();
-			DefaultAsyncNotifier notifier = new DefaultAsyncNotifier(ctx, sink);
-			Mono<JSONRPCMessage> terminal = Mono.defer(() -> body.run(notifier))
+			Mono<JSONRPCMessage> terminal = Mono.defer(() -> {
+				McpAsyncNotifier notifier = this.notifierFactory.apply(ctx, new DefaultAsyncNotifier(ctx, sink));
+				Assert.notNull(notifier, "notifierFactory must not return null");
+				return body.run(notifier);
+			})
 				.map(result -> (JSONRPCMessage) resultResponse(ctx, result))
 				.switchIfEmpty(Mono.fromSupplier(() -> bug(ctx, "Streaming body completed without a result")))
 				// The stream has already started, so a failure can only be reported
@@ -346,6 +354,9 @@ public final class McpServer implements McpRequestManager {
 
 		private McpChangePublisher changePublisher;
 
+		private BiFunction<McpRequestContext, McpAsyncNotifier, McpAsyncNotifier> notifierFactory = (ctx,
+				notifier) -> notifier;
+
 		private Builder() {
 		}
 
@@ -389,6 +400,26 @@ public final class McpServer implements McpRequestManager {
 		public Builder subscriptions(McpChangePublisher publisher) {
 			Assert.notNull(publisher, "publisher must not be null");
 			this.changePublisher = publisher;
+			return this;
+		}
+
+		/**
+		 * Customizes the notifier passed to streaming bodies, including sync handlers and
+		 * {@code subscriptions/listen}. The factory receives the request context and the
+		 * default notifier, which it may wrap to filter or reject notifications. By
+		 * default, the supplied notifier is used unchanged; no additional notification
+		 * policy is enforced.
+		 * <p>
+		 * Invoked once per stream subscription, before the body runs. The factory must be
+		 * thread-safe and return a non-null notifier. Factory failures are reported as
+		 * errors in the stream, whose HTTP status has already been committed.
+		 * @param notifierFactory the factory receiving the context and default notifier
+		 * @return this builder
+		 */
+		public Builder notifierFactory(
+				BiFunction<McpRequestContext, McpAsyncNotifier, McpAsyncNotifier> notifierFactory) {
+			Assert.notNull(notifierFactory, "notifierFactory must not be null");
+			this.notifierFactory = notifierFactory;
 			return this;
 		}
 
@@ -459,7 +490,7 @@ public final class McpServer implements McpRequestManager {
 					: HmacRequestStateCodec.builder().jsonMapper(mapper).build();
 
 			return new McpServer(this.serverInfo, this.supportedVersions, mapper, Map.copyOf(byMethod),
-					Set.copyOf(inputRequiredMethods), codec, subscriptionsFeature);
+					Set.copyOf(inputRequiredMethods), codec, subscriptionsFeature, this.notifierFactory);
 		}
 
 	}

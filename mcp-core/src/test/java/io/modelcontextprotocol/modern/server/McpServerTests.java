@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
@@ -26,6 +27,8 @@ import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.json.gson.GsonMcpJsonMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -297,10 +300,11 @@ class McpServerTests {
 
 	@Test
 	void streamingBodyNotificationsPrecedeTheResult() {
-		McpServer server = baseBuilder().feature(feature("tools/call",
-				(ctx, params) -> Mono.just(McpAsyncResponse.streaming(notifier -> notifier.progress(1.0, 2.0, "half")
-					.then(notifier.progress(2.0, 2.0, "done"))
-					.thenReturn(ok())))))
+		McpServer server = baseBuilder().feature(feature("tools/call", (ctx, params) -> Mono
+			.just(McpAsyncResponse.streaming(notifier -> notifier.progress(1.0, 2.0, "half")
+				.then(notifier.progress(2.0, 2.0, "done"))
+				.then(notifier.notify(McpSchema.METHOD_NOTIFICATION_MESSAGE, Map.of("level", "info", "data", "hello")))
+				.thenReturn(ok())))))
 			.build();
 
 		McpTransportResponse invocation = invoke(server, request("tools/call", meta(MetaKeys.PROGRESS_TOKEN, "tok-1")))
@@ -309,6 +313,8 @@ class McpServerTests {
 		StepVerifier.create(((McpTransportResponse.Streaming) invocation).messages())
 			.expectNextMatches(msg -> msg instanceof JSONRPCNotification)
 			.expectNextMatches(msg -> msg instanceof JSONRPCNotification)
+			.expectNextMatches(msg -> msg instanceof JSONRPCNotification notification
+					&& notification.method().equals(McpSchema.METHOD_NOTIFICATION_MESSAGE))
 			.expectNextMatches(msg -> msg instanceof JSONRPCResponse)
 			.verifyComplete();
 	}
@@ -325,6 +331,118 @@ class McpServerTests {
 
 		StepVerifier.create(((McpTransportResponse.Streaming) invocation).messages())
 			.expectNextMatches(msg -> msg instanceof JSONRPCResponse)
+			.verifyComplete();
+	}
+
+	@Test
+	void notifierFactoryFiltersUsingEachRequestsContextAndPreservesProgress() {
+		AtomicInteger created = new AtomicInteger();
+		McpServer server = baseBuilder().notifierFactory((ctx, delegate) -> {
+			created.incrementAndGet();
+			return new McpAsyncNotifier() {
+				@Override
+				public Mono<Void> progress(double progress, Double total, String message) {
+					return delegate.progress(progress, total, message);
+				}
+
+				@Override
+				public Mono<Void> notify(String method, Object params) {
+					if (McpSchema.METHOD_NOTIFICATION_MESSAGE.equals(method)
+							&& !ctx.meta().containsKey(MetaKeys.LOG_LEVEL)) {
+						return Mono.empty();
+					}
+					return delegate.notify(method, params);
+				}
+			};
+		})
+			.feature(feature("tools/call",
+					(ctx, params) -> Mono.just(McpAsyncResponse.streaming(notifier -> notifier
+						.notify(McpSchema.METHOD_NOTIFICATION_MESSAGE, Map.of("level", "info", "data", "hello"))
+						.then(notifier.progress(1.0, 1.0, "done"))
+						.thenReturn(ok())))))
+			.build();
+
+		var quiet = (McpTransportResponse.Streaming) invoke(server,
+				request("tools/call", meta(MetaKeys.PROGRESS_TOKEN, "quiet")))
+			.block();
+		var logging = (McpTransportResponse.Streaming) invoke(server, new JSONRPCRequest("tools/call", 2,
+				Map.of("_meta", meta(MetaKeys.PROGRESS_TOKEN, "logging", MetaKeys.LOG_LEVEL, "info"))))
+			.block();
+
+		assertThat(created).hasValue(0);
+		StepVerifier.create(quiet.messages())
+			.expectNextMatches(msg -> msg instanceof JSONRPCNotification notification
+					&& notification.method().equals(McpSchema.METHOD_NOTIFICATION_PROGRESS))
+			.expectNextMatches(msg -> msg instanceof JSONRPCResponse response && response.error() == null)
+			.verifyComplete();
+		StepVerifier.create(logging.messages())
+			.expectNextMatches(msg -> msg instanceof JSONRPCNotification notification
+					&& notification.method().equals(McpSchema.METHOD_NOTIFICATION_MESSAGE))
+			.expectNextMatches(msg -> msg instanceof JSONRPCNotification notification
+					&& notification.method().equals(McpSchema.METHOD_NOTIFICATION_PROGRESS))
+			.expectNextMatches(msg -> msg instanceof JSONRPCResponse response && response.error() == null)
+			.verifyComplete();
+		assertThat(created).hasValue(2);
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void invalidNotifierFactoryIsAnInternalErrorInStream(boolean returnsNull) {
+		AtomicBoolean ran = new AtomicBoolean();
+		McpServer server = baseBuilder().notifierFactory((ctx, delegate) -> {
+			if (returnsNull) {
+				return null;
+			}
+			throw new IllegalStateException("factory failed");
+		}).feature(feature("tools/call", (ctx, params) -> Mono.just(McpAsyncResponse.streaming(notifier -> {
+			ran.set(true);
+			return Mono.just(ok());
+		})))).build();
+
+		var invocation = (McpTransportResponse.Streaming) invoke(server, request("tools/call", meta())).block();
+
+		StepVerifier.create(invocation.messages())
+			.expectNextMatches(msg -> msg instanceof JSONRPCResponse response
+					&& response.error().code() == ErrorCodes.INTERNAL_ERROR)
+			.verifyComplete();
+		assertThat(ran).isFalse();
+	}
+
+	@Test
+	void notifierFactoryCanRejectANotificationWithAnMcpError() {
+		McpServer server = baseBuilder().notifierFactory((ctx, delegate) -> new McpAsyncNotifier() {
+			@Override
+			public Mono<Void> progress(double progress, Double total, String message) {
+				return delegate.progress(progress, total, message);
+			}
+
+			@Override
+			public Mono<Void> notify(String method, Object params) {
+				return Mono.error(McpException.invalidParams("Notification not allowed"));
+			}
+		})
+			.feature(feature("tools/call",
+					(ctx, params) -> Mono.just(McpAsyncResponse
+						.streaming(notifier -> notifier.notify("extension/forbidden", Map.of()).thenReturn(ok())))))
+			.build();
+
+		var invocation = (McpTransportResponse.Streaming) invoke(server, request("tools/call", meta())).block();
+
+		StepVerifier.create(invocation.messages())
+			.expectNextMatches(msg -> msg instanceof JSONRPCResponse response
+					&& response.error().code() == ErrorCodes.INVALID_PARAMS
+					&& response.error().message().equals("Notification not allowed"))
+			.verifyComplete();
+	}
+
+	@Test
+	void notifierFactoryIsNotInvokedForSingleResults() {
+		McpServer server = baseBuilder().notifierFactory((ctx, delegate) -> {
+			throw new IllegalStateException("No notifier needed");
+		}).feature(echoFeature("tools/call")).build();
+
+		StepVerifier.create(respond(server, request("tools/call", meta())))
+			.assertNext(response -> assertThat(response.error()).isNull())
 			.verifyComplete();
 	}
 
