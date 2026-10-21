@@ -24,7 +24,6 @@ import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
-import io.modelcontextprotocol.spec.json.gson.GsonMcpJsonMapper;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -39,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class McpServerTests {
 
 	private static McpServer.Builder baseBuilder() {
-		return McpServer.builder().serverInfo(SERVER_INFO).jsonMapper(new GsonMcpJsonMapper());
+		return McpServer.builder().serverInfo(SERVER_INFO);
 	}
 
 	private static McpFeature feature(String method,

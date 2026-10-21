@@ -4,52 +4,68 @@
 
 package io.modelcontextprotocol.modern.server.feature;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
 
-import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
+import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CompleteResult;
-import io.modelcontextprotocol.modern.McpSchema.Implementation;
-import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
+import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.server.McpServer;
-import io.modelcontextprotocol.modern.server.McpTransportResponse;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
+import static io.modelcontextprotocol.modern.server.ModernTestFixtures.SERVER_INFO;
+import static io.modelcontextprotocol.modern.server.ModernTestFixtures.meta;
+import static io.modelcontextprotocol.modern.server.ModernTestFixtures.respond;
 import static org.assertj.core.api.Assertions.assertThat;
 
-// Lives here rather than in mcp-core because mcp-core's tests use a Gson mapper, which
-// can't decode the polymorphic ref. Here McpJsonDefaults resolves a Jackson mapper.
-class CompletionsFeatureValueCapTests {
+class CompletionsFeatureTests {
 
-	@SuppressWarnings("unchecked")
-	private static Map<String, Object> complete(CompleteResult.Completion completion) {
-		McpServer server = McpServer.builder()
-			.serverInfo(Implementation.builder("test-server", "1.0.0").build())
-			.jsonMapper(McpJsonDefaults.getMapper())
+	private static McpServer server(CompleteResult.Completion completion) {
+		return McpServer.builder()
+			.serverInfo(SERVER_INFO)
 			.feature(CompletionsFeature
 				.ofAsync((McpAsyncCompletionRepository) (ctx, request) -> Mono.just(CompleteResult.of(completion))))
 			.build();
-		Map<String, Object> meta = new HashMap<>();
-		meta.put(MetaKeys.PROTOCOL_VERSION, McpSchema.LATEST_PROTOCOL_VERSION);
-		meta.put(MetaKeys.CLIENT_CAPABILITIES, Map.of());
-		JSONRPCRequest request = new JSONRPCRequest(McpSchema.METHOD_COMPLETION_COMPLETE, 1, Map.of("_meta", meta,
+	}
+
+	@SuppressWarnings("unchecked")
+	private static Map<String, Object> complete(CompleteResult.Completion completion) {
+		JSONRPCRequest request = new JSONRPCRequest(McpSchema.METHOD_COMPLETION_COMPLETE, 1, Map.of("_meta", meta(),
 				"ref", Map.of("type", "ref/prompt", "name", "p"), "argument", Map.of("name", "a", "value", "v")));
 
-		McpTransportResponse response = server.handle(McpTransportContext.EMPTY, request).block();
+		JSONRPCResponse response = respond(server(completion), request).block();
 
-		assertThat(response).isInstanceOf(McpTransportResponse.Result.class);
-		Map<String, Object> result = (Map<String, Object>) ((McpTransportResponse.Result) response).response().result();
-		return (Map<String, Object>) result.get("completion");
+		assertThat(response.error()).isNull();
+		return (Map<String, Object>) ((Map<String, Object>) response.result()).get("completion");
 	}
 
 	private static List<String> values(int count) {
 		return IntStream.range(0, count).mapToObj(i -> "v" + i).toList();
+	}
+
+	@Test
+	void missingRefIsRejectedAsInvalidParams() {
+		JSONRPCRequest request = new JSONRPCRequest(McpSchema.METHOD_COMPLETION_COMPLETE, 1,
+				Map.of("_meta", meta(), "argument", Map.of("name", "a", "value", "v")));
+
+		StepVerifier.create(respond(server(new CompleteResult.Completion(List.of())), request))
+			.assertNext(response -> assertThat(response.error().code()).isEqualTo(ErrorCodes.INVALID_PARAMS))
+			.verifyComplete();
+	}
+
+	@Test
+	void missingArgumentIsRejectedAsInvalidParams() {
+		JSONRPCRequest request = new JSONRPCRequest(McpSchema.METHOD_COMPLETION_COMPLETE, 1,
+				Map.of("_meta", meta(), "ref", Map.of("type", "ref/prompt", "name", "p")));
+
+		StepVerifier.create(respond(server(new CompleteResult.Completion(List.of())), request))
+			.assertNext(response -> assertThat(response.error().code()).isEqualTo(ErrorCodes.INVALID_PARAMS))
+			.verifyComplete();
 	}
 
 	@Test

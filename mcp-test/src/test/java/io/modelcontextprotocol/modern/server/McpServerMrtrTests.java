@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpSchema;
@@ -21,15 +22,14 @@ import io.modelcontextprotocol.modern.McpSchema.InputRequest;
 import io.modelcontextprotocol.modern.McpSchema.InputRequired;
 import io.modelcontextprotocol.modern.McpSchema.InputRequiredResult;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
-import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ReadResourceResult;
+import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.TextResourceContents;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncResourceRepository;
 import io.modelcontextprotocol.modern.server.feature.ResourcesFeature;
 import io.modelcontextprotocol.modern.server.feature.ResourcesPage;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
-import io.modelcontextprotocol.spec.json.gson.GsonMcpJsonMapper;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
@@ -47,7 +47,7 @@ class McpServerMrtrTests {
 		.build();
 
 	private static McpServer.Builder baseBuilder() {
-		return McpServer.builder().serverInfo(SERVER_INFO).jsonMapper(new GsonMcpJsonMapper());
+		return McpServer.builder().serverInfo(SERVER_INFO);
 	}
 
 	private static Map<String, Object> metaWithElicitation() {
@@ -74,7 +74,7 @@ class McpServerMrtrTests {
 			}
 			return Mono.just(McpAsyncResponse
 				.result(InputRequiredResult.builder().elicit("q1", CONFIRM).requestState("secret-plaintext").build()));
-		}), new GsonMcpJsonMapper(), PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE)).build();
+		}), McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE)).build();
 	}
 
 	@Test
@@ -137,9 +137,9 @@ class McpServerMrtrTests {
 	@SuppressWarnings("unchecked")
 	void unparseableInputResponseIsInvalidParams() {
 		McpServer server = baseBuilder().feature(ToolsFeature.ofAsync(tools((ctx, req) -> {
-			InputResponses.get(req.inputResponses(), "q1", ElicitAnswer.class, new GsonMcpJsonMapper());
+			InputResponses.get(req.inputResponses(), "q1", ElicitAnswer.class, McpJsonDefaults.getMapper());
 			return Mono.just(McpAsyncResponse.result(CallToolResult.builder().build()));
-		}), new GsonMcpJsonMapper(), PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE)).build();
+		}), McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE)).build();
 		JSONRPCRequest request = toolCall(1, metaWithElicitation(), null);
 		((Map<String, Object>) request.params()).put("inputResponses",
 				Map.of("q1", Map.of("action", "accept", "content", "not-an-object")));
@@ -162,7 +162,7 @@ class McpServerMrtrTests {
 							tools((ctx,
 									req) -> Mono.just(McpAsyncResponse
 										.result(InputRequiredResult.builder().elicit("q1", CONFIRM).build()))),
-							new GsonMcpJsonMapper(), PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE))
+							McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE))
 			.build();
 
 		JSONRPCResponse response = respond(server, toolCall(1, meta(), null)).block();
@@ -189,7 +189,7 @@ class McpServerMrtrTests {
 			}
 		};
 		McpServer server = baseBuilder()
-			.feature(ResourcesFeature.ofAsync(repo, new GsonMcpJsonMapper(), 0L, CacheScope.PRIVATE))
+			.feature(ResourcesFeature.ofAsync(repo, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
 			.build();
 
 		Map<String, Object> params = new HashMap<>();
@@ -201,8 +201,7 @@ class McpServerMrtrTests {
 		@SuppressWarnings("unchecked")
 		Map<String, Object> result = (Map<String, Object>) response.result();
 		assertThat(((Number) result.get("ttlMs")).longValue()).isZero();
-		// Gson ignores @JsonProperty on enums, so compare case-insensitively.
-		assertThat((String) result.get("cacheScope")).isEqualToIgnoringCase("private");
+		assertThat(result.get("cacheScope")).isEqualTo("private");
 	}
 
 	@Test
@@ -227,7 +226,7 @@ class McpServerMrtrTests {
 			}
 		};
 		McpServer server = baseBuilder()
-			.feature(ResourcesFeature.ofAsync(repo, new GsonMcpJsonMapper(), 0L, CacheScope.PRIVATE))
+			.feature(ResourcesFeature.ofAsync(repo, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
 			.build();
 
 		Map<String, Object> first = new HashMap<>();

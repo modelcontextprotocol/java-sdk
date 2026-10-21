@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator.ValidationResponse;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCMessage;
@@ -37,7 +38,6 @@ import io.modelcontextprotocol.modern.server.McpAsyncResponse;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.McpSyncResponse;
 import io.modelcontextprotocol.modern.server.ModernTestFixtures;
-import io.modelcontextprotocol.spec.json.gson.GsonMcpJsonMapper;
 import io.modelcontextprotocol.util.ToolsUtils;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -56,15 +56,17 @@ class ToolsFeatureTests {
 	private static final Tool ECHO_TOOL = Tool.builder("echo", ToolsUtils.EMPTY_JSON_SCHEMA).build();
 
 	private static McpFeature tools(McpAsyncToolRepository repository) {
-		return ToolsFeature.ofAsync(repository, new GsonMcpJsonMapper(), PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE);
+		return ToolsFeature.ofAsync(repository, McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L,
+				CacheScope.PRIVATE);
 	}
 
 	private static McpFeature tools(McpSyncToolRepository repository) {
-		return ToolsFeature.ofSync(repository, new GsonMcpJsonMapper(), PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE);
+		return ToolsFeature.ofSync(repository, McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L,
+				CacheScope.PRIVATE);
 	}
 
 	private static McpServer.Builder baseBuilder() {
-		return McpServer.builder().serverInfo(SERVER_INFO).jsonMapper(new GsonMcpJsonMapper());
+		return McpServer.builder().serverInfo(SERVER_INFO);
 	}
 
 	@Test
@@ -124,7 +126,7 @@ class ToolsFeatureTests {
 			}
 		};
 		return baseBuilder()
-			.feature(ToolsFeature.ofAsync(repo, new GsonMcpJsonMapper(), validator, 0L, CacheScope.PRIVATE))
+			.feature(ToolsFeature.ofAsync(repo, McpJsonDefaults.getMapper(), validator, 0L, CacheScope.PRIVATE))
 			.build();
 	}
 
@@ -137,8 +139,8 @@ class ToolsFeatureTests {
 			return Mono.just(McpAsyncResponse.result(CallToolResult.builder().build()));
 		});
 		McpServer server = baseBuilder()
-			.feature(ToolsFeature.ofAsync(repo, new GsonMcpJsonMapper(), rejecting(ToolsUtils.EMPTY_JSON_SCHEMA), 0L,
-					CacheScope.PRIVATE))
+			.feature(ToolsFeature.ofAsync(repo, McpJsonDefaults.getMapper(), rejecting(ToolsUtils.EMPTY_JSON_SCHEMA),
+					0L, CacheScope.PRIVATE))
 			.build();
 		JSONRPCRequest request = new JSONRPCRequest("tools/call", 1, Map.of("_meta", meta(), "name", "echo"));
 
@@ -194,7 +196,7 @@ class ToolsFeatureTests {
 	@Test
 	void negativeTtlIsRejected() {
 		assertThatIllegalArgumentException().isThrownBy(() -> ToolsFeature.ofAsync(emptyTools(),
-				new GsonMcpJsonMapper(), PERMISSIVE_VALIDATOR, -1L, CacheScope.PRIVATE));
+				McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, -1L, CacheScope.PRIVATE));
 		assertThatIllegalArgumentException().isThrownBy(() -> new ToolsPage(List.of(), null, -1L, null));
 	}
 
