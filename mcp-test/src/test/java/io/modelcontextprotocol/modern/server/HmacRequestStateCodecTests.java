@@ -16,7 +16,6 @@ import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
-import io.modelcontextprotocol.spec.json.gson.GsonMcpJsonMapper;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,11 +31,7 @@ class HmacRequestStateCodecTests {
 	}
 
 	private static HmacRequestStateCodec codec(Clock clock) {
-		return HmacRequestStateCodec.builder()
-			.key("test-key-0123456789abcdef".getBytes())
-			.clock(clock)
-			.jsonMapper(new GsonMcpJsonMapper())
-			.build();
+		return HmacRequestStateCodec.builder().key("test-key-0123456789abcdef".getBytes()).clock(clock).build();
 	}
 
 	@Test
@@ -96,7 +91,6 @@ class HmacRequestStateCodecTests {
 			.key("test-key-0123456789abcdef".getBytes())
 			.clock(clock)
 			.ttl(Duration.ofMinutes(1))
-			.jsonMapper(new GsonMcpJsonMapper())
 			.build();
 		McpRequestContext ctx = ctx("tools/call", "echo", McpTransportContext.EMPTY);
 		String sealed = codec.seal(ctx, "state");
@@ -112,7 +106,6 @@ class HmacRequestStateCodecTests {
 			.key("test-key-0123456789abcdef".getBytes())
 			.clock(clock)
 			.principalExtractor(tc -> (String) tc.get("user"))
-			.jsonMapper(new GsonMcpJsonMapper())
 			.build();
 		McpTransportContext alice = McpTransportContext.create(Map.of("user", "alice"));
 		McpTransportContext bob = McpTransportContext.create(Map.of("user", "bob"));
