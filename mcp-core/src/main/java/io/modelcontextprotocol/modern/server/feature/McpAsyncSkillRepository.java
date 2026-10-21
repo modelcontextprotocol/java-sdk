@@ -28,4 +28,22 @@ public interface McpAsyncSkillRepository {
 	 */
 	Mono<Skill> find(McpRequestContext ctx, String uri);
 
+	/**
+	 * Whether this repository implements {@link #readDirectory}. If so, the extension
+	 * advertises {@code directoryRead} and serves {@code resources/directory/read}.
+	 */
+	default boolean supportsDirectoryRead() {
+		return false;
+	}
+
+	/**
+	 * (A page of) the direct children of the directory resource {@code uri}, with
+	 * subdirectories carrying the {@code inode/directory} {@code mimeType}; or empty if
+	 * {@code uri} is not a directory this server serves. Only called when
+	 * {@link #supportsDirectoryRead()}.
+	 */
+	default Mono<ResourcesPage> readDirectory(McpRequestContext ctx, String uri, String cursor) {
+		return Mono.error(new UnsupportedOperationException("resources/directory/read is not supported"));
+	}
+
 }

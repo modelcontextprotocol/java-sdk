@@ -11,7 +11,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Collections;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -25,6 +27,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.CacheableResult;
+import io.modelcontextprotocol.modern.McpSchema.Resource;
 import io.modelcontextprotocol.modern.McpSchema.ResultType;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
@@ -32,9 +35,12 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Wire types for the Skills extension ({@value #EXTENSION_ID}, SEP-2640): serving Agent
- * Skills as MCP resources, enumerated by {@code skills/list} and described by
- * {@code skills/get}. Skill files themselves are read with the ordinary
- * {@code resources/read}.
+ * Skills as MCP resources, enumerated by {@code skills/list}, described by
+ * {@code skills/get} and, optionally, browsed by {@code resources/directory/read}. Skill
+ * files themselves are read with the ordinary {@code resources/read}.
+ * <p>
+ * Entries validate the SEP-2640 rules when constructed or deserialized, so a
+ * nonconforming {@link Skill} cannot exist.
  *
  * @see <a href=
  * "https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640">SEP-2640</a>
@@ -49,10 +55,21 @@ public final class SkillsSchema {
 
 	public static final String METHOD_SKILLS_GET = "skills/get";
 
-	/** Resources per skill, {@code SKILL.md} included, that every host must accept. */
+	public static final String METHOD_RESOURCES_DIRECTORY_READ = "resources/directory/read";
+
+	/** The {@code mimeType} of a directory resource. */
+	public static final String DIRECTORY_MIME_TYPE = "inode/directory";
+
+	/**
+	 * Resources per skill, {@code SKILL.md} included, that every host must accept.
+	 * Servers should not exceed it, but larger skills are not rejected.
+	 */
 	public static final int MAX_RESOURCES_PER_SKILL = 512;
 
-	/** Total bytes per skill, summed over its resources, that every host must accept. */
+	/**
+	 * Total bytes per skill, summed over its resources, that every host must accept.
+	 * Servers should not exceed it, but larger skills are not rejected.
+	 */
 	public static final long MAX_TOTAL_SIZE_PER_SKILL = 16L * 1024 * 1024;
 
 	private static final String SKILL_MD = "/SKILL.md";
@@ -120,6 +137,45 @@ public final class SkillsSchema {
 		}
 	}
 
+	/**
+	 * Checks a {@code resources/directory/read} URI: absolute, without query, fragment or
+	 * trailing slash.
+	 * @throws IllegalArgumentException if it is not
+	 */
+	public static void checkDirectoryUri(String uri) {
+		Assert.notNull(uri, "uri must not be null");
+		if (uri.endsWith("/")) {
+			throw new IllegalArgumentException("Directory URI must not have a trailing slash: " + uri);
+		}
+		parse(uri);
+	}
+
+	/**
+	 * Checks that each resource is a direct child of the directory {@code uri}, listed
+	 * once. It cannot tell whether the listing is complete.
+	 * @throws IllegalArgumentException if one is not
+	 */
+	public static void checkDirectoryChildren(String uri, List<Resource> children) {
+		checkDirectoryUri(uri);
+		URI directory = parse(uri);
+		String path = directory.getRawPath() == null ? "" : directory.getRawPath();
+		String prefix = path.isEmpty() ? "/" : path + "/";
+		Set<String> seen = new HashSet<>();
+		for (Resource child : children) {
+			URI parsed = parse(child.uri());
+			String childPath = parsed.getRawPath() == null ? "" : parsed.getRawPath();
+			String relative = childPath.startsWith(prefix) ? childPath.substring(prefix.length()) : "";
+			if (!directory.getScheme().equals(parsed.getScheme())
+					|| !Objects.equals(directory.getRawAuthority(), parsed.getRawAuthority()) || relative.isEmpty()
+					|| relative.contains("/") || relative.equals(".") || relative.equals("..")) {
+				throw new IllegalArgumentException(child.uri() + " is not a direct child of directory " + uri);
+			}
+			if (!seen.add(child.uri())) {
+				throw new IllegalArgumentException("Directory " + uri + " lists " + child.uri() + " twice");
+			}
+		}
+	}
+
 	/** One file of a skill: its URI, SHA-256 digest and size in bytes. */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -132,6 +188,9 @@ public final class SkillsSchema {
 			Assert.notNull(uri, "uri must not be null");
 			Assert.notNull(digest, "digest must not be null");
 			Assert.notNull(size, "size must not be null");
+			Assert.isTrue(DIGEST.matcher(digest).matches(),
+					"digest must be sha256: followed by 64 lowercase hex characters: " + digest);
+			Assert.isTrue(size >= 0, "size must not be negative");
 		}
 
 		/** Computes the digest and size of {@code content}. */
@@ -235,8 +294,10 @@ public final class SkillsSchema {
 	}
 
 	/**
-	 * A skill entry of {@code skills/list} and {@code skills/get}.
-	 * {@link Builder#build()} and {@link #validate()} enforce the SEP-2640 rules.
+	 * A skill entry of {@code skills/list} and {@code skills/get}. Constructing or
+	 * deserializing one enforces the SEP-2640 rules: a valid {@code name} matching the
+	 * URI, a {@code description}, and, unless dynamic, a duplicate-free resource list of
+	 * files within the skill that includes {@code SKILL.md}.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -246,56 +307,45 @@ public final class SkillsSchema {
 		@JsonProperty("resources") SkillResources resources,
 		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
 
-		// No lenient fromJson: an entry without resources is invalid and must not be
-		// loaded.
+		// Stricter than other records, with no lenient fromJson: hosts must not load an
+		// invalid entry.
 		public Skill {
 			Assert.notNull(uri, "uri must not be null");
 			Assert.notNull(frontmatter, "frontmatter must not be null");
 			Assert.notNull(resources, "resources must not be null");
+			frontmatter = Collections.unmodifiableMap(new LinkedHashMap<>(frontmatter));
+			validate(uri, frontmatter, resources);
 		}
 
-		/**
-		 * Checks the SEP-2640 entry rules: a valid {@code name} matching the URI, a
-		 * {@code description}, and, unless dynamic, a duplicate-free resource list of
-		 * well-formed files within the skill that includes {@code SKILL.md}.
-		 * @throws IllegalArgumentException if the entry breaks a rule
-		 */
-		public void validate() {
-			String uriName = skillName(this.uri);
-			if (!(this.frontmatter.get("name") instanceof String name) || name.length() > 64
+		private static void validate(String uri, Map<String, Object> frontmatter, SkillResources resources) {
+			String uriName = skillName(uri);
+			if (!(frontmatter.get("name") instanceof String name) || name.length() > 64
 					|| !NAME.matcher(name).matches()) {
 				throw new IllegalArgumentException(
-						"Skill " + this.uri + ": frontmatter name must be 1-64 lowercase letters, digits or hyphens");
+						"Skill " + uri + ": frontmatter name must be 1-64 lowercase letters, digits or hyphens");
 			}
 			if (!name.equals(uriName)) {
 				throw new IllegalArgumentException(
-						"Skill " + this.uri + ": frontmatter name " + name + " does not match the URI");
+						"Skill " + uri + ": frontmatter name " + name + " does not match the URI");
 			}
-			if (!(this.frontmatter.get("description") instanceof String description) || description.isEmpty()
+			if (!(frontmatter.get("description") instanceof String description) || description.isEmpty()
 					|| description.length() > 1024) {
 				throw new IllegalArgumentException(
-						"Skill " + this.uri + ": frontmatter description must have 1-1024 characters");
+						"Skill " + uri + ": frontmatter description must have 1-1024 characters");
 			}
-			if (this.resources.isDynamic()) {
+			if (resources.isDynamic()) {
 				return;
 			}
-			URI skill = parse(this.uri);
+			URI skill = parse(uri);
 			Set<String> seen = new HashSet<>();
-			for (SkillResource resource : this.resources.files()) {
+			for (SkillResource resource : resources.files()) {
 				requireWithinSkill(skill, parse(resource.uri()), resource.uri());
-				if (!DIGEST.matcher(resource.digest()).matches()) {
-					throw new IllegalArgumentException("Resource " + resource.uri()
-							+ ": digest must be sha256: followed by 64 lowercase hex characters");
-				}
-				if (resource.size() < 0) {
-					throw new IllegalArgumentException("Resource " + resource.uri() + ": size must not be negative");
-				}
 				if (!seen.add(resource.uri())) {
-					throw new IllegalArgumentException("Skill " + this.uri + " lists " + resource.uri() + " twice");
+					throw new IllegalArgumentException("Skill " + uri + " lists " + resource.uri() + " twice");
 				}
 			}
-			if (!seen.contains(this.uri)) {
-				throw new IllegalArgumentException("Skill " + this.uri + ": resources must include its SKILL.md");
+			if (!seen.contains(uri)) {
+				throw new IllegalArgumentException("Skill " + uri + ": resources must include its SKILL.md");
 			}
 		}
 
@@ -331,17 +381,7 @@ public final class SkillsSchema {
 			 * @throws IllegalArgumentException if the entry breaks a SEP-2640 rule
 			 */
 			public Skill build() {
-				Skill skill = new Skill(this.uri, this.frontmatter, this.resources, this.meta);
-				skill.validate();
-				if (!this.resources.isDynamic()) {
-					List<SkillResource> files = this.resources.files();
-					long totalSize = files.stream().mapToLong(SkillResource::size).sum();
-					if (files.size() > MAX_RESOURCES_PER_SKILL || totalSize > MAX_TOTAL_SIZE_PER_SKILL) {
-						logger.warn("Skill {} has {} resources totalling {} bytes, over the limits hosts must accept",
-								this.uri, files.size(), totalSize);
-					}
-				}
-				return skill;
+				return new Skill(this.uri, this.frontmatter, this.resources, this.meta);
 			}
 
 		}
@@ -375,6 +415,10 @@ public final class SkillsSchema {
 			Assert.notNull(ttlMs, "ttlMs must not be null");
 			Assert.notNull(cacheScope, "cacheScope must not be null");
 			resultType = resultType == null ? ResultType.COMPLETE : resultType;
+			Set<String> uris = new HashSet<>();
+			for (Skill skill : skills) {
+				Assert.isTrue(uris.add(skill.uri()), "skills/list lists skill " + skill.uri() + " twice");
+			}
 		}
 
 		@JsonCreator
@@ -512,6 +556,106 @@ public final class SkillsSchema {
 
 			public GetSkillResult build() {
 				return new GetSkillResult(skill, ttlMs, cacheScope, ResultType.COMPLETE, meta);
+			}
+
+		}
+	}
+
+	/** The {@code resources/directory/read} parameters. */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ReadDirectoryRequest( // @formatter:off
+		@JsonProperty("uri") String uri,
+		@JsonProperty("cursor") String cursor,
+		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+
+		public ReadDirectoryRequest {
+			Assert.notNull(uri, "uri must not be null");
+		}
+
+	}
+
+	/**
+	 * The {@code resources/directory/read} result: the directory's direct children, with
+	 * subdirectories carrying the {@value #DIRECTORY_MIME_TYPE} {@code mimeType}.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ReadDirectoryResult( // @formatter:off
+		@JsonProperty("resources") List<Resource> resources,
+		@JsonProperty("nextCursor") String nextCursor,
+		@JsonProperty("ttlMs") Long ttlMs,
+		@JsonProperty("cacheScope") CacheScope cacheScope,
+		@JsonProperty("resultType") String resultType,
+		@JsonProperty("_meta") Map<String, Object> meta) implements CacheableResult { // @formatter:on
+
+		public ReadDirectoryResult {
+			Assert.notNull(resources, "resources must not be null");
+			Assert.notNull(ttlMs, "ttlMs must not be null");
+			Assert.notNull(cacheScope, "cacheScope must not be null");
+			resultType = resultType == null ? ResultType.COMPLETE : resultType;
+		}
+
+		@JsonCreator
+		static ReadDirectoryResult fromJson(@JsonProperty("resources") List<Resource> resources,
+				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("ttlMs") Long ttlMs,
+				@JsonProperty("cacheScope") CacheScope cacheScope, @JsonProperty("resultType") String resultType,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (resources == null || ttlMs == null || cacheScope == null) {
+				logger
+					.warn("ReadDirectoryResult: missing required fields during deserialization; substituting defaults");
+			}
+			resources = resources == null ? List.of() : resources;
+			ttlMs = ttlMs == null ? 0L : ttlMs;
+			cacheScope = cacheScope == null ? CacheScope.PRIVATE : cacheScope;
+			return new ReadDirectoryResult(resources, nextCursor, ttlMs, cacheScope, resultType, meta);
+		}
+
+		public static Builder builder(List<Resource> resources) {
+			return new Builder(resources);
+		}
+
+		public static final class Builder {
+
+			private final List<Resource> resources;
+
+			private String nextCursor;
+
+			private Long ttlMs = 0L;
+
+			private CacheScope cacheScope = CacheScope.PRIVATE;
+
+			private Map<String, Object> meta;
+
+			private Builder(List<Resource> resources) {
+				Assert.notNull(resources, "resources must not be null");
+				this.resources = resources;
+			}
+
+			public Builder nextCursor(String nextCursor) {
+				this.nextCursor = nextCursor;
+				return this;
+			}
+
+			public Builder ttlMs(long ttlMs) {
+				Assert.isTrue(ttlMs >= 0, "ttlMs must not be negative");
+				this.ttlMs = ttlMs;
+				return this;
+			}
+
+			public Builder cacheScope(CacheScope cacheScope) {
+				Assert.notNull(cacheScope, "cacheScope must not be null");
+				this.cacheScope = cacheScope;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ReadDirectoryResult build() {
+				return new ReadDirectoryResult(resources, nextCursor, ttlMs, cacheScope, ResultType.COMPLETE, meta);
 			}
 
 		}
