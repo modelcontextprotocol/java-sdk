@@ -39,6 +39,9 @@ import io.modelcontextprotocol.modern.McpSchema.SamplingMessage;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.TextResourceContents;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
+import io.modelcontextprotocol.modern.SkillsSchema.Skill;
+import io.modelcontextprotocol.modern.SkillsSchema.SkillResource;
+import io.modelcontextprotocol.modern.SkillsSchema.SkillResources;
 import io.modelcontextprotocol.modern.server.InputResponses;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpServer;
@@ -51,6 +54,7 @@ import io.modelcontextprotocol.modern.server.feature.McpSyncPrompt;
 import io.modelcontextprotocol.modern.server.feature.McpSyncPromptRepository;
 import io.modelcontextprotocol.modern.server.feature.McpSyncResource;
 import io.modelcontextprotocol.modern.server.feature.McpSyncResourceRepository;
+import io.modelcontextprotocol.modern.server.feature.McpSyncSkillRepository;
 import io.modelcontextprotocol.modern.server.feature.McpSyncTool;
 import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.PromptsFeature;
@@ -59,6 +63,8 @@ import io.modelcontextprotocol.modern.server.feature.ResourceTemplatesPage;
 import io.modelcontextprotocol.modern.server.feature.ResourcesFeature;
 import io.modelcontextprotocol.modern.server.feature.ResourcesPage;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
+import io.modelcontextprotocol.modern.server.feature.SkillsFeature;
+import io.modelcontextprotocol.modern.server.feature.SkillsPage;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
 import io.modelcontextprotocol.modern.server.feature.ToolsPage;
 import io.modelcontextprotocol.modern.server.transport.HttpServletMcpTransport;
@@ -131,6 +137,7 @@ public class ModernConformanceServlet {
 			.feature(ToolsFeature.ofSync(new ConformanceTools(changes)))
 			.feature(ResourcesFeature.ofSync(new ConformanceResources()))
 			.feature(PromptsFeature.ofSync(new ConformancePrompts()))
+			.feature(SkillsFeature.ofSync(new ConformanceSkills()))
 			.feature(CompletionsFeature
 				.ofSync((ctx, request) -> CompleteResult.of(new CompleteResult.Completion(List.of()))))
 			.subscriptions(changes)
@@ -516,6 +523,10 @@ public class ModernConformanceServlet {
 				Resource.builder("test://watched-resource", "Watched Resource")
 					.description("A resource that can be subscribed to for updates")
 					.mimeType("text/plain")
+					.build(),
+				Resource.builder(ConformanceSkills.SKILL_MD, ConformanceSkills.NAME)
+					.description(ConformanceSkills.DESCRIPTION)
+					.mimeType("text/markdown")
 					.build());
 
 		@Override
@@ -539,6 +550,12 @@ public class ModernConformanceServlet {
 		}
 
 		private static ReadResourceResult read(String uri) {
+			String skillFile = ConformanceSkills.FILES.get(uri);
+			if (skillFile != null) {
+				return ReadResourceResult
+					.builder(List.of(TextResourceContents.builder(uri, skillFile).mimeType("text/markdown").build()))
+					.build();
+			}
 			return switch (uri) {
 				case "test://static-text" -> textResource(uri, "This is the content of the static text resource.");
 				case "test://watched-resource" -> textResource(uri, "This is a watched resource content.");
@@ -572,6 +589,46 @@ public class ModernConformanceServlet {
 				.build();
 		}
 
+	}
+
+	/** One SEP-2640 skill, whose files {@link ConformanceResources} serves. */
+	private static final class ConformanceSkills implements McpSyncSkillRepository {
+
+		static final String NAME = "conformance-skill";
+
+		static final String DESCRIPTION = "A sample skill for testing the Skills extension";
+
+		static final String SKILL_MD = "skill://" + NAME + "/SKILL.md";
+
+		static final Map<String, String> FILES = Map.of(SKILL_MD, """
+				---
+				name: conformance-skill
+				description: A sample skill for testing the Skills extension
+				---
+
+				# Conformance skill
+
+				Follow [the guide](references/GUIDE.md).
+				""", "skill://" + NAME + "/references/GUIDE.md", "# Guide\n\nThis is a supporting file.\n");
+
+		private static final Skill SKILL = Skill
+			.builder(SKILL_MD, Map.of("name", NAME, "description", DESCRIPTION), SkillResources
+				.of(FILES.entrySet().stream().map(file -> SkillResource.of(file.getKey(), file.getValue())).toList()))
+			.build();
+
+		@Override
+		public SkillsPage list(McpRequestContext ctx, String cursor) {
+			return SkillsPage.of(List.of(SKILL));
+		}
+
+		@Override
+		public Skill find(McpRequestContext ctx, String uri) {
+			return SKILL_MD.equals(uri) ? SKILL : null;
+		}
+
+	}
+
+	private record PromptEntry(Prompt prompt, Handler<GetPromptRequest, GetPromptOutcome> handler) {
 	}
 
 	private static final class ConformancePrompts implements McpSyncPromptRepository {
