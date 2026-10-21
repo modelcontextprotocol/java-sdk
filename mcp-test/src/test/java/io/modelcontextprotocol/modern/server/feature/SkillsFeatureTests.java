@@ -17,6 +17,7 @@ import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.Implementation;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
+import io.modelcontextprotocol.modern.McpSchema.Resource;
 import io.modelcontextprotocol.modern.SkillsSchema;
 import io.modelcontextprotocol.modern.SkillsSchema.Skill;
 import io.modelcontextprotocol.modern.SkillsSchema.SkillResource;
@@ -150,24 +151,20 @@ class SkillsFeatureTests {
 	}
 
 	@Test
-	void nonconformingEntryIsAnInternalError() {
-		// Bypasses the builder's validation: the frontmatter name does not match the URI.
-		Skill broken = new Skill(GIT_URI, Map.of("name", "other", "description", "d"), SkillResources.dynamic(), null);
+	void getReturningAnotherSkillIsAnInternalError() {
 		McpServer server = server(new McpSyncSkillRepository() {
 			@Override
 			public SkillsPage list(McpRequestContext ctx, String cursor) {
-				return SkillsPage.of(List.of(broken));
+				return SkillsPage.of(List.of());
 			}
 
 			@Override
 			public Skill find(McpRequestContext ctx, String uri) {
-				return broken;
+				return GIT;
 			}
 		});
 
-		assertThat(call(server, SkillsSchema.METHOD_SKILLS_LIST, Map.of()).error().code())
-			.isEqualTo(ErrorCodes.INTERNAL_ERROR);
-		assertThat(call(server, SkillsSchema.METHOD_SKILLS_GET, Map.of("uri", GIT_URI)).error().code())
+		assertThat(call(server, SkillsSchema.METHOD_SKILLS_GET, Map.of("uri", UNLISTED_URI)).error().code())
 			.isEqualTo(ErrorCodes.INTERNAL_ERROR);
 	}
 
@@ -186,6 +183,87 @@ class SkillsFeatureTests {
 		});
 
 		assertThat(call(server, SkillsSchema.METHOD_SKILLS_LIST, Map.of()).error().code())
+			.isEqualTo(ErrorCodes.INTERNAL_ERROR);
+	}
+
+	private static final String ROOT = "skill://git-workflow";
+
+	private static Resource file(String uri) {
+		return Resource.builder(uri, uri.substring(uri.lastIndexOf('/') + 1)).mimeType("text/markdown").build();
+	}
+
+	private static McpServer directoryServer(List<Resource> children) {
+		return server(new McpSyncSkillRepository() {
+			@Override
+			public SkillsPage list(McpRequestContext ctx, String cursor) {
+				return SkillsPage.of(List.of());
+			}
+
+			@Override
+			public Skill find(McpRequestContext ctx, String uri) {
+				return null;
+			}
+
+			@Override
+			public boolean supportsDirectoryRead() {
+				return true;
+			}
+
+			@Override
+			public ResourcesPage readDirectory(McpRequestContext ctx, String uri, String cursor) {
+				return ROOT.equals(uri) ? ResourcesPage.of(children) : null;
+			}
+		});
+	}
+
+	@Test
+	void directoryReadIsNeitherAdvertisedNorServedWithoutSupport() {
+		Map<String, Object> result = (Map<String, Object>) call(SERVER, McpSchema.METHOD_SERVER_DISCOVER, Map.of())
+			.result();
+		Map<String, Object> extensions = (Map<String, Object>) ((Map<String, Object>) result.get("capabilities"))
+			.get("extensions");
+
+		assertThat((Map<String, Object>) extensions.get(SkillsSchema.EXTENSION_ID)).doesNotContainKey("directoryRead");
+		assertThat(call(SERVER, SkillsSchema.METHOD_RESOURCES_DIRECTORY_READ, Map.of("uri", ROOT)).error().code())
+			.isEqualTo(ErrorCodes.METHOD_NOT_FOUND);
+	}
+
+	@Test
+	void directoryReadIsAdvertisedAndReturnsChildren() {
+		McpServer server = directoryServer(List.of(file(ROOT + "/SKILL.md"),
+				Resource.builder(ROOT + "/references", "references")
+					.mimeType(SkillsSchema.DIRECTORY_MIME_TYPE)
+					.build()));
+
+		Map<String, Object> discover = (Map<String, Object>) call(server, McpSchema.METHOD_SERVER_DISCOVER, Map.of())
+			.result();
+		Map<String, Object> extensions = (Map<String, Object>) ((Map<String, Object>) discover.get("capabilities"))
+			.get("extensions");
+		assertThat(extensions).containsEntry(SkillsSchema.EXTENSION_ID, Map.of("directoryRead", true));
+
+		Map<String, Object> result = (Map<String, Object>) call(server, SkillsSchema.METHOD_RESOURCES_DIRECTORY_READ,
+				Map.of("uri", ROOT))
+			.result();
+		assertThat(result).containsEntry("resultType", "complete").containsEntry("cacheScope", "public");
+		assertThat((List<Map<String, Object>>) result.get("resources")).extracting(r -> r.get("mimeType"))
+			.containsExactly("text/markdown", SkillsSchema.DIRECTORY_MIME_TYPE);
+	}
+
+	@Test
+	void directoryReadOfUnknownOrTrailingSlashUriIsInvalidParams() {
+		McpServer server = directoryServer(List.of());
+
+		assertThat(call(server, SkillsSchema.METHOD_RESOURCES_DIRECTORY_READ, Map.of("uri", "skill://other")).error()
+			.code()).isEqualTo(ErrorCodes.INVALID_PARAMS);
+		assertThat(call(server, SkillsSchema.METHOD_RESOURCES_DIRECTORY_READ, Map.of("uri", ROOT + "/")).error().code())
+			.isEqualTo(ErrorCodes.INVALID_PARAMS);
+	}
+
+	@Test
+	void directoryReadListingAGrandchildIsAnInternalError() {
+		McpServer server = directoryServer(List.of(file(ROOT + "/references/GUIDE.md")));
+
+		assertThat(call(server, SkillsSchema.METHOD_RESOURCES_DIRECTORY_READ, Map.of("uri", ROOT)).error().code())
 			.isEqualTo(ErrorCodes.INTERNAL_ERROR);
 	}
 

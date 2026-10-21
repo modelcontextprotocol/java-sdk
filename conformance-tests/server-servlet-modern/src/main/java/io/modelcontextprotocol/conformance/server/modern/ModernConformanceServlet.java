@@ -626,6 +626,28 @@ public class ModernConformanceServlet {
 			return SKILL_MD.equals(uri) ? SKILL : null;
 		}
 
+		@Override
+		public boolean supportsDirectoryRead() {
+			return true;
+		}
+
+		@Override
+		public ResourcesPage readDirectory(McpRequestContext ctx, String uri, String cursor) {
+			String root = "skill://" + NAME;
+			if (uri.equals(root)) {
+				return ResourcesPage.of(List.of(skillFile(SKILL_MD),
+						Resource.builder(root + "/references", "references").mimeType("inode/directory").build()));
+			}
+			if (uri.equals(root + "/references")) {
+				return ResourcesPage.of(List.of(skillFile(root + "/references/GUIDE.md")));
+			}
+			return null;
+		}
+
+		private static Resource skillFile(String uri) {
+			return Resource.builder(uri, uri.substring(uri.lastIndexOf('/') + 1)).mimeType("text/markdown").build();
+		}
+
 	}
 
 	private record PromptEntry(Prompt prompt, Handler<GetPromptRequest, GetPromptOutcome> handler) {
