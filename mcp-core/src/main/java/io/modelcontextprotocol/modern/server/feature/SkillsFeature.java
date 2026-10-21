@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.modern.server.feature;
 
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -19,6 +18,8 @@ import io.modelcontextprotocol.modern.SkillsSchema;
 import io.modelcontextprotocol.modern.SkillsSchema.GetSkillRequest;
 import io.modelcontextprotocol.modern.SkillsSchema.GetSkillResult;
 import io.modelcontextprotocol.modern.SkillsSchema.ListSkillsResult;
+import io.modelcontextprotocol.modern.SkillsSchema.ReadDirectoryRequest;
+import io.modelcontextprotocol.modern.SkillsSchema.ReadDirectoryResult;
 import io.modelcontextprotocol.modern.SkillsSchema.Skill;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
 import io.modelcontextprotocol.modern.server.McpFeature;
@@ -75,6 +76,10 @@ public final class SkillsFeature implements McpFeature {
 
 	@Override
 	public Set<String> methods() {
+		if (this.repository.supportsDirectoryRead()) {
+			return Set.of(SkillsSchema.METHOD_SKILLS_LIST, SkillsSchema.METHOD_SKILLS_GET,
+					SkillsSchema.METHOD_RESOURCES_DIRECTORY_READ);
+		}
 		return Set.of(SkillsSchema.METHOD_SKILLS_LIST, SkillsSchema.METHOD_SKILLS_GET);
 	}
 
@@ -84,6 +89,10 @@ public final class SkillsFeature implements McpFeature {
 			return Params.decode(this.jsonMapper, params, PaginatedRequest.class)
 				.flatMap(request -> this.repository.list(ctx, request.cursor()))
 				.map(page -> McpAsyncResponse.result(toListResult(page)));
+		}
+		if (SkillsSchema.METHOD_RESOURCES_DIRECTORY_READ.equals(ctx.method())) {
+			return Params.decode(this.jsonMapper, params, ReadDirectoryRequest.class)
+				.flatMap(request -> readDirectory(ctx, request));
 		}
 		return Params.decode(this.jsonMapper, params, GetSkillRequest.class).flatMap(request -> {
 			try {
@@ -98,19 +107,27 @@ public final class SkillsFeature implements McpFeature {
 		});
 	}
 
-	@Override
-	public void capabilities(ServerCapabilities.Builder builder) {
-		builder.extension(SkillsSchema.EXTENSION_ID, Map.of());
+	private Mono<McpAsyncResponse<Result>> readDirectory(McpRequestContext ctx, ReadDirectoryRequest request) {
+		try {
+			SkillsSchema.checkDirectoryUri(request.uri());
+		}
+		catch (IllegalArgumentException ex) {
+			return Mono.error(McpException.invalidParams(ex.getMessage()));
+		}
+		return this.repository.readDirectory(ctx, request.uri(), request.cursor())
+			.switchIfEmpty(Mono.error(() -> McpException.invalidParams("Unknown directory: " + request.uri())))
+			.map(page -> McpAsyncResponse.result(toDirectoryResult(request.uri(), page)));
 	}
 
+	@Override
+	public void capabilities(ServerCapabilities.Builder builder) {
+		builder.extension(SkillsSchema.EXTENSION_ID,
+				this.repository.supportsDirectoryRead() ? Map.of("directoryRead", true) : Map.of());
+	}
+
+	// Nonconforming results are server bugs, so they fail as internal errors.
+
 	private Result toListResult(SkillsPage page) {
-		Set<String> uris = new HashSet<>();
-		for (Skill skill : page.skills()) {
-			check(skill);
-			if (!uris.add(skill.uri())) {
-				throw new IllegalStateException("skills/list lists skill " + skill.uri() + " twice");
-			}
-		}
 		return ListSkillsResult.builder(page.skills())
 			.nextCursor(page.nextCursor())
 			.ttlMs(page.ttlMs() != null ? page.ttlMs() : this.defaultTtlMs)
@@ -119,21 +136,20 @@ public final class SkillsFeature implements McpFeature {
 	}
 
 	private Result toGetResult(String uri, Skill skill) {
-		check(skill);
 		if (!skill.uri().equals(uri)) {
 			throw new IllegalStateException("skills/get for " + uri + " found skill " + skill.uri());
 		}
 		return GetSkillResult.builder(skill).ttlMs(this.defaultTtlMs).cacheScope(this.defaultCacheScope).build();
 	}
 
-	// A nonconforming entry is a server bug, so it fails as an internal error.
-	private static void check(Skill skill) {
-		try {
-			skill.validate();
-		}
-		catch (IllegalArgumentException ex) {
-			throw new IllegalStateException(ex.getMessage(), ex);
-		}
+	private Result toDirectoryResult(String uri, ResourcesPage page) {
+		Assert.notNull(page.resources(), "resources must not be null");
+		SkillsSchema.checkDirectoryChildren(uri, page.resources());
+		return ReadDirectoryResult.builder(page.resources())
+			.nextCursor(page.nextCursor())
+			.ttlMs(page.ttlMs() != null ? page.ttlMs() : this.defaultTtlMs)
+			.cacheScope(page.cacheScope() != null ? page.cacheScope() : this.defaultCacheScope)
+			.build();
 	}
 
 	private static McpAsyncSkillRepository adapt(McpSyncSkillRepository repository) {
@@ -146,6 +162,16 @@ public final class SkillsFeature implements McpFeature {
 			@Override
 			public Mono<Skill> find(McpRequestContext ctx, String uri) {
 				return SyncAdapters.call(ctx, () -> repository.find(ctx, uri));
+			}
+
+			@Override
+			public boolean supportsDirectoryRead() {
+				return repository.supportsDirectoryRead();
+			}
+
+			@Override
+			public Mono<ResourcesPage> readDirectory(McpRequestContext ctx, String uri, String cursor) {
+				return SyncAdapters.call(ctx, () -> repository.readDirectory(ctx, uri, cursor));
 			}
 		};
 	}

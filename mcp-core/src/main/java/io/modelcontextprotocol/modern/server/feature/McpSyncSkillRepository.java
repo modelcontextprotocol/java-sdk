@@ -19,4 +19,17 @@ public interface McpSyncSkillRepository {
 	 */
 	Skill find(McpRequestContext ctx, String uri);
 
+	/** See {@link McpAsyncSkillRepository#supportsDirectoryRead()}. */
+	default boolean supportsDirectoryRead() {
+		return false;
+	}
+
+	/**
+	 * See {@link McpAsyncSkillRepository#readDirectory}; {@code null} if {@code uri} is
+	 * not a directory this server serves.
+	 */
+	default ResourcesPage readDirectory(McpRequestContext ctx, String uri, String cursor) {
+		throw new UnsupportedOperationException("resources/directory/read is not supported");
+	}
+
 }

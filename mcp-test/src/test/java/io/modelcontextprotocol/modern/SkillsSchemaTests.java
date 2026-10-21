@@ -9,6 +9,7 @@ import java.util.Map;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.modern.McpSchema.Resource;
 import io.modelcontextprotocol.modern.SkillsSchema.GetSkillResult;
 import io.modelcontextprotocol.modern.SkillsSchema.ListSkillsResult;
 import io.modelcontextprotocol.modern.SkillsSchema.Skill;
@@ -80,6 +81,21 @@ class SkillsSchemaTests {
 				+ resources + "}";
 
 		assertThatException().isThrownBy(() -> this.jsonMapper.readValue(json, Skill.class));
+	}
+
+	@Test
+	void nonconformingEntryIsRejectedOnDeserialization() {
+		String json = "{\"uri\":\"" + URI + "\",\"frontmatter\":{\"name\":\"billing\",\"description\":\"d\"}"
+				+ ",\"resources\":\"dynamic\"}";
+
+		assertThatException().isThrownBy(() -> this.jsonMapper.readValue(json, Skill.class));
+	}
+
+	@Test
+	void listingTheSameSkillTwiceIsRejected() {
+		Skill skill = Skill.builder(URI, FRONTMATTER, SkillResources.dynamic()).build();
+
+		assertThatIllegalArgumentException().isThrownBy(() -> ListSkillsResult.builder(List.of(skill, skill)).build());
 	}
 
 	@Test
@@ -161,6 +177,35 @@ class SkillsSchemaTests {
 	@Test
 	void dynamicSkillSkipsResourceChecks() {
 		assertThatNoException().isThrownBy(() -> Skill.builder(URI, FRONTMATTER, SkillResources.dynamic()).build());
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "skill://pdf/templates/a.md", "skill://pdf/templates/regional" })
+	void directChildrenAreAccepted(String child) {
+		assertThatNoException().isThrownBy(() -> SkillsSchema.checkDirectoryChildren("skill://pdf/templates",
+				List.of(Resource.builder(child, "c").build())));
+	}
+
+	@Test
+	void childrenOfTheSkillRootAreAccepted() {
+		assertThatNoException().isThrownBy(() -> SkillsSchema.checkDirectoryChildren("skill://pdf",
+				List.of(Resource.builder("skill://pdf/SKILL.md", "SKILL.md").build())));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "skill://pdf/templates/regional/eu.md", "skill://pdf/templates", "skill://pdf/other/a.md",
+			"file://pdf/templates/a.md", "skill://pdf/templates-x/a.md" })
+	void nonDirectChildrenAreRejected(String child) {
+		assertThatIllegalArgumentException().isThrownBy(() -> SkillsSchema
+			.checkDirectoryChildren("skill://pdf/templates", List.of(Resource.builder(child, "c").build())));
+	}
+
+	@Test
+	void repeatedChildIsRejected() {
+		Resource child = Resource.builder("skill://pdf/templates/a.md", "a.md").build();
+
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> SkillsSchema.checkDirectoryChildren("skill://pdf/templates", List.of(child, child)));
 	}
 
 }
