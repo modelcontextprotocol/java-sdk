@@ -78,28 +78,28 @@
 		<springframework.version>6.2.1</springframework.version>
 
 		<!-- plugin versions -->
-		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
-		<maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
+		<maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
+		<maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
 		<maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
 		<maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
-		<maven-source-plugin.version>3.3.0</maven-source-plugin.version>
+		<maven-source-plugin.version>3.4.0</maven-source-plugin.version>
 		<jacoco-maven-plugin.version>0.8.10</jacoco-maven-plugin.version>
-		<flatten-maven-plugin.version>1.5.0</flatten-maven-plugin.version>
-		<maven-deploy-plugin.version>3.1.1</maven-deploy-plugin.version>
+		<flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
+		<maven-deploy-plugin.version>3.2.0</maven-deploy-plugin.version>
 		<asciidoctor-maven-plugin.version>2.2.3</asciidoctor-maven-plugin.version>
 		<maven-assembly-plugin.version>3.7.0</maven-assembly-plugin.version>
 		<maven-dependency-plugin.version>3.5.0</maven-dependency-plugin.version>
 		<maven-site-plugin.version>4.0.0-M13</maven-site-plugin.version>
 		<maven-project-info-reports-plugin.version>3.4.5</maven-project-info-reports-plugin.version>
-		<maven-jar-plugin.version>3.3.0</maven-jar-plugin.version>
-		<spring-javaformat-maven-plugin.version>0.0.47</spring-javaformat-maven-plugin.version>
+		<maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
+		<spring-javaformat-maven-plugin.version>0.0.48</spring-javaformat-maven-plugin.version>
 		<org.maven.antora-version>1.0.0-alpha.4</org.maven.antora-version>
 		<io.spring.maven.antora-version>0.0.4</io.spring.maven.antora-version>
 		<asciidoctorj-pdf.version>1.6.2</asciidoctorj-pdf.version>
 		<tomcat.version>11.0.2</tomcat.version>
 		<jakarta.servlet.version>6.1.0</jakarta.servlet.version>
 		<awaitility.version>4.2.0</awaitility.version>
-		<bnd-maven-plugin.version>7.1.0</bnd-maven-plugin.version>
+		<bnd-maven-plugin.version>7.4.0</bnd-maven-plugin.version>
 		<json-unit-assertj.version>4.1.0</json-unit-assertj.version>
 		<json-schema-validator-jackson2.version>2.0.4</json-schema-validator-jackson2.version>
 		<json-schema-validator-jackson3.version>3.0.6</json-schema-validator-jackson3.version>
@@ -271,7 +271,7 @@
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>exec-maven-plugin</artifactId>
-				<version>3.1.0</version>
+				<version>3.6.4</version>
 				<configuration>
 					<skip>true</skip>
 					<mainClass>ignored</mainClass>
