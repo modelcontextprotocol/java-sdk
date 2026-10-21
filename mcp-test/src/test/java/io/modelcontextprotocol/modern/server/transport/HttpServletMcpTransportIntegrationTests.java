@@ -6,6 +6,7 @@ package io.modelcontextprotocol.modern.server.transport;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.Socket;
@@ -258,6 +259,19 @@ class HttpServletMcpTransportIntegrationTests {
 
 		assertThat(response.statusCode()).isEqualTo(400);
 		assertThat(errorCode(response)).isEqualTo(ErrorCodes.INVALID_PARAMS);
+	}
+
+	@Test
+	void listenWithoutNotificationsIsInvalidParams() throws Exception {
+		HttpRequest request = post("subscriptions/listen", Map.of("_meta", meta())).build();
+		HttpResponse<InputStream> response = HttpClient.newHttpClient()
+			.send(request, HttpResponse.BodyHandlers.ofInputStream());
+
+		try (InputStream body = response.body()) {
+			assertThat(response.statusCode()).isEqualTo(400);
+			assertThat(new String(body.readAllBytes(), StandardCharsets.UTF_8))
+				.contains("\"code\":" + ErrorCodes.INVALID_PARAMS);
+		}
 	}
 
 	@Test
