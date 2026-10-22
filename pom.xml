@@ -89,7 +89,7 @@
 		<asciidoctor-maven-plugin.version>2.2.3</asciidoctor-maven-plugin.version>
 		<maven-assembly-plugin.version>3.7.0</maven-assembly-plugin.version>
 		<maven-dependency-plugin.version>3.5.0</maven-dependency-plugin.version>
-		<maven-site-plugin.version>4.0.0-M13</maven-site-plugin.version>
+		<maven-site-plugin.version>4.0.0-M16</maven-site-plugin.version>
 		<maven-project-info-reports-plugin.version>3.4.5</maven-project-info-reports-plugin.version>
 		<maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
 		<spring-javaformat-maven-plugin.version>0.0.48</spring-javaformat-maven-plugin.version>
