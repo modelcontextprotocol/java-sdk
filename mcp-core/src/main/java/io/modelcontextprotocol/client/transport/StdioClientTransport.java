@@ -393,7 +393,8 @@ public class StdioClientTransport implements McpClientTransport {
 	/**
 	 * Gracefully closes the transport by destroying the process and disposing of the
 	 * schedulers. This method sends a TERM signal to the process and waits for it to exit
-	 * before cleaning up resources.
+	 * before cleaning up resources. If the process does not exit within
+	 * {@link ServerParameters#getProcessTerminationTimeout()}, it is destroyed forcibly.
 	 * @return A Mono that completes when the transport is closed
 	 */
 	@Override
@@ -412,8 +413,16 @@ public class StdioClientTransport implements McpClientTransport {
 		})).then(Mono.defer(() -> {
 			logger.debug("Sending TERM to process");
 			if (this.process != null) {
-				this.process.destroy();
-				return Mono.fromFuture(process.onExit());
+				Process serverProcess = this.process;
+				serverProcess.destroy();
+				Duration timeout = params.getProcessTerminationTimeout();
+				// A process that ignores TERM would otherwise keep closeGracefully()
+				// from completing
+				return Mono.fromFuture(serverProcess::onExit).timeout(timeout, Mono.defer(() -> {
+					logger.warn("MCP server did not exit within {} after TERM, destroying it forcibly", timeout);
+					serverProcess.destroyForcibly();
+					return Mono.fromFuture(serverProcess::onExit);
+				}));
 			}
 			else {
 				logger.warn("Process not started");
