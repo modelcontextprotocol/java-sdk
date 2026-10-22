@@ -30,7 +30,7 @@ jobs:
           timeout 30 bash -c 'until curl -s http://localhost:8080/mcp > /dev/null 2>&1; do sleep 0.5; done'
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -62,7 +62,7 @@ jobs:
           timeout 30 bash -c 'until curl -s http://localhost:8081/mcp > /dev/null 2>&1; do sleep 0.5; done'
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -92,7 +92,7 @@ jobs:
         run: ./mvnw clean install -DskipTests
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
 
