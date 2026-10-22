@@ -669,10 +669,10 @@ class StdioMcpTransportTests {
 			.getBytes(StandardCharsets.UTF_8));
 		this.clientOut.flush();
 
-		var firstResponse = readLineWithTimeout();
-		var secondResponse = readLineWithTimeout();
-		assertThatJson(firstResponse).isEqualTo(emptyResult(1));
-		assertThatJson(secondResponse).isEqualTo(emptyResult(2));
+		// Requests are handled concurrently, so responses may arrive in either order.
+		assertThat(List.of(readLineWithTimeout(), readLineWithTimeout())).satisfiesExactlyInAnyOrder(
+				response -> assertThatJson(response).isEqualTo(emptyResult(1)),
+				response -> assertThatJson(response).isEqualTo(emptyResult(2)));
 	}
 
 	@Test
