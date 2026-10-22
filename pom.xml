@@ -71,7 +71,7 @@
 		<jackson-annotations.version>2.20</jackson-annotations.version>
 		<jackson2.version>2.20.2</jackson2.version>
 		<jackson3.version>3.0.4</jackson3.version>
-		<springframework.version>6.2.1</springframework.version>
+		<springframework.version>6.2.19</springframework.version>
 
 		<!-- plugin versions -->
 		<maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
