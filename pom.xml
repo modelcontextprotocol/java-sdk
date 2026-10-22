@@ -101,8 +101,8 @@
 		<awaitility.version>4.3.0</awaitility.version>
 		<bnd-maven-plugin.version>7.4.0</bnd-maven-plugin.version>
 		<json-unit-assertj.version>4.1.1</json-unit-assertj.version>
-		<json-schema-validator-jackson2.version>2.0.4</json-schema-validator-jackson2.version>
-		<json-schema-validator-jackson3.version>3.0.6</json-schema-validator-jackson3.version>
+		<json-schema-validator-jackson2.version>2.0.8</json-schema-validator-jackson2.version>
+		<json-schema-validator-jackson3.version>2.0.8</json-schema-validator-jackson3.version>
 
 	</properties>
 
