@@ -73,7 +73,7 @@
 		<slf4j-api.version>2.0.16</slf4j-api.version>
 		<logback.version>1.6.5</logback.version>
 		<jackson-annotations.version>2.21</jackson-annotations.version>
-		<jackson2.version>2.21.1</jackson2.version>
+		<jackson2.version>2.21.8</jackson2.version>
 		<jackson3.version>3.1.4</jackson3.version>
 
 		<!-- plugin versions -->
