@@ -80,7 +80,7 @@
 		<maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
 		<maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
 		<maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
-		<maven-javadoc-plugin.version>3.11.3</maven-javadoc-plugin.version>
+		<maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
 		<maven-source-plugin.version>3.4.0</maven-source-plugin.version>
 		<jacoco-maven-plugin.version>0.8.10</jacoco-maven-plugin.version>
 		<flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
