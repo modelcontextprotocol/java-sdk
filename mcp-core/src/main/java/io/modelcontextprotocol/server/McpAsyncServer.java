@@ -723,6 +723,10 @@ public class McpAsyncServer {
 			McpServerFeatures.AsyncResourceTemplateSpecification removed = this.resourceTemplates.remove(uriTemplate);
 			if (removed != null) {
 				logger.debug("Removed resource template: {}", uriTemplate);
+				if (Boolean.TRUE.equals(this.serverCapabilities.resources().listChanged())) {
+					return notifyResourcesListChanged();
+				}
+				return Mono.empty();
 			}
 			else {
 				logger.warn("Failed to remove a resource template with URI '{}' (not found)", uriTemplate);

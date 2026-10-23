@@ -78,6 +78,7 @@ class DerivedCapabilitiesRuntimeChangesTests {
 		StepVerifier.create(server.addResource(asyncResource("test://added"))).verifyComplete();
 		StepVerifier.create(server.removeResource("test://initial")).verifyComplete();
 		StepVerifier.create(server.addResourceTemplate(asyncTemplate("test://items/{id}"))).verifyComplete();
+		StepVerifier.create(server.removeResourceTemplate("test://items/{id}")).verifyComplete();
 
 		assertThat(transport.getAllSentMessages()).isEmpty();
 	}
