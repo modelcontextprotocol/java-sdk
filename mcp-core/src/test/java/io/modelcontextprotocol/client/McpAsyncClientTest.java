@@ -111,6 +111,31 @@ class McpAsyncClientTest {
 		}
 
 		@Nested
+		class LoggingConsumers {
+
+			@Test
+			void addLoggingConsumerAfterBuild() {
+				McpClientTransport transport = mock(McpClientTransport.class);
+				when(transport.protocolVersions()).thenReturn(List.of("2024-11-05"));
+				var client = McpClient.async(transport).jsonSchemaValidator(mock(JsonSchemaValidator.class)).build();
+
+				assertThatCode(() -> client.addLoggingConsumer(notification -> Mono.empty()))
+					.doesNotThrowAnyException();
+			}
+
+			@Test
+			void addLoggingConsumerRejectsNull() {
+				McpClientTransport transport = mock(McpClientTransport.class);
+				when(transport.protocolVersions()).thenReturn(List.of("2024-11-05"));
+				var client = McpClient.async(transport).jsonSchemaValidator(mock(JsonSchemaValidator.class)).build();
+
+				assertThatThrownBy(() -> client.addLoggingConsumer(null)).isInstanceOf(IllegalArgumentException.class)
+					.hasMessage("Logging consumer must not be null");
+			}
+
+		}
+
+		@Nested
 		class ClientCapabilities {
 
 			@Test

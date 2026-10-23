@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
@@ -186,6 +187,13 @@ public class McpAsyncClient {
 	private final boolean applyElicitationDefaults;
 
 	/**
+	 * Consumers notified for every logging message received from the server. Held as a
+	 * live reference so that consumers registered after the client was built are picked
+	 * up by the already installed notification handler.
+	 */
+	private final List<Function<LoggingMessageNotification, Mono<Void>>> loggingConsumers;
+
+	/**
 	 * Create a new McpAsyncClient with the given transport and session request-response
 	 * timeout.
 	 * @param transport the transport to use.
@@ -304,11 +312,12 @@ public class McpAsyncClient {
 				asyncPromptsChangeNotificationHandler(promptsChangeConsumersFinal));
 
 		// Utility Logging Notification
-		List<Function<LoggingMessageNotification, Mono<Void>>> loggingConsumersFinal = new ArrayList<>();
+		List<Function<LoggingMessageNotification, Mono<Void>>> loggingConsumersFinal = new CopyOnWriteArrayList<>();
 		loggingConsumersFinal.add((notification) -> Mono.fromRunnable(() -> logger.debug("Logging: {}", notification)));
 		if (!Utils.isEmpty(features.loggingConsumers())) {
 			loggingConsumersFinal.addAll(features.loggingConsumers());
 		}
+		this.loggingConsumers = loggingConsumersFinal;
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_MESSAGE,
 				asyncLoggingNotificationHandler(loggingConsumersFinal));
 
@@ -1101,6 +1110,19 @@ public class McpAsyncClient {
 				.flatMap(consumer -> consumer.apply(loggingMessageNotification))
 				.then();
 		};
+	}
+
+	/**
+	 * Registers an additional consumer for logging messages received from the server.
+	 * <p>
+	 * Unlike {@link McpClient.AsyncSpec#loggingConsumer(Function)}, this can be called
+	 * after the client has been built, so a consumer may be registered only once
+	 * {@link #getServerCapabilities()} shows the server supports logging.
+	 * @param loggingConsumer A consumer that receives logging messages. Must not be null.
+	 */
+	public void addLoggingConsumer(Function<LoggingMessageNotification, Mono<Void>> loggingConsumer) {
+		Assert.notNull(loggingConsumer, "Logging consumer must not be null");
+		this.loggingConsumers.add(loggingConsumer);
 	}
 
 	/**
