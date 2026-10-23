@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -724,6 +725,48 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		}
 		catch (IOException | InterruptedException e) {
 			return -1;
+		}
+	}
+
+	/**
+	 * A client that waits for the response before it starts reading events must not hang
+	 * when the server has nothing to send yet. The GET handler used to leave the response
+	 * uncommitted until the first SSE event was written, so an idle server never answered
+	 * and clients such as Node's fetch/undici or mcp-remote timed out waiting for the
+	 * headers.
+	 */
+	@Test
+	void listeningStreamCommitsResponseBeforeFirstEvent() throws Exception {
+		// No keep-alive on this provider: nothing will ever be written to the stream, so
+		// the
+		// request can only complete if the server commits the response itself.
+		var provider = HttpServletStreamableServerTransportProvider.builder()
+			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
+			.mcpEndpoint(MESSAGE_ENDPOINT)
+			.build();
+		MCP_SERVLET.setDelegate(provider);
+		var server = McpServer.sync(provider).serverInfo("test-server", "1.0.0").build();
+		try {
+			String sessionId = initializeSession(httpClient);
+			assertThat(sessionId).isNotNull();
+
+			var get = HttpRequest.newBuilder()
+				.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+				.header("Accept", "text/event-stream")
+				.header(HttpHeaders.MCP_SESSION_ID, sessionId)
+				.GET()
+				.build();
+
+			HttpResponse<InputStream> response = httpClient.sendAsync(get, HttpResponse.BodyHandlers.ofInputStream())
+				.get(5, TimeUnit.SECONDS);
+
+			assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_OK);
+			assertThat(response.headers().firstValue("Content-Type").orElse("")).contains("text/event-stream");
+			response.body().close();
+		}
+		finally {
+			server.closeGracefully();
+			MCP_SERVLET.setDelegate(mcpServerTransportProvider);
 		}
 	}
 
