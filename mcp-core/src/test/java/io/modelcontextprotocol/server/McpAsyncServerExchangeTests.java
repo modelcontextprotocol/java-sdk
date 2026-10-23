@@ -17,6 +17,8 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import reactor.core.publisher.Mono;
@@ -29,6 +31,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -83,6 +86,54 @@ class McpAsyncServerExchangeTests {
 			assertThatThrownBy(() -> result.roots().add(McpSchema.Root.builder("file:///test").name("Test").build()))
 				.isInstanceOf(UnsupportedOperationException.class);
 		}).verifyComplete();
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void testListRootsWithoutCapabilities(boolean paginated) {
+		exchange = new McpAsyncServerExchange("testSessionId", mockSession, null, clientInfo,
+				McpTransportContext.EMPTY);
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(McpSchema.PaginatedRequest.class),
+				any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ListRootsResult.builder(List.of()).build()));
+
+		Mono<McpSchema.ListRootsResult> result = paginated ? exchange.listRoots("cursor") : exchange.listRoots();
+		verifyNoInteractions(mockSession);
+		StepVerifier.create(result)
+			.verifyErrorSatisfies(error -> assertThat(error).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Client must be initialized. Call the initialize method first!"));
+		verifyNoInteractions(mockSession);
+	}
+
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void testListRootsWithoutRootsCapability(boolean paginated) {
+		exchange = new McpAsyncServerExchange("testSessionId", mockSession,
+				McpSchema.ClientCapabilities.builder().build(), clientInfo, McpTransportContext.EMPTY);
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(McpSchema.PaginatedRequest.class),
+				any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ListRootsResult.builder(List.of()).build()));
+
+		Mono<McpSchema.ListRootsResult> result = paginated ? exchange.listRoots("cursor") : exchange.listRoots();
+		verifyNoInteractions(mockSession);
+		StepVerifier.create(result)
+			.verifyErrorSatisfies(error -> assertThat(error).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Client must be configured with root listing capabilities"));
+		verifyNoInteractions(mockSession);
+	}
+
+	@Test
+	void testListRootsWithoutListChangedSupport() {
+		exchange = new McpAsyncServerExchange("testSessionId", mockSession,
+				McpSchema.ClientCapabilities.builder().roots(false).build(), clientInfo, McpTransportContext.EMPTY);
+		McpSchema.ListRootsResult result = McpSchema.ListRootsResult.builder(List.of()).build();
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest("cursor")),
+				any(TypeRef.class)))
+			.thenReturn(Mono.just(result));
+
+		StepVerifier.create(exchange.listRoots("cursor")).expectNext(result).verifyComplete();
+		verify(mockSession).sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest("cursor")),
+				any(TypeRef.class));
 	}
 
 	@Test
