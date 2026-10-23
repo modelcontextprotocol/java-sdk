@@ -140,6 +140,19 @@ public class McpSyncClient implements AutoCloseable {
 		return this.delegate.getClientInfo();
 	}
 
+	/**
+	 * Drops every cached list and {@code resources/read} result, so that the next call
+	 * re-fetches from the server. Use it when the caller must observe current server
+	 * state and can wait for neither the server's {@code ttlMs} to lapse nor a change
+	 * notification to arrive.
+	 * <p>
+	 * The tool output schema cache used by {@link #callTool} is a separate mechanism and
+	 * is not affected.
+	 */
+	public void invalidateCache() {
+		this.delegate.invalidateCache();
+	}
+
 	@Override
 	public void close() {
 		this.delegate.close();
