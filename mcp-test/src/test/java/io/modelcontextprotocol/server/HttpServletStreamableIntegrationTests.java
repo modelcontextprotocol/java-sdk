@@ -635,7 +635,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 				.tools(McpServerFeatures.AsyncToolSpecification.builder()
 					.tool(McpSchema.Tool.builder("hangs", EMPTY_JSON_SCHEMA).description("never returns").build())
 					.callHandler((exchange, request) -> Flux
-						.interval(Duration.ZERO, toolEmissionInterval, Schedulers.newSingle("test-tool"))
+						.interval(toolEmissionInterval, toolEmissionInterval, Schedulers.newSingle("test-tool"))
 						.flatMap(tick -> exchange.loggingNotification(McpSchema.LoggingMessageNotification.builder()
 							.level(McpSchema.LoggingLevel.INFO)
 							.data("x".repeat(64 * 1024))

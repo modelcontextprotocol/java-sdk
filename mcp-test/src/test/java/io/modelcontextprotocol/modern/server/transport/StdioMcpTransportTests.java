@@ -29,9 +29,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
 
-import com.google.gson.GsonBuilder;
-import com.google.gson.ToNumberPolicy;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCMessage;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
@@ -39,13 +38,12 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
-import io.modelcontextprotocol.modern.server.McpTransportResponse;
 import io.modelcontextprotocol.modern.server.McpRequestManager;
 import io.modelcontextprotocol.modern.server.McpServer;
+import io.modelcontextprotocol.modern.server.McpTransportResponse;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
-import io.modelcontextprotocol.spec.json.gson.GsonMcpJsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
@@ -57,14 +55,20 @@ import static io.modelcontextprotocol.modern.server.ModernTestFixtures.PERMISSIV
 import static io.modelcontextprotocol.modern.server.ModernTestFixtures.SERVER_INFO;
 import static io.modelcontextprotocol.modern.server.ModernTestFixtures.emptyTools;
 import static io.modelcontextprotocol.modern.server.ModernTestFixtures.meta;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 
 class StdioMcpTransportTests {
 
-	private final GsonMcpJsonMapper jsonMapper = new GsonMcpJsonMapper();
+	private final McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 
 	private PipedOutputStream clientOut;
 
@@ -105,8 +109,40 @@ class StdioMcpTransportTests {
 		this.clientOut.flush();
 	}
 
-	private static int errorCode(Map<String, Object> response) {
-		return ((Number) ((Map<?, ?>) response.get("error")).get("code")).intValue();
+	// MCP lets an error response omit the id when the request's id could not be read.
+	private static String error(int code) {
+		return """
+				{
+				  "jsonrpc": "2.0",
+				  "error": {
+				    "code": %d,
+				    "message": "${json-unit.any-string}"
+				  }
+				}
+				""".formatted(code);
+	}
+
+	private static String error(Object id, int code) {
+		return """
+				{
+				  "jsonrpc": "2.0",
+				  "id": %s,
+				  "error": {
+				    "code": %d,
+				    "message": "${json-unit.any-string}"
+				  }
+				}
+				""".formatted(id, code);
+	}
+
+	private static String emptyResult(int id) {
+		return """
+				{
+				  "jsonrpc": "2.0",
+				  "id": %s,
+				  "result": {}
+				}
+				""".formatted(id);
 	}
 
 	@AfterEach
@@ -180,14 +216,10 @@ class StdioMcpTransportTests {
 		fastParams.put("name", "fast");
 		send("tools/call", 2, fastParams);
 
-		String firstLine = readLineWithTimeout();
-		Map<String, Object> firstResponse = this.jsonMapper.readValue(firstLine, Map.class);
-		assertThat(((Number) firstResponse.get("id")).intValue()).isEqualTo(2);
+		assertThatJson(readLineWithTimeout()).inPath("$.id").isEqualTo(2);
 
 		releaseSlow.countDown();
-		String secondLine = readLineWithTimeout();
-		Map<String, Object> secondResponse = this.jsonMapper.readValue(secondLine, Map.class);
-		assertThat(((Number) secondResponse.get("id")).intValue()).isEqualTo(1);
+		assertThatJson(readLineWithTimeout()).inPath("$.id").isEqualTo(1);
 	}
 
 	@Test
@@ -203,10 +235,16 @@ class StdioMcpTransportTests {
 		params.put("name", "streamer");
 		send("tools/call", 5, params);
 
-		String first = readLineWithTimeout();
-		assertThat(first).contains("notifications/progress");
-		String second = readLineWithTimeout();
-		assertThat(second).contains("\"result\"");
+		assertThatJson(readLineWithTimeout()).inPath("$.method").isEqualTo("notifications/progress");
+		assertThatJson(readLineWithTimeout()).isEqualTo(json("""
+				{
+				  "jsonrpc": "2.0",
+				  "id": 5,
+				  "result": {
+				    "resultType": "complete"
+				  }
+				}
+				"""));
 	}
 
 	@Test
@@ -237,11 +275,7 @@ class StdioMcpTransportTests {
 		this.clientOut.write("not json at all\n".getBytes(StandardCharsets.UTF_8));
 		this.clientOut.flush();
 
-		String line = readLineWithTimeout();
-		Map<String, Object> parsed = this.jsonMapper.readValue(line, Map.class);
-		assertThat(parsed.get("id")).isNull();
-		assertThat(((Number) ((Map<?, ?>) parsed.get("error")).get("code")).intValue())
-			.isEqualTo(ErrorCodes.PARSE_ERROR);
+		assertThatJson(readLineWithTimeout()).isEqualTo(error(ErrorCodes.PARSE_ERROR));
 	}
 
 	@Test
@@ -254,14 +288,10 @@ class StdioMcpTransportTests {
 			.getBytes(StandardCharsets.UTF_8));
 		this.clientOut.flush();
 
-		Map<String, Object> parsed = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(parsed.get("id")).isNull();
-		assertThat(((Number) ((Map<?, ?>) parsed.get("error")).get("code")).intValue())
-			.isEqualTo(ErrorCodes.INVALID_REQUEST);
+		assertThatJson(readLineWithTimeout()).isEqualTo(error(ErrorCodes.INVALID_REQUEST));
 
 		send("tools/list", 7, Map.of("_meta", meta()));
-		Map<String, Object> next = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) next.get("id")).intValue()).isEqualTo(7);
+		assertThatJson(readLineWithTimeout()).isEqualTo(emptyResult(7));
 	}
 
 	@Test
@@ -297,9 +327,7 @@ class StdioMcpTransportTests {
 		send("tools/call", 2, Map.of("_meta", meta(), "name", "answers"));
 
 		// An error for id 1 would read as the answer to the request still in flight.
-		Map<String, Object> response = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) response.get("id")).intValue()).isEqualTo(2);
-		assertThat(response.get("error")).isNull();
+		assertThatJson(readLineWithTimeout()).isEqualTo(emptyResult(2));
 	}
 
 	@Test
@@ -308,9 +336,7 @@ class StdioMcpTransportTests {
 
 		for (String line : List.of("null", "[]", "42", "\"text\"")) {
 			sendRaw(line);
-			Map<String, Object> response = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-			assertThat(response.get("id")).as(line).isNull();
-			assertThat(errorCode(response)).as(line).isEqualTo(ErrorCodes.INVALID_REQUEST);
+			assertThatJson(readLineWithTimeout()).as(line).isEqualTo(error(ErrorCodes.INVALID_REQUEST));
 		}
 	}
 
@@ -320,9 +346,7 @@ class StdioMcpTransportTests {
 
 		sendRaw("{\"jsonrpc\":\"1.0\",\"id\":8,\"method\":\"tools/list\",\"params\":{}}");
 
-		Map<String, Object> response = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) response.get("id")).intValue()).isEqualTo(8);
-		assertThat(errorCode(response)).isEqualTo(ErrorCodes.INVALID_REQUEST);
+		assertThatJson(readLineWithTimeout()).isEqualTo(error(8, ErrorCodes.INVALID_REQUEST));
 	}
 
 	@Test
@@ -367,11 +391,9 @@ class StdioMcpTransportTests {
 		send("tools/call", 3, Map.of("_meta", meta(), "name", "answers"));
 		releaseWrites.countDown();
 
-		Map<String, Object> first = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) first.get("id")).intValue()).isEqualTo(1);
-		Map<String, Object> next = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(next.get("method")).isNull();
-		assertThat(((Number) next.get("id")).intValue()).isEqualTo(3);
+		assertThatJson(readLineWithTimeout()).isEqualTo(emptyResult(1));
+		// The progress notification for request 2 was dropped.
+		assertThatJson(readLineWithTimeout()).isEqualTo(emptyResult(3));
 	}
 
 	@Test
@@ -392,18 +414,18 @@ class StdioMcpTransportTests {
 		send("tools/call", 1, Map.of("_meta", meta(), "name", "slow"));
 		send("tools/call", 2, Map.of("_meta", meta(), "name", "fast"));
 
-		Map<String, Object> first = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) first.get("id")).intValue()).isEqualTo(2);
+		assertThatJson(readLineWithTimeout()).isEqualTo(emptyResult(2));
 		release.countDown();
-		Map<String, Object> second = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) second.get("id")).intValue()).isEqualTo(1);
+		assertThatJson(readLineWithTimeout()).isEqualTo(emptyResult(1));
 	}
 
 	@Test
 	void prettyPrintedOutputStaysOnOneLine() throws Exception {
-		GsonMcpJsonMapper prettyMapper = new GsonMcpJsonMapper(new GsonBuilder().setPrettyPrinting()
-			.setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
-			.create());
+		// Stands in for a pretty-printing mapper: raw line breaks between tokens.
+		McpJsonMapper prettyMapper = mock(McpJsonMapper.class, delegatesTo(this.jsonMapper));
+		doAnswer(invocation -> {
+			return this.jsonMapper.writeValueAsString(invocation.getArgument(0)).replace(",", ",\n");
+		}).when(prettyMapper).writeValueAsString(any());
 		start(managerOf((transportContext,
 				request) -> Mono.just(McpTransportResponse
 					.result(JSONRPCResponse.result(request.id(), Map.of("text", "line one\nline two"))))),
@@ -411,9 +433,16 @@ class StdioMcpTransportTests {
 
 		send("tools/call", 6, Map.of("_meta", meta()));
 
-		Map<String, Object> response = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) response.get("id")).intValue()).isEqualTo(6);
-		assertThat(((Map<?, ?>) response.get("result")).get("text")).isEqualTo("line one\nline two");
+		var line = readLineWithTimeout();
+		assertThatJson(line).isEqualTo(json("""
+				{
+					"id": 6,
+					"jsonrpc": "2.0",
+					"result": {
+						"text": "line one\\nline two"
+					}
+				}
+				"""));
 	}
 
 	@Test
@@ -449,8 +478,7 @@ class StdioMcpTransportTests {
 
 		for (int i = 0; i < 50; i++) {
 			send("tools/list", 1, Map.of("_meta", meta()));
-			Map<String, Object> response = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-			assertThat(response.get("error")).isNull();
+			assertThatJson(readLineWithTimeout()).isEqualTo(emptyResult(1));
 		}
 	}
 
@@ -506,7 +534,7 @@ class StdioMcpTransportTests {
 		start(server);
 
 		send("subscriptions/listen", 3, Map.of("_meta", meta(), "notifications", Map.of("toolsListChanged", true)));
-		assertThat(readLineWithTimeout()).contains("notifications/subscriptions/acknowledged");
+		assertThatJson(readLineWithTimeout()).inPath("$.method").isEqualTo("notifications/subscriptions/acknowledged");
 
 		this.transport.closeGracefully().block(Duration.ofSeconds(1));
 
@@ -578,15 +606,11 @@ class StdioMcpTransportTests {
 		}));
 
 		send("tools/list", 6, Map.of("_meta", meta()));
-		assertThat(readLineWithTimeout()).contains("notifications/progress");
-		Map<String, Object> failed = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) failed.get("id")).intValue()).isEqualTo(6);
-		assertThat(errorCode(failed)).isEqualTo(ErrorCodes.INTERNAL_ERROR);
+		assertThatJson(readLineWithTimeout()).inPath("$.method").isEqualTo("notifications/progress");
+		assertThatJson(readLineWithTimeout()).isEqualTo(error(6, ErrorCodes.INTERNAL_ERROR));
 
 		send("tools/list", 7, Map.of("_meta", meta()));
-		Map<String, Object> empty = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) empty.get("id")).intValue()).isEqualTo(7);
-		assertThat(errorCode(empty)).isEqualTo(ErrorCodes.INTERNAL_ERROR);
+		assertThatJson(readLineWithTimeout()).isEqualTo(error(7, ErrorCodes.INTERNAL_ERROR));
 	}
 
 	// Not spec-mandated, but follows from the same MUST-reply rule: a request manager
@@ -603,14 +627,10 @@ class StdioMcpTransportTests {
 		}));
 
 		send("tools/list", 9, Map.of("_meta", meta()));
-		Map<String, Object> failed = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) failed.get("id")).intValue()).isEqualTo(9);
-		assertThat(errorCode(failed)).isEqualTo(ErrorCodes.INTERNAL_ERROR);
+		assertThatJson(readLineWithTimeout()).isEqualTo(error(9, ErrorCodes.INTERNAL_ERROR));
 
 		send("tools/list", 9, Map.of("_meta", meta()));
-		Map<String, Object> retried = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) retried.get("id")).intValue()).isEqualTo(9);
-		assertThat(retried.get("error")).isNull();
+		assertThatJson(readLineWithTimeout()).isEqualTo(emptyResult(9));
 	}
 
 	@Test
@@ -623,9 +643,7 @@ class StdioMcpTransportTests {
 				+ "\"}}");
 		send("tools/list", 2, Map.of("_meta", meta()));
 
-		Map<String, Object> response = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) response.get("id")).intValue()).isEqualTo(2);
-		assertThat(response.get("error")).isNull();
+		assertThatJson(readLineWithTimeout()).isEqualTo(emptyResult(2));
 	}
 
 	@Test
@@ -637,8 +655,7 @@ class StdioMcpTransportTests {
 
 		sendRaw(request);
 
-		Map<String, Object> response = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-		assertThat(((Number) response.get("id")).intValue()).isEqualTo(3);
+		assertThatJson(readLineWithTimeout()).isEqualTo(emptyResult(3));
 	}
 
 	@Test
@@ -652,13 +669,10 @@ class StdioMcpTransportTests {
 			.getBytes(StandardCharsets.UTF_8));
 		this.clientOut.flush();
 
-		Set<Integer> ids = new HashSet<>();
-		for (int i = 0; i < 2; i++) {
-			Map<String, Object> response = this.jsonMapper.readValue(readLineWithTimeout(), Map.class);
-			assertThat(response.get("error")).isNull();
-			ids.add(((Number) response.get("id")).intValue());
-		}
-		assertThat(ids).containsExactlyInAnyOrder(1, 2);
+		// Requests are handled concurrently, so responses may arrive in either order.
+		assertThat(List.of(readLineWithTimeout(), readLineWithTimeout())).satisfiesExactlyInAnyOrder(
+				response -> assertThatJson(response).isEqualTo(emptyResult(1)),
+				response -> assertThatJson(response).isEqualTo(emptyResult(2)));
 	}
 
 	@Test

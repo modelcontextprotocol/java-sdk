@@ -1,28 +1,92 @@
 version: 2
 updates:
-    - package-ecosystem: 'github-actions'
-      directory: '/'
-      schedule:
-          interval: monthly
-      labels:
-        - 'github_actions'
-        - 'waiting for triage'
-    - package-ecosystem: 'maven'
-      directory: '/'
-      schedule:
-          interval: monthly
-      open-pull-requests-limit: 10
-      labels:
-        - 'dependencies'
-        - 'waiting for triage'
-      ignore:
-          # Freeze production dependencies of mcp-core
-          - dependency-name: 'org.slf4j:slf4j-api'
-          - dependency-name: 'com.fasterxml.jackson.core:jackson-annotations'
-          - dependency-name: 'tools.jackson.core:jackson-databind'
-          - dependency-name: 'io.projectreactor:reactor-bom'
-          - dependency-name: 'io.projectreactor:reactor-core'
-          - dependency-name: 'jakarta.servlet:jakarta.servlet-api'
-          # mcp-json-jackson2 and mcp-json-jackson3 dependencies
-          - dependency-name: 'com.fasterxml.jackson.core:jackson-databind'
-          - dependency-name: 'com.networknt:json-schema-validator'
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: weekly
+    labels:
+      - 'github_actions'
+      - 'waiting for triage'
+  # Active development line: all updates, except minor and major updates of production dependencies
+  - package-ecosystem: 'maven'
+    directory: '/'
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 15
+    labels:
+      - 'dependencies'
+      - 'waiting for triage'
+    ignore:
+      # mcp-core production dependencies
+      - dependency-name: 'org.slf4j:slf4j-api'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: 'com.fasterxml.jackson.core:jackson-annotations'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: 'io.projectreactor:reactor-bom'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: 'io.projectreactor:reactor-core'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: 'jakarta.servlet:jakarta.servlet-api'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      # mcp-json-jackson2 and mcp-json-jackson3 production dependencies
+      - dependency-name: 'com.fasterxml.jackson.core:jackson-databind'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: 'tools.jackson.core:jackson-databind'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: 'com.networknt:json-schema-validator'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      # mcp-test compile dependencies, which end up on consumers' test classpath
+      - dependency-name: 'org.assertj:assertj-core'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'org.junit.jupiter:*'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'org.mockito:mockito-core'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'org.testcontainers:*'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'org.awaitility:awaitility'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'ch.qos.logback:logback-classic'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'net.javacrumbs.json-unit:json-unit-assertj'
+        update-types: ['version-update:semver-major']
+  # Maintenance lines: patch updates only
+  - package-ecosystem: 'maven'
+    directory: '/'
+    target-branch: '2.1.x'
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 10
+    labels:
+      - 'dependencies'
+      - 'maintenance'
+      - 'waiting for triage'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+  - package-ecosystem: 'maven'
+    directory: '/'
+    target-branch: '1.1.x'
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 10
+    labels:
+      - 'dependencies'
+      - 'maintenance'
+      - 'waiting for triage'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+  - package-ecosystem: 'maven'
+    directory: '/'
+    target-branch: '0.18.x'
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 10
+    labels:
+      - 'dependencies'
+      - 'maintenance'
+      - 'waiting for triage'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']

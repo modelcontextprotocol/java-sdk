@@ -51,6 +51,9 @@ import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -197,6 +200,36 @@ class HttpServletMcpTransportIntegrationTests {
 		assertThat(response.statusCode()).isEqualTo(200);
 		assertThat(response.headers().firstValue("Content-Type"))
 			.hasValueSatisfying(v -> assertThat(v).contains("application/json"));
+	}
+
+	@ParameterizedTest
+	@NullAndEmptySource
+	@ValueSource(strings = { "text/plain", "application/x-www-form-urlencoded", "multipart/form-data",
+			"application/json-rpc", "application/jsonp", "text/plain; a=application/json" })
+	void postWithNonJsonContentTypeIsRejected(String contentType) throws Exception {
+		HttpRequest original = post("tools/call", Map.of("_meta", meta(), "name", "echo")).header("Mcp-Name", "echo")
+			.build();
+		HttpRequest.Builder builder = HttpRequest.newBuilder(original,
+				(name, value) -> !name.equalsIgnoreCase("Content-Type"));
+		if (contentType != null) {
+			builder.header("Content-Type", contentType);
+		}
+		HttpResponse<String> response = HttpClient.newHttpClient()
+			.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(415);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "application/json; charset=utf-8", "Application/JSON", "Application/JSON; charset=UTF-8" })
+	void postWithJsonContentTypeIsAccepted(String contentType) throws Exception {
+		HttpRequest request = post("tools/call", Map.of("_meta", meta(), "name", "echo")).header("Mcp-Name", "echo")
+			.setHeader("Content-Type", contentType)
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(response.body()).contains("echo:echo");
 	}
 
 	@Test

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
@@ -17,6 +18,8 @@ import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
 import io.modelcontextprotocol.modern.McpSchema.ReadResourceOutcome;
 import io.modelcontextprotocol.modern.McpSchema.ReadResourceRequest;
+import io.modelcontextprotocol.modern.McpSchema.SubscriptionFilter;
+import io.modelcontextprotocol.modern.McpSchema.SubscriptionsAcknowledgedParams;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncResourceRepository;
 import io.modelcontextprotocol.modern.server.feature.McpChangeFeed;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
@@ -24,7 +27,6 @@ import io.modelcontextprotocol.modern.server.feature.ResourcesFeature;
 import io.modelcontextprotocol.modern.server.feature.ResourcesPage;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
-import io.modelcontextprotocol.spec.json.gson.GsonMcpJsonMapper;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -43,8 +45,7 @@ class SubscriptionsFeatureTests {
 		McpChangeFeed feed = new McpChangeFeed();
 		McpServer server = McpServer.builder()
 			.serverInfo(SERVER_INFO)
-			.jsonMapper(new GsonMcpJsonMapper())
-			.feature(ToolsFeature.ofAsync(emptyTools(), new GsonMcpJsonMapper(), PERMISSIVE_VALIDATOR, 0L,
+			.feature(ToolsFeature.ofAsync(emptyTools(), McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L,
 					CacheScope.PRIVATE))
 			.subscriptions(feed)
 			.build();
@@ -62,13 +63,9 @@ class SubscriptionsFeatureTests {
 		StepVerifier.create(invocation.messages()).assertNext(msg -> {
 			JSONRPCNotification ack = (JSONRPCNotification) msg;
 			assertThat(ack.method()).isEqualTo(McpSchema.METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED);
-			@SuppressWarnings("unchecked")
-			Map<String, Object> ackParams = (Map<String, Object>) new GsonMcpJsonMapper().convertValue(ack.params(),
-					Map.class);
-			@SuppressWarnings("unchecked")
-			Map<String, Object> notifications = (Map<String, Object>) ackParams.get("notifications");
-			assertThat(notifications.get("toolsListChanged")).isEqualTo(true);
-			assertThat(notifications.get("promptsListChanged")).isNull();
+			SubscriptionFilter notifications = ((SubscriptionsAcknowledgedParams) ack.params()).notifications();
+			assertThat(notifications.toolsListChanged()).isTrue();
+			assertThat(notifications.promptsListChanged()).isNull();
 		})
 			.then(() -> feed.broadcast(new ServerChange.ToolsListChanged()))
 			.assertNext(msg -> assertThat(((JSONRPCNotification) msg).method())
@@ -84,8 +81,7 @@ class SubscriptionsFeatureTests {
 		McpChangeFeed feed = new McpChangeFeed();
 		McpServer server = McpServer.builder()
 			.serverInfo(SERVER_INFO)
-			.jsonMapper(new GsonMcpJsonMapper())
-			.feature(ToolsFeature.ofAsync(emptyTools(), new GsonMcpJsonMapper(), PERMISSIVE_VALIDATOR, 0L,
+			.feature(ToolsFeature.ofAsync(emptyTools(), McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L,
 					CacheScope.PRIVATE))
 			.subscriptions(feed)
 			.build();
@@ -115,8 +111,7 @@ class SubscriptionsFeatureTests {
 		McpChangeFeed feed = new McpChangeFeed();
 		McpServer server = McpServer.builder()
 			.serverInfo(SERVER_INFO)
-			.jsonMapper(new GsonMcpJsonMapper())
-			.feature(ToolsFeature.ofAsync(emptyTools(), new GsonMcpJsonMapper(), PERMISSIVE_VALIDATOR, 0L,
+			.feature(ToolsFeature.ofAsync(emptyTools(), McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L,
 					CacheScope.PRIVATE))
 			.subscriptions(feed)
 			.build();
@@ -131,7 +126,7 @@ class SubscriptionsFeatureTests {
 
 		StepVerifier.create(invocation.messages()).assertNext(msg -> {
 			JSONRPCNotification ack = (JSONRPCNotification) msg;
-			assertThat(subscriptionIdOf(ack)).isEqualTo(42L);
+			assertThat(subscriptionIdOf(ack)).isEqualTo(42);
 		}).assertNext(msg -> assertThat(msg).isInstanceOf(JSONRPCResponse.class)).verifyComplete();
 	}
 
@@ -183,8 +178,8 @@ class SubscriptionsFeatureTests {
 
 		assertThat(resourcesCapability(server)).containsEntry("subscribe", true).containsEntry("listChanged", true);
 		StepVerifier.create(listenToResource(server).messages())
-			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg))
-				.containsEntry("resourceSubscriptions", List.of("test://a")))
+			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg).resourceSubscriptions())
+				.containsExactly("test://a"))
 			.then(server::closeGracefully)
 			.expectNextMatches(msg -> msg instanceof JSONRPCResponse)
 			.verifyComplete();
@@ -196,8 +191,7 @@ class SubscriptionsFeatureTests {
 
 		assertThat(resourcesCapability(server)).containsEntry("subscribe", false).containsEntry("listChanged", true);
 		StepVerifier.create(listenToResource(server).messages())
-			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg))
-				.extractingByKey("resourceSubscriptions")
+			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg).resourceSubscriptions())
 				.isNull())
 			.then(server::closeGracefully)
 			.expectNextMatches(msg -> msg instanceof JSONRPCResponse)
@@ -266,8 +260,7 @@ class SubscriptionsFeatureTests {
 		};
 		McpServer.Builder builder = McpServer.builder()
 			.serverInfo(SERVER_INFO)
-			.jsonMapper(new GsonMcpJsonMapper())
-			.feature(ResourcesFeature.ofAsync(repository, new GsonMcpJsonMapper(), 0L, CacheScope.PRIVATE));
+			.feature(ResourcesFeature.ofAsync(repository, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE));
 		if (publisher != null) {
 			builder.subscriptions(publisher);
 		}
@@ -290,19 +283,15 @@ class SubscriptionsFeatureTests {
 		return (McpTransportResponse.Streaming) server.handle(McpTransportContext.EMPTY, request).block();
 	}
 
-	@SuppressWarnings("unchecked")
-	private static Map<String, Object> acknowledgedNotifications(JSONRPCNotification ack) {
+	private static SubscriptionFilter acknowledgedNotifications(JSONRPCNotification ack) {
 		assertThat(ack.method()).isEqualTo(McpSchema.METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED);
-		Map<String, Object> params = (Map<String, Object>) new GsonMcpJsonMapper().convertValue(ack.params(),
-				Map.class);
-		return (Map<String, Object>) params.get("notifications");
+		return ((SubscriptionsAcknowledgedParams) ack.params()).notifications();
 	}
 
 	private static McpServer toolsServer(McpChangePublisher publisher) {
 		return McpServer.builder()
 			.serverInfo(SERVER_INFO)
-			.jsonMapper(new GsonMcpJsonMapper())
-			.feature(ToolsFeature.ofAsync(emptyTools(), new GsonMcpJsonMapper(), PERMISSIVE_VALIDATOR, 0L,
+			.feature(ToolsFeature.ofAsync(emptyTools(), McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L,
 					CacheScope.PRIVATE))
 			.subscriptions(publisher)
 			.build();
@@ -316,12 +305,8 @@ class SubscriptionsFeatureTests {
 		return (McpTransportResponse.Streaming) server.handle(McpTransportContext.EMPTY, request).block();
 	}
 
-	@SuppressWarnings("unchecked")
 	private static Object subscriptionIdOf(JSONRPCNotification notification) {
-		Map<String, Object> params = (Map<String, Object>) new GsonMcpJsonMapper().convertValue(notification.params(),
-				Map.class);
-		Map<String, Object> meta = (Map<String, Object>) params.get("meta");
-		return meta.get(MetaKeys.SUBSCRIPTION_ID);
+		return ((SubscriptionsAcknowledgedParams) notification.params()).meta().get(MetaKeys.SUBSCRIPTION_ID);
 	}
 
 }
