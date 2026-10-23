@@ -13,6 +13,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
@@ -30,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 
@@ -305,6 +307,34 @@ class StdioServerTransportProviderTests {
 
 		// Verify session was closed
 		verify(mockSession).closeGracefully();
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void sendMessageWaitsForBothInboundAndOutboundReadinessSignals() throws Exception {
+		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), System.in,
+				testOutPrintStream);
+		Class<?> transportClass = Class
+			.forName(StdioServerTransportProvider.class.getName() + "$StdioMcpSessionTransport");
+		var constructor = transportClass.getDeclaredConstructor(StdioServerTransportProvider.class);
+		constructor.setAccessible(true);
+		McpServerTransport transport = (McpServerTransport) constructor.newInstance(transportProvider);
+
+		Field inboundReadyField = StdioServerTransportProvider.class.getDeclaredField("inboundReady");
+		inboundReadyField.setAccessible(true);
+		Sinks.One<Void> inboundReady = (Sinks.One<Void>) inboundReadyField.get(transportProvider);
+
+		Field outboundReadyField = transportClass.getDeclaredField("outboundReady");
+		outboundReadyField.setAccessible(true);
+		Sinks.One<Void> outboundReady = (Sinks.One<Void>) outboundReadyField.get(transport);
+
+		StepVerifier
+			.create(transport.sendMessage(
+					new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION, "test/notification", Map.of())))
+			.then(() -> inboundReady.tryEmitValue(null))
+			.expectNoEvent(Duration.ofMillis(100))
+			.then(() -> outboundReady.tryEmitValue(null))
+			.verifyComplete();
 	}
 
 	@Test
