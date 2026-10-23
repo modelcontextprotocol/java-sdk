@@ -205,6 +205,41 @@ class SubscriptionsFeatureTests {
 		assertThat(resourcesCapability(server)).containsEntry("subscribe", false);
 	}
 
+	@Test
+	void listenWithoutNotificationsIsRejectedAsInvalidParams() {
+		McpServer server = toolsServer(new McpChangeFeed());
+		JSONRPCRequest request = new JSONRPCRequest("subscriptions/listen", 1, Map.of("_meta", meta()));
+
+		assertThat(server.handle(McpTransportContext.EMPTY, request).block()).isInstanceOfSatisfying(
+				McpTransportResponse.Error.class,
+				error -> assertThat(error.response().error().code()).isEqualTo(McpSchema.ErrorCodes.INVALID_PARAMS));
+	}
+
+	@Test
+	void listenWithNullNotificationsIsRejectedAsInvalidParams() {
+		McpServer server = toolsServer(new McpChangeFeed());
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("notifications", null);
+		JSONRPCRequest request = new JSONRPCRequest("subscriptions/listen", 1, params);
+
+		assertThat(server.handle(McpTransportContext.EMPTY, request).block()).isInstanceOfSatisfying(
+				McpTransportResponse.Error.class,
+				error -> assertThat(error.response().error().code()).isEqualTo(McpSchema.ErrorCodes.INVALID_PARAMS));
+	}
+
+	@Test
+	void listenWithEmptyNotificationsIsAccepted() {
+		McpServer server = toolsServer(new McpChangeFeed());
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("notifications", Map.of());
+		JSONRPCRequest request = new JSONRPCRequest("subscriptions/listen", 1, params);
+
+		assertThat(server.handle(McpTransportContext.EMPTY, request).block())
+			.isInstanceOf(McpTransportResponse.Streaming.class);
+	}
+
 	private static McpServer resourcesServer(boolean supportsSubscribe, McpChangePublisher publisher) {
 		McpAsyncResourceRepository repository = new McpAsyncResourceRepository() {
 			@Override
