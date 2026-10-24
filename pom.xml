@@ -63,46 +63,45 @@
 		     an empty value makes maven-jar-plugin fail, which is intentional. -->
 		<module.name />
 
-		<assert4j.version>3.27.6</assert4j.version>
-		<junit.version>6.0.2</junit.version>
-		<mockito.version>5.20.0</mockito.version>
-		<testcontainers.version>1.21.4</testcontainers.version>
-		<byte-buddy.version>1.17.8</byte-buddy.version>
-		<toxiproxy.version>1.21.0</toxiproxy.version>
+		<assert4j.version>3.27.7</assert4j.version>
+		<junit.version>6.1.3</junit.version>
+		<mockito.version>5.24.0</mockito.version>
+		<testcontainers.version>2.0.5</testcontainers.version>
+		<byte-buddy.version>1.18.15</byte-buddy.version>
+		<toxiproxy.version>2.0.5</toxiproxy.version>
 
-		<slf4j-api.version>2.0.16</slf4j-api.version>
-		<logback.version>1.5.15</logback.version>
-		<jackson-annotations.version>2.21</jackson-annotations.version>
-		<jackson2.version>2.21.1</jackson2.version>
-		<jackson3.version>3.1.4</jackson3.version>
-		<springframework.version>6.2.1</springframework.version>
+		<slf4j-api.version>2.0.20</slf4j-api.version>
+		<logback.version>1.6.5</logback.version>
+		<jackson-annotations.version>2.22</jackson-annotations.version>
+		<jackson2.version>2.22.4</jackson2.version>
+		<jackson3.version>3.1.8</jackson3.version>
 
 		<!-- plugin versions -->
-		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
-		<maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
+		<maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
+		<maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
 		<maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
-		<maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
-		<maven-source-plugin.version>3.3.0</maven-source-plugin.version>
+		<maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
+		<maven-source-plugin.version>3.4.0</maven-source-plugin.version>
 		<jacoco-maven-plugin.version>0.8.10</jacoco-maven-plugin.version>
-		<flatten-maven-plugin.version>1.5.0</flatten-maven-plugin.version>
-		<maven-deploy-plugin.version>3.1.1</maven-deploy-plugin.version>
+		<flatten-maven-plugin.version>1.8.0</flatten-maven-plugin.version>
+		<maven-deploy-plugin.version>3.2.0</maven-deploy-plugin.version>
 		<asciidoctor-maven-plugin.version>2.2.3</asciidoctor-maven-plugin.version>
 		<maven-assembly-plugin.version>3.7.0</maven-assembly-plugin.version>
 		<maven-dependency-plugin.version>3.5.0</maven-dependency-plugin.version>
-		<maven-site-plugin.version>4.0.0-M13</maven-site-plugin.version>
+		<maven-site-plugin.version>4.0.0-M16</maven-site-plugin.version>
 		<maven-project-info-reports-plugin.version>3.4.5</maven-project-info-reports-plugin.version>
-		<maven-jar-plugin.version>3.3.0</maven-jar-plugin.version>
-		<spring-javaformat-maven-plugin.version>0.0.47</spring-javaformat-maven-plugin.version>
+		<maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
+		<spring-javaformat-maven-plugin.version>0.0.48</spring-javaformat-maven-plugin.version>
 		<org.maven.antora-version>1.0.0-alpha.4</org.maven.antora-version>
 		<io.spring.maven.antora-version>0.0.4</io.spring.maven.antora-version>
 		<asciidoctorj-pdf.version>1.6.2</asciidoctorj-pdf.version>
-		<tomcat.version>11.0.2</tomcat.version>
+		<tomcat.version>11.0.27</tomcat.version>
 		<jakarta.servlet.version>6.1.0</jakarta.servlet.version>
-		<awaitility.version>4.2.0</awaitility.version>
-		<bnd-maven-plugin.version>7.1.0</bnd-maven-plugin.version>
-		<json-unit-assertj.version>4.1.0</json-unit-assertj.version>
-		<json-schema-validator-jackson2.version>2.0.4</json-schema-validator-jackson2.version>
-		<json-schema-validator-jackson3.version>3.0.6</json-schema-validator-jackson3.version>
+		<awaitility.version>4.3.0</awaitility.version>
+		<bnd-maven-plugin.version>7.4.0</bnd-maven-plugin.version>
+		<json-unit-assertj.version>6.4.0</json-unit-assertj.version>
+		<json-schema-validator-jackson2.version>2.0.8</json-schema-validator-jackson2.version>
+		<json-schema-validator-jackson3.version>3.0.8</json-schema-validator-jackson3.version>
 
 	</properties>
 
@@ -271,7 +270,7 @@
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>exec-maven-plugin</artifactId>
-				<version>3.1.0</version>
+				<version>3.6.4</version>
 				<configuration>
 					<skip>true</skip>
 					<mainClass>ignored</mainClass>
@@ -323,7 +322,7 @@
 					<plugin>
 						<groupId>org.sonatype.central</groupId>
 						<artifactId>central-publishing-maven-plugin</artifactId>
-						<version>0.7.0</version>
+						<version>0.12.0</version>
 						<extensions>true</extensions>
 						<configuration>
 							<publishingServerId>central</publishingServerId>
@@ -336,7 +335,7 @@
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-gpg-plugin</artifactId>
-						<version>3.2.7</version>
+						<version>3.2.8</version>
 						<executions>
 							<execution>
 								<id>sign-artifacts</id>
@@ -364,7 +363,7 @@
 			<dependency>
 				<groupId>io.projectreactor</groupId>
 				<artifactId>reactor-bom</artifactId>
-				<version>2026.0.0-M2</version>
+				<version>2026.0.0-RC1</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>

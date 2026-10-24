@@ -7,6 +7,7 @@ package io.modelcontextprotocol.modern.server.feature;
 import java.util.List;
 import java.util.Map;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
@@ -19,7 +20,6 @@ import io.modelcontextprotocol.modern.McpSchema.PromptArgument;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpServer;
-import io.modelcontextprotocol.spec.json.gson.GsonMcpJsonMapper;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
@@ -37,7 +37,6 @@ class PromptsFeatureTests {
 
 	private static final McpServer SERVER = McpServer.builder()
 		.serverInfo(SERVER_INFO)
-		.jsonMapper(new GsonMcpJsonMapper())
 		.feature(PromptsFeature.ofAsync(new McpAsyncPromptRepository() {
 			@Override
 			public Mono<PromptsPage> list(McpRequestContext ctx, String cursor) {
@@ -53,7 +52,7 @@ class PromptsFeatureTests {
 			public Mono<McpAsyncResponse<GetPromptOutcome>> get(McpRequestContext ctx, GetPromptRequest request) {
 				return Mono.just(McpAsyncResponse.result(GetPromptResult.builder(List.of()).build()));
 			}
-		}, new GsonMcpJsonMapper(), 0L, CacheScope.PRIVATE))
+		}, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
 		.build();
 
 	private static JSONRPCResponse get(String name, Map<String, String> arguments) {

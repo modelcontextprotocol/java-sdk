@@ -36,6 +36,7 @@ import io.modelcontextprotocol.modern.server.TransportParams;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.server.transport.DefaultServerTransportSecurityValidator;
 import io.modelcontextprotocol.server.transport.HeaderAccessor;
+import io.modelcontextprotocol.server.transport.HttpServletRequestUtils;
 import io.modelcontextprotocol.server.transport.ServerHttpHeaderValidator;
 import io.modelcontextprotocol.server.transport.ServerTransportSecurityException;
 import io.modelcontextprotocol.util.Assert;
@@ -184,6 +185,11 @@ public class HttpServletMcpTransport extends HttpServlet {
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
+			return;
+		}
+		if (!HttpServletRequestUtils.isJsonContentType(request.getContentType())) {
+			response.sendError(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE,
+					"Unsupported Media Type: Content-Type must be application/json");
 			return;
 		}
 		if (request.getContentLengthLong() > this.requestMaxSize) {
@@ -348,7 +354,7 @@ public class HttpServletMcpTransport extends HttpServlet {
 	private static PrintWriter startEventStream(HttpServletResponse response) throws IOException {
 		response.setContentType(TEXT_EVENT_STREAM);
 		response.setCharacterEncoding(UTF_8);
-		response.setHeader("Cache-Control", "no-cache");
+		response.setHeader("Cache-Control", "no-cache, no-transform");
 		response.setHeader("X-Accel-Buffering", "no");
 		response.setStatus(HttpServletResponse.SC_OK);
 		response.flushBuffer();

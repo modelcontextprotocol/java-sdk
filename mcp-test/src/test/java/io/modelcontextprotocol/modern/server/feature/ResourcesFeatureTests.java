@@ -7,6 +7,7 @@ package io.modelcontextprotocol.modern.server.feature;
 import java.util.List;
 import java.util.Map;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.McpException;
 import io.modelcontextprotocol.modern.McpSchema;
@@ -17,7 +18,6 @@ import io.modelcontextprotocol.modern.server.McpTransportResponse;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
 import io.modelcontextprotocol.modern.server.McpServer;
-import io.modelcontextprotocol.spec.json.gson.GsonMcpJsonMapper;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -33,8 +33,7 @@ class ResourcesFeatureTests {
 	private static McpServer server(McpAsyncResourceRepository repo) {
 		return McpServer.builder()
 			.serverInfo(SERVER_INFO)
-			.jsonMapper(new GsonMcpJsonMapper())
-			.feature(ResourcesFeature.ofAsync(repo, new GsonMcpJsonMapper(), 0L, McpSchema.CacheScope.PRIVATE))
+			.feature(ResourcesFeature.ofAsync(repo, McpJsonDefaults.getMapper(), 0L, McpSchema.CacheScope.PRIVATE))
 			.build();
 	}
 

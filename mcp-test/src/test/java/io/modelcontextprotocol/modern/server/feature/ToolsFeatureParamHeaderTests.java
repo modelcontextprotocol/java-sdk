@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator.ValidationResponse;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
@@ -25,7 +26,7 @@ import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.McpTransportResponse;
 import io.modelcontextprotocol.modern.server.TransportParams;
-import io.modelcontextprotocol.spec.json.gson.GsonMcpJsonMapper;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -81,8 +82,8 @@ class ToolsFeatureParamHeaderTests {
 		};
 		this.server = McpServer.builder()
 			.serverInfo(SERVER_INFO)
-			.jsonMapper(new GsonMcpJsonMapper())
-			.feature(ToolsFeature.ofAsync(repository, new GsonMcpJsonMapper(), validator, 0L, CacheScope.PRIVATE))
+			.jsonMapper(McpJsonDefaults.getMapper())
+			.feature(ToolsFeature.ofAsync(repository, McpJsonDefaults.getMapper(), validator, 0L, CacheScope.PRIVATE))
 			.build();
 	}
 
