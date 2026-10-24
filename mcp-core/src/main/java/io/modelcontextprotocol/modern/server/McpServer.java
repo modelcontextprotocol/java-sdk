@@ -327,7 +327,7 @@ public final class McpServer implements McpRequestManager {
 	}
 
 	/**
-	 * Builds an immutable {@link McpServer} from registered features.
+	 * Builds an immutable {@link McpServer} from registered features and tools.
 	 */
 	public static final class Builder {
 
@@ -390,8 +390,12 @@ public final class McpServer implements McpRequestManager {
 		}
 
 		/**
-		 * Registers a tool, served in registration order by a {@link ToolsFeature} built
-		 * at {@link #build()}. No other feature may serve {@code tools/*} then.
+		 * Registers a tool. The registered tools are served in registration order by a
+		 * {@link ToolsFeature} created at {@link #build()} with this builder's JSON
+		 * mapper and {@link #jsonSchemaValidator schema validator}, and no caching. No
+		 * other feature may then serve {@code tools/*}; for cache hints, register
+		 * {@link ToolsFeature#ofTools} as a feature instead.
+		 * @throws IllegalArgumentException if a tool with the same name is registered
 		 */
 		public Builder tool(McpServerTool tool) {
 			Assert.notNull(tool, "tool must not be null");
@@ -401,6 +405,7 @@ public final class McpServer implements McpRequestManager {
 			return this;
 		}
 
+		/** Registers each of these tools, in order. See {@link #tool}. */
 		public Builder tools(List<McpServerTool> tools) {
 			Assert.notNull(tools, "tools must not be null");
 			tools.forEach(this::tool);
@@ -453,6 +458,7 @@ public final class McpServer implements McpRequestManager {
 			McpJsonMapper mapper = this.jsonMapper != null ? this.jsonMapper : McpJsonDefaults.getMapper();
 
 			List<McpFeature> allFeatures = new ArrayList<>(this.features);
+			// Added before capabilities are collected, which subscriptions depend on.
 			if (!this.tools.isEmpty()) {
 				JsonSchemaValidator validator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 						: McpJsonDefaults.getSchemaValidator();

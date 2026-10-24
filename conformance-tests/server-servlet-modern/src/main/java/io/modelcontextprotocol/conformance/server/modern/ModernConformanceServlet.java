@@ -1,5 +1,6 @@
 package io.modelcontextprotocol.conformance.server.modern;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,8 +15,6 @@ import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.modern.McpException;
 import io.modelcontextprotocol.modern.McpSchema.AudioContent;
 import io.modelcontextprotocol.modern.McpSchema.BlobResourceContents;
-import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
-import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
 import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.CompleteResult;
@@ -45,22 +44,19 @@ import io.modelcontextprotocol.modern.McpSchema.Tool;
 import io.modelcontextprotocol.modern.server.InputResponses;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpServer;
-import io.modelcontextprotocol.modern.server.McpSyncNotifier;
 import io.modelcontextprotocol.modern.server.McpSyncResponse;
 import io.modelcontextprotocol.modern.server.feature.CompletionsFeature;
 import io.modelcontextprotocol.modern.server.feature.McpChangeBroadcaster;
 import io.modelcontextprotocol.modern.server.feature.McpChangeFeed;
+import io.modelcontextprotocol.modern.server.feature.McpServerTool;
 import io.modelcontextprotocol.modern.server.feature.McpSyncPromptRepository;
 import io.modelcontextprotocol.modern.server.feature.McpSyncResourceRepository;
-import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.PromptsFeature;
 import io.modelcontextprotocol.modern.server.feature.PromptsPage;
 import io.modelcontextprotocol.modern.server.feature.ResourceTemplatesPage;
 import io.modelcontextprotocol.modern.server.feature.ResourcesFeature;
 import io.modelcontextprotocol.modern.server.feature.ResourcesPage;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
-import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
-import io.modelcontextprotocol.modern.server.feature.ToolsPage;
 import io.modelcontextprotocol.modern.server.transport.HttpServletMcpTransport;
 import io.modelcontextprotocol.server.transport.DefaultServerTransportSecurityValidator;
 import org.apache.catalina.Context;
@@ -128,7 +124,7 @@ public class ModernConformanceServlet {
 
 		McpServer mcpServer = McpServer.builder()
 			.serverInfo(Implementation.builder("mcp-modern-conformance-server", "1.0.0").build())
-			.feature(ToolsFeature.ofSync(new ConformanceTools(changes)))
+			.tools(ConformanceTools.create(changes))
 			.feature(ResourcesFeature.ofSync(new ConformanceResources()))
 			.feature(PromptsFeature.ofSync(new ConformancePrompts()))
 			.feature(CompletionsFeature
@@ -239,112 +235,107 @@ public class ModernConformanceServlet {
 
 	}
 
-	@FunctionalInterface
-	private interface StreamingTool {
-
-		CallToolResult run(McpRequestContext ctx, CallToolRequest request, McpSyncNotifier notifier);
-
-	}
-
 	private static <R, O extends Result> Handler<R, O> respond(BiFunction<McpRequestContext, R, O> fn) {
 		return (ctx, request) -> McpSyncResponse.result(fn.apply(ctx, request));
 	}
 
-	private static Handler<CallToolRequest, CallToolOutcome> stream(StreamingTool tool) {
-		return (ctx, request) -> McpSyncResponse.streaming(notifier -> tool.run(ctx, request, notifier));
-	}
+	private static final class ConformanceTools {
 
-	private record ToolEntry(Tool tool, Handler<CallToolRequest, CallToolOutcome> handler) {
-	}
+		private ConformanceTools() {
+		}
 
-	private static final class ConformanceTools implements McpSyncToolRepository {
-
-		private final Map<String, ToolEntry> tools = new LinkedHashMap<>();
-
-		ConformanceTools(McpChangeBroadcaster changes) {
-			add("test_simple_text", "Returns simple text content for testing",
-					respond((ctx, req) -> text("This is a simple text response for testing.")));
-			add("test_image_content", "Returns image content for testing",
-					respond((ctx, req) -> CallToolResult.builder()
+		static List<McpServerTool> create(McpChangeBroadcaster changes) {
+			List<McpServerTool> tools = new ArrayList<>();
+			tools.add(McpServerTool.sync(tool("test_simple_text", "Returns simple text content for testing"),
+					(ctx, req) -> text("This is a simple text response for testing.")));
+			tools.add(McpServerTool.sync(tool("test_image_content", "Returns image content for testing"),
+					(ctx, req) -> CallToolResult.builder()
 						.addContent(ImageContent.builder(RED_PIXEL_PNG, "image/png").build())
 						.build()));
-			add("test_audio_content", "Returns audio content for testing",
-					respond((ctx, req) -> CallToolResult.builder()
+			tools.add(McpServerTool.sync(tool("test_audio_content", "Returns audio content for testing"),
+					(ctx, req) -> CallToolResult.builder()
 						.addContent(AudioContent.builder(MINIMAL_WAV, "audio/wav").build())
 						.build()));
-			add("test_embedded_resource", "Returns embedded resource content for testing",
-					respond((ctx,
-							req) -> CallToolResult.builder()
-								.addContent(
-										EmbeddedResource
-											.builder(TextResourceContents
-												.builder("test://embedded-resource",
-														"This is an embedded resource content.")
-												.mimeType("text/plain")
-												.build())
+			tools
+				.add(McpServerTool.sync(tool("test_embedded_resource", "Returns embedded resource content for testing"),
+						(ctx, req) -> CallToolResult.builder()
+							.addContent(
+									EmbeddedResource
+										.builder(TextResourceContents
+											.builder("test://embedded-resource",
+													"This is an embedded resource content.")
+											.mimeType("text/plain")
 											.build())
-								.build()));
-			add("test_multiple_content_types", "Returns multiple content types for testing",
-					respond((ctx,
-							req) -> CallToolResult.builder()
-								.addContent(TextContent.builder("Multiple content types test:").build())
-								.addContent(ImageContent.builder(RED_PIXEL_PNG, "image/png").build())
-								.addContent(
-										EmbeddedResource
-											.builder(TextResourceContents
-												.builder("test://mixed-content-resource",
-														"{\"test\":\"data\",\"value\":123}")
-												.mimeType("application/json")
-												.build())
+										.build())
+							.build()));
+			tools.add(McpServerTool
+				.sync(tool("test_multiple_content_types", "Returns multiple content types for testing"),
+						(ctx, req) -> CallToolResult.builder()
+							.addContent(TextContent.builder("Multiple content types test:").build())
+							.addContent(ImageContent.builder(RED_PIXEL_PNG, "image/png").build())
+							.addContent(
+									EmbeddedResource
+										.builder(TextResourceContents
+											.builder("test://mixed-content-resource",
+													"{\"test\":\"data\",\"value\":123}")
+											.mimeType("application/json")
 											.build())
-								.build()));
-			add("test_error_handling", "Tool that returns an error for testing error handling",
-					respond((ctx, req) -> CallToolResult.builder()
+										.build())
+							.build()));
+			tools.add(McpServerTool.sync(
+					tool("test_error_handling", "Tool that returns an error for testing error handling"),
+					(ctx, req) -> CallToolResult.builder()
 						.addContent(TextContent.builder("This tool intentionally returns an error for testing").build())
 						.isError(true)
 						.build()));
-			add("test_tool_with_progress", "Tool that reports progress notifications", stream((ctx, req, notifier) -> {
-				notifier.progress(0, 100.0, null);
-				sleep(50);
-				notifier.progress(50, 100.0, null);
-				sleep(50);
-				notifier.progress(100, 100.0, null);
-				return text("Tool execution completed with progress");
-			}));
+			tools.add(McpServerTool.syncStreaming(
+					tool("test_tool_with_progress", "Tool that reports progress notifications"),
+					(ctx, req, notifier) -> {
+						notifier.progress(0, 100.0, null);
+						sleep(50);
+						notifier.progress(50, 100.0, null);
+						sleep(50);
+						notifier.progress(100, 100.0, null);
+						return text("Tool execution completed with progress");
+					}));
 
 			// SEP-1613 / SEP-2106 JSON Schema 2020-12 keyword preservation
-			add(Tool.builder("json_schema_2020_12_tool", JSON, JSON_SCHEMA_2020_12_INPUT)
+			tools.add(McpServerTool.sync(Tool.builder("json_schema_2020_12_tool", JSON, JSON_SCHEMA_2020_12_INPUT)
 				.description("Tool with JSON Schema 2020-12 features (SEP-1613, SEP-2106)")
-				.build(), respond((ctx, req) -> text("ok")));
+				.build(), (ctx, req) -> text("ok")));
 
 			// SEP-2575 diagnostic tools
-			add("test_missing_capability", "Test tool requiring sampling", (ctx, req) -> {
-				if (!ctx.clientCapabilities().supportsSampling()) {
-					throw McpException.missingClientCapability(ClientCapabilities.builder().sampling().build());
-				}
-				return McpSyncResponse.result(text("Success"));
-			});
-			add("test_streaming_elicitation", "Diagnostic tool validating response progress streams",
-					stream((ctx, req, notifier) -> {
+			tools
+				.add(McpServerTool.sync(tool("test_missing_capability", "Test tool requiring sampling"), (ctx, req) -> {
+					if (!ctx.clientCapabilities().supportsSampling()) {
+						throw McpException.missingClientCapability(ClientCapabilities.builder().sampling().build());
+					}
+					return text("Success");
+				}));
+			tools.add(McpServerTool.syncStreaming(
+					tool("test_streaming_elicitation", "Diagnostic tool validating response progress streams"),
+					(ctx, req, notifier) -> {
 						notifier.progress(50, 100.0, null);
 						return text("Streaming complete");
 					}));
 			// Logging is deprecated and unsupported, so no log is ever sent; the suite
 			// checks exactly that.
-			add("test_logging_tool", "Diagnostic logging validator tool",
-					stream((ctx, req, notifier) -> text("Logging evaluated")));
-			add("test_trigger_tool_change", "Emits a tools list-changed notification", respond((ctx, req) -> {
-				changes.broadcast(new ServerChange.ToolsListChanged());
-				return text("Mutation triggered");
-			}));
-			add("test_trigger_prompt_change", "Emits a prompts list-changed notification", respond((ctx, req) -> {
-				changes.broadcast(new ServerChange.PromptsListChanged());
-				return text("Mutation triggered");
-			}));
+			tools.add(McpServerTool.syncStreaming(tool("test_logging_tool", "Diagnostic logging validator tool"),
+					(ctx, req, notifier) -> text("Logging evaluated")));
+			tools.add(McpServerTool.sync(tool("test_trigger_tool_change", "Emits a tools list-changed notification"),
+					(ctx, req) -> {
+						changes.broadcast(new ServerChange.ToolsListChanged());
+						return text("Mutation triggered");
+					}));
+			tools.add(McpServerTool
+				.sync(tool("test_trigger_prompt_change", "Emits a prompts list-changed notification"), (ctx, req) -> {
+					changes.broadcast(new ServerChange.PromptsListChanged());
+					return text("Mutation triggered");
+				}));
 
 			// SEP-2322 MRTR tools
-			add("test_input_required_result_elicitation", "MRTR: returns InputRequiredResult with elicitation request",
-					respond((ctx, req) -> {
+			tools.add(McpServerTool.sync(tool("test_input_required_result_elicitation",
+					"MRTR: returns InputRequiredResult with elicitation request"), (ctx, req) -> {
 						Map<String, Object> content = acceptedContent(req.inputResponses(), "user_name");
 						if (content == null || !(content.get("name") instanceof String name)) {
 							return InputRequiredResult.builder()
@@ -353,8 +344,8 @@ public class ModernConformanceServlet {
 						}
 						return text("Hello, " + name + "!");
 					}));
-			add("test_input_required_result_sampling", "MRTR: returns InputRequiredResult with sampling request",
-					respond((ctx, req) -> {
+			tools.add(McpServerTool.sync(tool("test_input_required_result_sampling",
+					"MRTR: returns InputRequiredResult with sampling request"), (ctx, req) -> {
 						Map<String, Object> response = responseObject(req.inputResponses(), "capital_question");
 						if (response == null) {
 							return InputRequiredResult.builder()
@@ -365,16 +356,16 @@ public class ModernConformanceServlet {
 						Object answer = content instanceof Map<?, ?> m ? m.get("text") : null;
 						return text("Sampling result: " + answer);
 					}));
-			add("test_input_required_result_list_roots", "MRTR: returns InputRequiredResult with roots/list request",
-					respond((ctx, req) -> {
+			tools.add(McpServerTool.sync(tool("test_input_required_result_list_roots",
+					"MRTR: returns InputRequiredResult with roots/list request"), (ctx, req) -> {
 						Map<String, Object> response = responseObject(req.inputResponses(), "client_roots");
 						if (response == null || !(response.get("roots") instanceof List<?> roots)) {
 							return InputRequiredResult.builder().listRoots("client_roots").build();
 						}
 						return text("Found " + roots.size() + " root(s): " + roots);
 					}));
-			add("test_input_required_result_request_state", "MRTR: returns InputRequiredResult with requestState",
-					respond((ctx, req) -> {
+			tools.add(McpServerTool.sync(tool("test_input_required_result_request_state",
+					"MRTR: returns InputRequiredResult with requestState"), (ctx, req) -> {
 						Map<String, Object> content = acceptedContent(req.inputResponses(), "confirm");
 						if ("request-state".equals(req.requestState()) && content != null
 								&& Boolean.TRUE.equals(content.get("ok"))) {
@@ -385,8 +376,8 @@ public class ModernConformanceServlet {
 							.requestState("request-state")
 							.build();
 					}));
-			add("test_input_required_result_multiple_inputs",
-					"MRTR: returns InputRequiredResult with multiple input requests", respond((ctx, req) -> {
+			tools.add(McpServerTool.sync(tool("test_input_required_result_multiple_inputs",
+					"MRTR: returns InputRequiredResult with multiple input requests"), (ctx, req) -> {
 						Map<String, Object> user = acceptedContent(req.inputResponses(), "user_name");
 						Map<String, Object> greeting = responseObject(req.inputResponses(), "greeting");
 						Map<String, Object> roots = responseObject(req.inputResponses(), "client_roots");
@@ -402,8 +393,9 @@ public class ModernConformanceServlet {
 							.requestState("multiple-inputs")
 							.build();
 					}));
-			add("test_input_required_result_multi_round", "MRTR: multi-round InputRequiredResult workflow",
-					respond((ctx, req) -> {
+			tools.add(McpServerTool.sync(
+					tool("test_input_required_result_multi_round", "MRTR: multi-round InputRequiredResult workflow"),
+					(ctx, req) -> {
 						String state = req.requestState();
 						if (state != null && state.startsWith("round-1")) {
 							Map<String, Object> step1 = acceptedContent(req.inputResponses(), "step1");
@@ -428,8 +420,9 @@ public class ModernConformanceServlet {
 					}));
 			// Integrity protection comes from the server's RequestStateCodec: a tampered
 			// requestState is rejected before this handler runs.
-			add("test_input_required_result_tampered_state", "MRTR: HMAC-signed requestState integrity test",
-					respond((ctx, req) -> {
+			tools.add(McpServerTool.sync(
+					tool("test_input_required_result_tampered_state", "MRTR: HMAC-signed requestState integrity test"),
+					(ctx, req) -> {
 						if ("tamper-test".equals(req.requestState())
 								&& responseObject(req.inputResponses(), "confirm") != null) {
 							return text("integrity-ok: state verified");
@@ -439,8 +432,8 @@ public class ModernConformanceServlet {
 							.requestState("tamper-test")
 							.build();
 					}));
-			add("test_input_required_result_capabilities", "MRTR: respects client capabilities in inputRequests",
-					respond((ctx, req) -> {
+			tools.add(McpServerTool.sync(tool("test_input_required_result_capabilities",
+					"MRTR: respects client capabilities in inputRequests"), (ctx, req) -> {
 						if (req.inputResponses() != null && !req.inputResponses().isEmpty()) {
 							return text("capabilities-ok: received " + String.join(",", req.inputResponses().keySet()));
 						}
@@ -458,34 +451,11 @@ public class ModernConformanceServlet {
 						}
 						return builder.build();
 					}));
+			return tools;
 		}
 
-		private void add(String name, String description, Handler<CallToolRequest, CallToolOutcome> handler) {
-			add(Tool.builder(name, EMPTY_JSON_SCHEMA).description(description).build(), handler);
-		}
-
-		private void add(Tool tool, Handler<CallToolRequest, CallToolOutcome> handler) {
-			this.tools.put(tool.name(), new ToolEntry(tool, handler));
-		}
-
-		@Override
-		public ToolsPage list(McpRequestContext ctx, String cursor) {
-			return ToolsPage.of(this.tools.values().stream().map(ToolEntry::tool).toList());
-		}
-
-		@Override
-		public Tool find(McpRequestContext ctx, String name) {
-			ToolEntry entry = this.tools.get(name);
-			return entry != null ? entry.tool() : null;
-		}
-
-		@Override
-		public McpSyncResponse<CallToolOutcome> call(McpRequestContext ctx, CallToolRequest request) {
-			ToolEntry entry = this.tools.get(request.name());
-			if (entry == null) {
-				throw McpException.invalidParams("Unknown tool: " + request.name());
-			}
-			return entry.handler().handle(ctx, request);
+		private static Tool tool(String name, String description) {
+			return Tool.builder(name, EMPTY_JSON_SCHEMA).description(description).build();
 		}
 
 		private static void sleep(long millis) {

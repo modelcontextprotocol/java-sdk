@@ -16,7 +16,6 @@ import io.modelcontextprotocol.modern.McpException;
 import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
 import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
-import io.modelcontextprotocol.modern.McpSchema.CompleteResult;
 import io.modelcontextprotocol.modern.McpSchema.ElicitFormRequest;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.InputRequiredResult;
@@ -36,13 +35,11 @@ import static io.modelcontextprotocol.modern.server.ModernTestFixtures.SERVER_IN
 import static io.modelcontextprotocol.modern.server.ModernTestFixtures.meta;
 import static io.modelcontextprotocol.modern.server.ModernTestFixtures.respond;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
-import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 /**
- * The same three tools registered two ways (#1200): today's repository, feature and
- * server, and {@link McpServerTool} on the server builder. Both servers must answer every
- * request alike.
+ * The same three tools registered through a hand-written repository and
+ * {@link ToolsFeature}, and through {@link McpServerTool} on the server builder. Both
+ * servers must answer every request alike.
  */
 class ToolRegistrationComparisonTests {
 
@@ -218,50 +215,6 @@ class ToolRegistrationComparisonTests {
 		List<JSONRPCMessage> actual = stream(shortcuts(), request);
 
 		assertThat(actual).isEqualTo(expected).hasSize(4);
-	}
-
-	// What only the shortcuts check, at registration rather than per request.
-
-	@Test
-	void aDuplicateToolNameFailsWhereItIsRegistered() {
-		McpServer.Builder builder = McpServer.builder()
-			.serverInfo(SERVER_INFO)
-			.tool(McpServerTool.sync(GREET, (ctx, request) -> greet(request)));
-
-		assertThatIllegalArgumentException()
-			.isThrownBy(() -> builder.tool(McpServerTool.sync(GREET, (ctx, request) -> text("again"))))
-			.withMessage("Tool 'greet' is already registered");
-	}
-
-	@Test
-	void anInvalidToolNameFailsWhereItIsRegistered() {
-		Tool invalid = Tool.builder("has spaces", ToolsUtils.EMPTY_JSON_SCHEMA).build();
-
-		assertThatIllegalArgumentException().isThrownBy(() -> McpServerTool.sync(invalid, (ctx, request) -> text("")));
-	}
-
-	@Test
-	void shortcutsCannotBeMixedWithAnExplicitToolsFeature() {
-		McpServer.Builder builder = McpServer.builder()
-			.serverInfo(SERVER_INFO)
-			.tool(McpServerTool.sync(GREET, (ctx, request) -> greet(request)))
-			.feature(ToolsFeature.ofSync(new GreetingTools()));
-
-		assertThatIllegalStateException().isThrownBy(builder::build)
-			.withMessageStartingWith(
-					"Primitives registered with tool(...) cannot be combined with " + ToolsFeature.class.getName());
-	}
-
-	@Test
-	void shortcutsCombineWithUnrelatedFeatures() {
-		McpServer server = McpServer.builder()
-			.serverInfo(SERVER_INFO)
-			.tool(McpServerTool.sync(GREET, (ctx, request) -> greet(request)))
-			.feature(CompletionsFeature
-				.ofSync((ctx, request) -> CompleteResult.of(new CompleteResult.Completion(List.of()))))
-			.build();
-
-		assertThat(respond(server, call("greet", Map.of("arguments", Map.of("name", "Ada")))).block().error()).isNull();
 	}
 
 	private static JSONRPCRequest call(String name, Map<String, Object> params) {

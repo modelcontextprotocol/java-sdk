@@ -11,6 +11,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
 
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator.ValidationResponse;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
@@ -24,6 +26,10 @@ import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
+import io.modelcontextprotocol.modern.McpSchema.Tool;
+import io.modelcontextprotocol.modern.server.feature.McpChangeFeed;
+import io.modelcontextprotocol.modern.server.feature.McpServerTool;
+import io.modelcontextprotocol.util.ToolsUtils;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -33,6 +39,8 @@ import static io.modelcontextprotocol.modern.server.ModernTestFixtures.invoke;
 import static io.modelcontextprotocol.modern.server.ModernTestFixtures.meta;
 import static io.modelcontextprotocol.modern.server.ModernTestFixtures.respond;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class McpServerTests {
@@ -373,6 +381,87 @@ class McpServerTests {
 
 		assertThatThrownBy(builder::build).isInstanceOf(IllegalStateException.class)
 			.hasMessageContaining("server/discover");
+	}
+
+	private static McpServerTool okTool(String name) {
+		return McpServerTool.sync(Tool.builder(name, ToolsUtils.EMPTY_JSON_SCHEMA).build(), (ctx, request) -> ok());
+	}
+
+	@SuppressWarnings("unchecked")
+	private static Map<String, Object> result(McpServer server, JSONRPCRequest request) {
+		return (Map<String, Object>) respond(server, request).block().result();
+	}
+
+	@SuppressWarnings("unchecked")
+	private static Map<String, Object> capabilities(McpServer server) {
+		return (Map<String, Object>) result(server, request("server/discover", meta())).get("capabilities");
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void registeredToolsAreListedInRegistrationOrder() {
+		McpServer server = baseBuilder().tool(okTool("b")).tools(List.of(okTool("a"), okTool("c"))).build();
+
+		List<Map<String, Object>> tools = (List<Map<String, Object>>) result(server, request("tools/list", meta()))
+			.get("tools");
+		assertThat(tools).extracting(tool -> tool.get("name")).containsExactly("b", "a", "c");
+	}
+
+	@Test
+	void duplicateToolNameIsRejectedWhenRegistered() {
+		McpServer.Builder builder = baseBuilder().tool(okTool("echo"));
+
+		assertThatIllegalArgumentException().isThrownBy(() -> builder.tool(okTool("echo")))
+			.withMessage("Tool 'echo' is already registered");
+	}
+
+	@Test
+	void nullToolsAreRejected() {
+		assertThatIllegalArgumentException().isThrownBy(() -> baseBuilder().tool(null));
+		assertThatIllegalArgumentException().isThrownBy(() -> baseBuilder().tools(null));
+		assertThatIllegalArgumentException().isThrownBy(() -> baseBuilder().jsonSchemaValidator(null));
+	}
+
+	@Test
+	void toolsCannotBeCombinedWithAnotherFeatureServingAToolsMethod() {
+		McpServer.Builder builder = baseBuilder().tool(okTool("echo")).feature(echoFeature("tools/call"));
+
+		assertThatIllegalStateException().isThrownBy(builder::build)
+			.withMessageContaining("tool(...)")
+			.withMessageContaining("'tools/call'");
+	}
+
+	@Test
+	void toolsCombineWithFeaturesServingOtherMethods() {
+		McpServer server = baseBuilder().tool(okTool("echo")).feature(echoFeature("completion/complete")).build();
+
+		assertThat(respond(server, request("completion/complete", meta())).block().error()).isNull();
+		assertThat(capabilities(server)).containsKey("tools");
+	}
+
+	@Test
+	void withoutToolsNoToolsFeatureIsCreated() {
+		McpServer server = baseBuilder().build();
+
+		assertError(invoke(server, request("tools/list", meta())).block(), ErrorCodes.METHOD_NOT_FOUND);
+		assertThat(capabilities(server)).doesNotContainKey("tools");
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void registeredToolsAreAdvertisedAsListChangedWithSubscriptions() {
+		McpServer server = baseBuilder().tool(okTool("echo")).subscriptions(new McpChangeFeed()).build();
+
+		assertThat((Map<String, Object>) capabilities(server).get("tools")).containsEntry("listChanged", true);
+	}
+
+	@Test
+	void builderSchemaValidatorChecksToolArguments() {
+		JsonSchemaValidator rejecting = (schema, content) -> ValidationResponse.asInvalid("rejected");
+		McpServer server = baseBuilder().tool(okTool("echo")).jsonSchemaValidator(rejecting).build();
+
+		assertThat(result(server, new JSONRPCRequest("tools/call", 1, Map.of("_meta", meta(), "name", "echo"))))
+			.containsEntry("isError", true);
 	}
 
 	private static void assertError(McpTransportResponse response, int code) {
