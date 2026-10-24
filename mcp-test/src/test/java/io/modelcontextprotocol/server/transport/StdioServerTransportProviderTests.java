@@ -144,6 +144,37 @@ class StdioServerTransportProviderTests {
 	}
 
 	@Test
+	void shouldKeepHandlingMessagesAfterOneFails() {
+
+		String jsonMessages = "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/fails\"}\n"
+				+ "{\"jsonrpc\":\"2.0\",\"method\":\"ping\",\"id\":2}\n";
+		InputStream stream = new ByteArrayInputStream(jsonMessages.getBytes(StandardCharsets.UTF_8));
+
+		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), stream, System.out);
+		CountDownLatch pingLatch = new CountDownLatch(1);
+
+		McpServerSession.Factory realSessionFactory = transport -> {
+			McpServerSession session = mock(McpServerSession.class);
+			when(session.handle(any())).thenAnswer(invocation -> {
+				McpSchema.JSONRPCMessage message = invocation.getArgument(0);
+				if (message instanceof McpSchema.JSONRPCNotification) {
+					return Mono.error(new RuntimeException("notification handler failed"));
+				}
+				pingLatch.countDown();
+				return Mono.empty();
+			});
+			when(session.closeGracefully()).thenReturn(Mono.empty());
+			return session;
+		};
+
+		transportProvider.setSessionFactory(realSessionFactory);
+
+		StepVerifier.create(Mono.fromCallable(() -> pingLatch.await(5, TimeUnit.SECONDS)))
+			.expectNext(true)
+			.verifyComplete();
+	}
+
+	@Test
 	void shouldHandleUtf8MessagesWithNonUtf8DefaultCharset() throws Exception {
 		String utf8Content = "한글 漢字 café 🎉";
 		String jsonMessage = "{\"jsonrpc\":\"2.0\",\"method\":\"test\"," + "\"params\":{\"message\":\"" + utf8Content
