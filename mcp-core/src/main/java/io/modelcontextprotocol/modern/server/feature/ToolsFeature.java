@@ -85,6 +85,16 @@ public final class ToolsFeature implements McpFeature {
 		return ofAsync(adapt(repository), jsonMapper, jsonSchemaValidator, defaultTtlMs, defaultCacheScope);
 	}
 
+	/**
+	 * Serves a fixed set of tools, listed in this order on a single page. Duplicate names
+	 * are rejected.
+	 */
+	public static ToolsFeature ofTools(List<McpServerTool> tools, McpJsonMapper jsonMapper,
+			JsonSchemaValidator jsonSchemaValidator, long defaultTtlMs, CacheScope defaultCacheScope) {
+		return ofAsync(new InMemoryToolRepository(tools), jsonMapper, jsonSchemaValidator, defaultTtlMs,
+				defaultCacheScope);
+	}
+
 	@Override
 	public Set<String> methods() {
 		return Set.of(McpSchema.METHOD_TOOLS_LIST, McpSchema.METHOD_TOOLS_CALL);

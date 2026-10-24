@@ -17,6 +17,7 @@ import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCMessage;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
@@ -35,6 +36,8 @@ import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.UnsupportedProtocolVersionData;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
+import io.modelcontextprotocol.modern.server.feature.McpServerTool;
+import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -338,6 +341,10 @@ public final class McpServer implements McpRequestManager {
 
 		private final List<McpFeature> features = new ArrayList<>();
 
+		private final Map<String, McpServerTool> tools = new LinkedHashMap<>();
+
+		private JsonSchemaValidator jsonSchemaValidator;
+
 		private long discoverTtlMs = 0L;
 
 		private CacheScope discoverCacheScope = CacheScope.PRIVATE;
@@ -383,6 +390,34 @@ public final class McpServer implements McpRequestManager {
 		}
 
 		/**
+		 * Registers a tool, served in registration order by a {@link ToolsFeature} built
+		 * at {@link #build()}. No other feature may serve {@code tools/*} then.
+		 */
+		public Builder tool(McpServerTool tool) {
+			Assert.notNull(tool, "tool must not be null");
+			if (this.tools.putIfAbsent(tool.tool().name(), tool) != null) {
+				throw new IllegalArgumentException("Tool '" + tool.tool().name() + "' is already registered");
+			}
+			return this;
+		}
+
+		public Builder tools(List<McpServerTool> tools) {
+			Assert.notNull(tools, "tools must not be null");
+			tools.forEach(this::tool);
+			return this;
+		}
+
+		/**
+		 * The validator for the arguments and structured output of tools registered with
+		 * {@link #tool}. Defaults to {@link McpJsonDefaults#getSchemaValidator()}.
+		 */
+		public Builder jsonSchemaValidator(JsonSchemaValidator jsonSchemaValidator) {
+			Assert.notNull(jsonSchemaValidator, "jsonSchemaValidator must not be null");
+			this.jsonSchemaValidator = jsonSchemaValidator;
+			return this;
+		}
+
+		/**
 		 * Registers {@code subscriptions/listen}, backed by {@code publisher}, for the
 		 * tools, prompts and resources features that are registered.
 		 */
@@ -418,6 +453,12 @@ public final class McpServer implements McpRequestManager {
 			McpJsonMapper mapper = this.jsonMapper != null ? this.jsonMapper : McpJsonDefaults.getMapper();
 
 			List<McpFeature> allFeatures = new ArrayList<>(this.features);
+			if (!this.tools.isEmpty()) {
+				JsonSchemaValidator validator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+						: McpJsonDefaults.getSchemaValidator();
+				allFeatures.add(registeredWith("tool(...)", ToolsFeature.ofTools(List.copyOf(this.tools.values()),
+						mapper, validator, 0L, CacheScope.PRIVATE)));
+			}
 
 			ServerCapabilities.Builder capabilitiesBuilder = ServerCapabilities.builder();
 			for (McpFeature feature : allFeatures) {
@@ -460,6 +501,22 @@ public final class McpServer implements McpRequestManager {
 
 			return new McpServer(this.serverInfo, this.supportedVersions, mapper, Map.copyOf(byMethod),
 					Set.copyOf(inputRequiredMethods), codec, subscriptionsFeature);
+		}
+
+		// Checked here rather than by the method collision check in build(), whose
+		// "served by both ToolsFeature and ToolsFeature" would not say which
+		// registration to move.
+		private McpFeature registeredWith(String shortcut, McpFeature feature) {
+			for (McpFeature explicit : this.features) {
+				for (String method : feature.methods()) {
+					if (explicit.methods().contains(method)) {
+						throw new IllegalStateException("Primitives registered with " + shortcut
+								+ " cannot be combined with " + explicit.getClass().getName() + ", which also serves '"
+								+ method + "'; register them on that feature's repository instead");
+					}
+				}
+			}
+			return feature;
 		}
 
 	}
