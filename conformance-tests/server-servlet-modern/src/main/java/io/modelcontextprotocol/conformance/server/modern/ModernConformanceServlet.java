@@ -90,6 +90,15 @@ public class ModernConformanceServlet {
 	// Minimal WAV file (base64 encoded) - 1 sample at 8kHz
 	private static final String MINIMAL_WAV = "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQAAAAA=";
 
+	private static final String CUSTOM_HEADER_INPUT = """
+			{
+			  "type": "object",
+			  "properties": {
+			    "region": { "type": "string", "x-mcp-header": "Region" }
+			  }
+			}
+			""";
+
 	private static final String JSON_SCHEMA_2020_12_INPUT = """
 			{
 			  "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -316,6 +325,13 @@ public class ModernConformanceServlet {
 			add(Tool.builder("json_schema_2020_12_tool", JSON, JSON_SCHEMA_2020_12_INPUT)
 				.description("Tool with JSON Schema 2020-12 features (SEP-1613, SEP-2106)")
 				.build(), respond((ctx, req) -> text("ok")));
+
+			// SEP-2243 custom headers: region is mirrored into Mcp-Param-Region
+			add(Tool.builder("test_custom_header", JSON, CUSTOM_HEADER_INPUT)
+				.description("Tool with an x-mcp-header parameter (SEP-2243)")
+				.build(),
+					respond((ctx, req) -> text(
+							"Region: " + (req.arguments() == null ? null : req.arguments().get("region")))));
 
 			// SEP-2575 diagnostic tools
 			add("test_missing_capability", "Test tool requiring sampling", (ctx, req) -> {

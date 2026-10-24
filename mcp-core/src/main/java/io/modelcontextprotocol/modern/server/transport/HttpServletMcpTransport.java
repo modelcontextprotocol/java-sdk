@@ -32,6 +32,7 @@ import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
 import io.modelcontextprotocol.modern.server.McpRequestManager;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.McpTransportResponse;
+import io.modelcontextprotocol.modern.server.TransportParams;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.server.transport.DefaultServerTransportSecurityValidator;
 import io.modelcontextprotocol.server.transport.HeaderAccessor;
@@ -196,7 +197,9 @@ public class HttpServletMcpTransport extends HttpServlet {
 			return;
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request);
+		// Attached after the extractor, so it can neither drop nor forge the params.
+		McpTransportContext transportContext = TransportParams.attach(this.contextExtractor.extract(request),
+				TransportParams.fromHeaders(headers(request)));
 
 		String body;
 		try {
@@ -455,6 +458,14 @@ public class HttpServletMcpTransport extends HttpServlet {
 				return Collections.list(request.getHeaderNames());
 			}
 		};
+	}
+
+	private static Map<String, List<String>> headers(HttpServletRequest request) {
+		Map<String, List<String>> headers = new HashMap<>();
+		for (String name : Collections.list(request.getHeaderNames())) {
+			headers.put(name, Collections.list(request.getHeaders(name)));
+		}
+		return headers;
 	}
 
 	private static String decodeMcpNameHeader(String value) {

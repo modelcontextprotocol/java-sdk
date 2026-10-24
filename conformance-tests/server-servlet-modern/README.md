@@ -29,6 +29,5 @@ Besides the standard `test_*` tools, resources and prompts, the server exposes t
   `test_trigger_tool_change`, `test_trigger_prompt_change`
 - **SEP-2322 MRTR:** `test_input_required_result_*` tools and the `test_input_required_result_prompt` prompt
 - **SEP-1613 / SEP-2106:** `json_schema_2020_12_tool`
-
-SEP-2243 custom headers (`x-mcp-header` / `Mcp-Param-{Name}`) are not supported yet; see
-[Known Limitations](../VALIDATION_RESULTS.md#known-limitations).
+- **SEP-2243 custom headers:** `test_custom_header`, whose `region` argument is mirrored into
+  `Mcp-Param-Region`

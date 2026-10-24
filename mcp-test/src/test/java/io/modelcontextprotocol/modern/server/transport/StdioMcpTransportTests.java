@@ -41,6 +41,7 @@ import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.server.McpRequestManager;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.McpTransportResponse;
+import io.modelcontextprotocol.modern.server.TransportParams;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
@@ -220,6 +221,21 @@ class StdioMcpTransportTests {
 
 		releaseSlow.countDown();
 		assertThatJson(readLineWithTimeout()).inPath("$.id").isEqualTo(1);
+	}
+
+	@Test
+	void requestsDeclareThatArgumentsAreNotMirroredIntoHeaders() throws Exception {
+		AtomicReference<TransportParams> params = new AtomicReference<>();
+		McpRequestManager manager = managerOf((transportContext, request) -> {
+			params.set(TransportParams.from(transportContext));
+			return Mono.just(McpTransportResponse.result(JSONRPCResponse.result(request.id(), Map.of())));
+		});
+
+		start(manager);
+		send("tools/call", 1, Map.of("_meta", meta(), "name", "echo"));
+		readLineWithTimeout();
+
+		assertThat(params.get()).isSameAs(TransportParams.NOT_MIRRORED);
 	}
 
 	@Test

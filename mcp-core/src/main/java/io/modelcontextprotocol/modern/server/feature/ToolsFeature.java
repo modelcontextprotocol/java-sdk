@@ -20,6 +20,7 @@ import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
 import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
+import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.ListToolsResult;
 import io.modelcontextprotocol.modern.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.modern.McpSchema.Result;
@@ -29,11 +30,19 @@ import io.modelcontextprotocol.modern.McpSchema.Tool;
 import io.modelcontextprotocol.modern.server.McpFeature;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
+import io.modelcontextprotocol.modern.server.TransportParams;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
 /**
  * The {@code tools/list} and {@code tools/call} feature.
+ * <p>
+ * A {@code tools/call} is checked against the SEP-2243 {@code Mcp-Param-{Name}} headers
+ * of its {@code x-mcp-header} parameters, read from the {@link TransportParams} in the
+ * transport context, before its arguments are validated. Mismatches fail with
+ * {@code -32020}. Only a transport that declares {@link TransportParams#NOT_MIRRORED}
+ * skips the check: a transport context without params counts as a request with no
+ * headers.
  *
  * @author Dariusz Jędrzejczyk
  */
@@ -105,6 +114,13 @@ public final class ToolsFeature implements McpFeature {
 
 	private Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, Tool tool, CallToolRequest request) {
 		Map<String, Object> arguments = request.arguments() != null ? request.arguments() : Map.of();
+		TransportParams params = TransportParams.from(ctx.transportContext());
+		if (params.isMirrored()) {
+			String headerMismatch = McpParamHeaders.validate(tool.inputSchema(), arguments, params);
+			if (headerMismatch != null) {
+				return Mono.error(new McpException(ErrorCodes.HEADER_MISMATCH, headerMismatch));
+			}
+		}
 		ValidationResponse input = this.jsonSchemaValidator.validate(tool.inputSchema(), arguments);
 		if (!input.valid()) {
 			// A tool execution error, so the model can fix the call.
