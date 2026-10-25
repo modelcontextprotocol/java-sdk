@@ -13,6 +13,10 @@ import reactor.core.publisher.Mono;
  * The transport-facing entry point that answers each request with a
  * {@link McpTransportResponse}. Use {@link #handleBlocking} when the calling thread may
  * block, {@link #handle} when it must not. Neither completes with an error.
+ * <p>
+ * For {@code tools/call}, the transport context must map
+ * {@link McpParamHeaders#TRANSPORT_CONTEXT_KEY} to the request's {@code Mcp-Param-{Name}}
+ * headers, or to {@link McpParamHeaders#NOT_MIRRORED} for a transport without headers.
  *
  * @author Dariusz Jędrzejczyk
  */
