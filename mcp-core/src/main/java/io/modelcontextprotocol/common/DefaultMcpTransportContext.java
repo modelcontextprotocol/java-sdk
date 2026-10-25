@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.common;
 
 import java.util.Map;
+import java.util.stream.Stream;
 
 import io.modelcontextprotocol.util.Assert;
 
@@ -26,6 +27,11 @@ class DefaultMcpTransportContext implements McpTransportContext {
 	@Override
 	public Object get(String key) {
 		return this.metadata.get(key);
+	}
+
+	@Override
+	public Stream<Map.Entry<String, Object>> stream() {
+		return this.metadata.entrySet().stream();
 	}
 
 	@Override
