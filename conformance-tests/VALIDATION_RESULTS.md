@@ -40,9 +40,8 @@ These run but don't count: the frozen requirement set marks extensions and anyth
 in the anchor release (`0.2.0-alpha.10`) as `not_scored`. Pending scenarios are still spec requirements.
 
 - **Passing:** `json-schema-2020-12` (8/8 checks, including the SEP-2106 `allOf`/`anyOf`,
-  `if`/`then`/`else` and `$anchor` checks), `http-header-validation` (14/14)
-- **Failing — `http-custom-header-server-validation` (SEP-2243 custom headers):** not implemented,
-  see [Known Limitations](#known-limitations)
+  `if`/`then`/`else` and `$anchor` checks), `http-header-validation` (14/14),
+  `http-custom-header-server-validation` (10/10, SEP-2243 custom headers, against the `test_x_mcp_header` tool)
 - **Failing — tasks extension (`tasks-*`, SEP-2663):** not implemented
 
 ## Server Test Results
@@ -97,25 +96,6 @@ of the 0.2.0-alpha auth suite.
 
 1. **Client SSE Retry:** client doesn't parse or respect the `retry:` field,
    reconnects immediately, and doesn't send the `Last-Event-ID` header
-2. **Modern server: SEP-2243 custom headers (`Mcp-Param-{Name}`) are not supported.** SEP-2243 is part
-   of 2026-07-28 and the server-side requirements are MUSTs; only the scenario's pending status keeps
-   it out of the score. Today the five custom-header checks report "not testable" because no tool
-   carries `x-mcp-header`. Adding such a tool would turn them into real failures, because nothing
-   validates the headers yet. Supporting it needs SDK work:
-   - **Tool definitions:** `Tool.inputSchema` is a free-form map, so `x-mcp-header` can already be
-     written, but nothing enforces the definition rules: value non-empty, ASCII without space or `:`,
-     case-insensitively unique per tool, only on `integer`/`string`/`boolean` parameters (not `number`).
-   - **Request validation on `tools/call`:** for each designated parameter, Base64-decode
-     `=?base64?…?=` values, check the header matches the body value (integers as decimal strings,
-     booleans as `true`/`false`), reject headers with invalid characters, don't expect a header when
-     the value is null or omitted, and reject a missing required parameter. Failures are answered with
-     `400` and `-32020`.
-   - **Where it lives:** the check needs the called tool's `inputSchema`, which
-     `HttpServletMcpTransport` doesn't have. `ToolsFeature` already looks the `Tool` up through
-     `McpSyncToolRepository#find` / `McpAsyncToolRepository#find` and validates the arguments against
-     `inputSchema` before calling the tool, so the header check fits there. What's missing is a way to
-     get the raw `Mcp-Param-*` headers from the transport to the feature (e.g. through the
-     `McpTransportContext` on `McpRequestContext`).
 
 ## Running Tests
 

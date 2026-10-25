@@ -61,7 +61,16 @@ public final class ModernTestFixtures {
 
 	/** Answers the request without blocking and returns its non-streaming response. */
 	public static Mono<JSONRPCResponse> respond(McpRequestManager manager, JSONRPCRequest request) {
-		return invoke(manager, request).map(response -> {
+		return respond(manager, McpTransportContext.EMPTY, request);
+	}
+
+	/**
+	 * Answers the request with the given transport context without blocking and returns
+	 * its non-streaming response.
+	 */
+	public static Mono<JSONRPCResponse> respond(McpRequestManager manager, McpTransportContext transportContext,
+			JSONRPCRequest request) {
+		return manager.handle(transportContext, request).map(response -> {
 			if (response instanceof McpTransportResponse.Result result) {
 				return result.response();
 			}

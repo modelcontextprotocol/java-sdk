@@ -37,13 +37,23 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
+import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
+import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
+import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
+import io.modelcontextprotocol.modern.McpSchema.TextContent;
+import io.modelcontextprotocol.modern.McpSchema.Tool;
+import io.modelcontextprotocol.modern.server.McpParamHeaders;
+import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpRequestManager;
 import io.modelcontextprotocol.modern.server.McpServer;
+import io.modelcontextprotocol.modern.server.McpSyncResponse;
 import io.modelcontextprotocol.modern.server.McpTransportResponse;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
+import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
+import io.modelcontextprotocol.modern.server.feature.ToolsPage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
@@ -519,6 +529,80 @@ class StdioMcpTransportTests {
 		Thread.sleep(300);
 
 		assertThat(handled).isEmpty();
+	}
+
+	@Test
+	void requestsAndNotificationsStateThatParamHeadersAreNotMirrored() throws Exception {
+		AtomicReference<McpTransportContext> requestContext = new AtomicReference<>();
+		AtomicReference<McpTransportContext> notificationContext = new AtomicReference<>();
+		start(new McpRequestManager() {
+			@Override
+			public Mono<McpTransportResponse> handleBlocking(McpTransportContext transportContext,
+					JSONRPCRequest request) {
+				throw new AssertionError("stdio must never handle requests for a blocking caller");
+			}
+
+			@Override
+			public Mono<McpTransportResponse> handle(McpTransportContext transportContext, JSONRPCRequest request) {
+				requestContext.set(transportContext);
+				return Mono.just(McpTransportResponse.result(JSONRPCResponse.result(request.id(), Map.of())));
+			}
+
+			@Override
+			public Mono<Void> handleNotification(McpTransportContext transportContext,
+					JSONRPCNotification notification) {
+				notificationContext.set(transportContext);
+				return Mono.empty();
+			}
+		});
+
+		// Lines are read in order, so the notification is handled before the request.
+		send("notifications/roots/list_changed", null, Map.of());
+		send("tools/call", 1, Map.of("_meta", meta(), "name", "region"));
+		assertThatJson(readLineWithTimeout()).isEqualTo(emptyResult(1));
+
+		assertThat(requestContext.get().get(McpParamHeaders.TRANSPORT_CONTEXT_KEY))
+			.isSameAs(McpParamHeaders.NOT_MIRRORED);
+		assertThat(notificationContext.get().get(McpParamHeaders.TRANSPORT_CONTEXT_KEY))
+			.isSameAs(McpParamHeaders.NOT_MIRRORED);
+	}
+
+	@Test
+	void annotatedToolIsCalledWithoutParamHeaders() throws Exception {
+		Tool tool = Tool.builder("region", this.jsonMapper, """
+				{
+				  "type": "object",
+				  "properties": {
+				    "region": { "type": "string", "x-mcp-header": "Region" }
+				  }
+				}
+				""").build();
+		McpServer server = McpServer.builder()
+			.serverInfo(SERVER_INFO)
+			.jsonMapper(this.jsonMapper)
+			.feature(ToolsFeature.ofSync(new McpSyncToolRepository() {
+				@Override
+				public ToolsPage list(McpRequestContext ctx, String cursor) {
+					return ToolsPage.of(List.of(tool));
+				}
+
+				@Override
+				public Tool find(McpRequestContext ctx, String name) {
+					return tool;
+				}
+
+				@Override
+				public McpSyncResponse<CallToolOutcome> call(McpRequestContext ctx, CallToolRequest request) {
+					return McpSyncResponse
+						.result(CallToolResult.builder().addContent(TextContent.builder("ok").build()).build());
+				}
+			}, this.jsonMapper, PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE))
+			.build();
+		start(server);
+
+		send("tools/call", 2, Map.of("_meta", meta(), "name", "region", "arguments", Map.of("region", "eu-west1")));
+
+		assertThatJson(readLineWithTimeout()).inPath("$.result.content[0].text").isEqualTo("ok");
 	}
 
 	@Test
