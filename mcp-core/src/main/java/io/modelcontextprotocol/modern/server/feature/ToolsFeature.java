@@ -9,6 +9,7 @@ import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -20,16 +21,22 @@ import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
 import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
+import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.ListToolsResult;
 import io.modelcontextprotocol.modern.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
-import io.modelcontextprotocol.modern.server.McpFeature;
-import io.modelcontextprotocol.modern.server.McpRequestContext;
+import io.modelcontextprotocol.modern.ToolParamHeaderAnnotations;
+import io.modelcontextprotocol.modern.ToolParamHeaderAnnotations.InvalidAnnotation;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
+import io.modelcontextprotocol.modern.server.McpFeature;
+import io.modelcontextprotocol.modern.server.McpParamHeaders;
+import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 /**
@@ -38,6 +45,8 @@ import reactor.core.publisher.Mono;
  * @author Dariusz Jędrzejczyk
  */
 public final class ToolsFeature implements McpFeature {
+
+	private static final Logger logger = LoggerFactory.getLogger(ToolsFeature.class);
 
 	private final McpAsyncToolRepository repository;
 
@@ -110,6 +119,9 @@ public final class ToolsFeature implements McpFeature {
 			return Mono.error(missing);
 		}
 		Map<String, Object> arguments = request.arguments() != null ? request.arguments() : Map.of();
+		// Before input-schema validation, so a mismatch is a protocol error rather than a
+		// tool execution error the model would try to fix.
+		validateParamHeaders(ctx, tool.definition(), arguments);
 		ValidationResponse input = this.jsonSchemaValidator.validate(tool.definition().inputSchema(), arguments);
 		if (!input.valid()) {
 			// A tool execution error, so the model can fix the call.
@@ -119,6 +131,37 @@ public final class ToolsFeature implements McpFeature {
 				.build()));
 		}
 		return tool.handler().call(ctx, request).map(response -> checkOutput(tool.definition(), response));
+	}
+
+	private static void validateParamHeaders(McpRequestContext ctx, Tool tool, Map<String, Object> arguments) {
+		Object headers = ctx.transportContext().get(McpParamHeaders.TRANSPORT_CONTEXT_KEY);
+		if (headers == McpParamHeaders.NOT_MIRRORED) {
+			return;
+		}
+		// Parsed on every call, without caching, because repositories are user code and
+		// may return a different tool each time.
+		ToolParamHeaderAnnotations annotations = ToolParamHeaderAnnotations.parse(tool);
+		if (!annotations.isValid()) {
+			// Compliant clients drop the tool from tools/list: this is how its author
+			// finds out why.
+			logger.warn("Tool '{}' has invalid {} annotations, which are not enforced: {}", tool.name(),
+					ToolParamHeaderAnnotations.KEYWORD,
+					annotations.invalid().stream().map(InvalidAnnotation::describe).collect(Collectors.joining("; ")));
+		}
+		if (annotations.valid().isEmpty()) {
+			return;
+		}
+		// Failing rather than skipping, so a transport that forgets the headers can't
+		// silently disable validation.
+		if (!(headers instanceof McpParamHeaders paramHeaders)) {
+			logger.warn("Transport did not provide Mcp-Param headers, required to validate tool '{}'", tool.name());
+			throw new McpException(ErrorCodes.INTERNAL_ERROR, "Internal error");
+		}
+		ParamHeaderValidator.Result result = ParamHeaderValidator.validate(annotations.valid(), arguments,
+				paramHeaders);
+		if (result instanceof ParamHeaderValidator.Invalid invalid) {
+			throw new McpException(ErrorCodes.HEADER_MISMATCH, invalid.problem());
+		}
 	}
 
 	private McpAsyncResponse<CallToolOutcome> checkOutput(Tool tool, McpAsyncResponse<CallToolOutcome> response) {
