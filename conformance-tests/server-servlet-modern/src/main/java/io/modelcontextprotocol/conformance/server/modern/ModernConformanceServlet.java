@@ -31,8 +31,6 @@ import io.modelcontextprotocol.modern.McpSchema.InputRequiredResult;
 import io.modelcontextprotocol.modern.McpSchema.Prompt;
 import io.modelcontextprotocol.modern.McpSchema.PromptArgument;
 import io.modelcontextprotocol.modern.McpSchema.PromptMessage;
-import io.modelcontextprotocol.modern.McpSchema.ReadResourceOutcome;
-import io.modelcontextprotocol.modern.McpSchema.ReadResourceRequest;
 import io.modelcontextprotocol.modern.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.modern.McpSchema.Resource;
 import io.modelcontextprotocol.modern.McpSchema.Result;
@@ -52,6 +50,7 @@ import io.modelcontextprotocol.modern.server.feature.McpChangeBroadcaster;
 import io.modelcontextprotocol.modern.server.feature.McpChangeFeed;
 import io.modelcontextprotocol.modern.server.feature.McpSyncPrompt;
 import io.modelcontextprotocol.modern.server.feature.McpSyncPromptRepository;
+import io.modelcontextprotocol.modern.server.feature.McpSyncResource;
 import io.modelcontextprotocol.modern.server.feature.McpSyncResourceRepository;
 import io.modelcontextprotocol.modern.server.feature.McpSyncTool;
 import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
@@ -519,9 +518,13 @@ public class ModernConformanceServlet {
 		}
 
 		@Override
-		public McpSyncResponse<ReadResourceOutcome> read(McpRequestContext ctx, ReadResourceRequest request) {
-			String uri = request.uri();
-			ReadResourceResult result = switch (uri) {
+		public McpSyncResource find(McpRequestContext ctx, String uri) {
+			ReadResourceResult result = read(uri);
+			return result != null ? McpSyncResource.of((c, request) -> McpSyncResponse.result(result)) : null;
+		}
+
+		private static ReadResourceResult read(String uri) {
+			return switch (uri) {
 				case "test://static-text" -> textResource(uri, "This is the content of the static text resource.");
 				case "test://watched-resource" -> textResource(uri, "This is a watched resource content.");
 				case "test://static-binary" -> ReadResourceResult
@@ -529,10 +532,6 @@ public class ModernConformanceServlet {
 					.build();
 				default -> templateResource(uri);
 			};
-			if (result == null) {
-				throw McpException.invalidParams("Unknown resource: " + uri, Map.of("uri", uri));
-			}
-			return McpSyncResponse.result(result);
 		}
 
 		@Override
