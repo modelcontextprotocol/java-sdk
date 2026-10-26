@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -53,13 +54,12 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.web.client.RestClient;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.APPLICATION_JSON;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.TEXT_EVENT_STREAM;
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
@@ -137,12 +137,18 @@ class HttpServletStatelessIntegrationTests {
 				Tool.builder("tool1", EMPTY_JSON_SCHEMA).title("tool1 description").build(),
 				(transportContext, request) -> {
 					// perform a blocking call to a remote service
-					String response = RestClient.create()
-						.get()
-						.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
-						.retrieve()
-						.body(String.class);
-					assertThat(response).isNotBlank();
+					try {
+						HttpResponse<String> response = HttpClient.newHttpClient()
+							.send(HttpRequest.newBuilder()
+								.uri(URI.create(
+										"https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md"))
+								.GET()
+								.build(), HttpResponse.BodyHandlers.ofString());
+						assertThat(response.body()).isNotBlank();
+					}
+					catch (Exception e) {
+						throw new RuntimeException(e);
+					}
 					return callResponse;
 				});
 
@@ -711,34 +717,19 @@ class HttpServletStatelessIntegrationTests {
 
 		mcpServer.addTool(toolSpec);
 
-		McpSchema.CallToolRequest callToolRequest = McpSchema.CallToolRequest.builder("test")
-			.arguments(Map.of())
+		var request = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+			.header("Content-Type", APPLICATION_JSON)
+			.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
+			.header(HttpHeaders.PROTOCOL_VERSION, ProtocolVersions.MCP_2025_03_26)
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"jsonrpc":"2.0","id":"test","method":"tools/call","params":{"name":"test","arguments":{}}}"""))
 			.build();
-		McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.METHOD_TOOLS_CALL, "test",
-				callToolRequest);
 
-		MockHttpServletRequest request = new MockHttpServletRequest("POST", CUSTOM_MESSAGE_ENDPOINT);
-		MockHttpServletResponse response = new MockHttpServletResponse();
+		var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
 
-		byte[] content = JSON_MAPPER.writeValueAsBytes(jsonrpcRequest);
-		request.setContent(content);
-		request.addHeader("Content-Type", "application/json");
-		request.addHeader("Content-Length", Integer.toString(content.length));
-		request.addHeader("Content-Length", Integer.toString(content.length));
-		request.addHeader("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM);
-		request.addHeader("Content-Type", APPLICATION_JSON);
-		request.addHeader("Cache-Control", "no-cache");
-		request.addHeader(HttpHeaders.PROTOCOL_VERSION, ProtocolVersions.MCP_2025_03_26);
-
-		mcpStatelessServerTransport.service(request, response);
-
-		McpSchema.JSONRPCResponse jsonrpcResponse = JSON_MAPPER.readValue(response.getContentAsByteArray(),
-				McpSchema.JSONRPCResponse.class);
-
-		assertThat(jsonrpcResponse).isNotNull();
-		assertThat(jsonrpcResponse.error()).isNotNull();
-		assertThat(jsonrpcResponse.error().code()).isEqualTo(ErrorCodes.INTERNAL_ERROR);
-		assertThat(jsonrpcResponse.error().message()).isEqualTo("testing");
+		assertThatJson(response.body()).inPath("error.code").isEqualTo(ErrorCodes.INTERNAL_ERROR);
+		assertThatJson(response.body()).inPath("error.message").isEqualTo("testing");
 	}
 
 	@Test
@@ -913,6 +904,59 @@ class HttpServletStatelessIntegrationTests {
 
 		var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
 		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "text/plain;charset=UTF-8", "application/x-www-form-urlencoded", "multipart/form-data" })
+	void rejectsNonJsonContentType(String contentType) throws Exception {
+		AtomicBoolean toolCalled = new AtomicBoolean();
+		McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().tools(false).build())
+			.tools(McpStatelessServerFeatures.SyncToolSpecification.builder()
+				.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).build())
+				.callHandler((transportContext, request) -> {
+					toolCalled.set(true);
+					return CallToolResult.builder().build();
+				})
+				.build())
+			.build();
+
+		// CORS-safelisted content types can be sent cross-origin by a browser without a
+		// preflight, so they must be rejected before the message is handled
+		var request = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+			.header("Content-Type", contentType)
+			.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"jsonrpc":"2.0","id":"call-1","method":"tools/call","params":{"name":"tool1","arguments":{}}}"""))
+			.build();
+
+		var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
+		assertThatJson(response.body()).inPath("message")
+			.isEqualTo("Unsupported Media Type: Content-Type must be application/json");
+		assertThat(toolCalled).isFalse();
+	}
+
+	@Test
+	void rejectsMalformedMessageAsInvalidRequest() throws Exception {
+		McpServer.sync(mcpStatelessServerTransport).build();
+
+		// Valid JSON, but "jsonrpc" is an object instead of a string, so it cannot be
+		// converted into a JSONRPCRequest
+		var request = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+			.header("Content-Type", APPLICATION_JSON)
+			.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"jsonrpc":{"a":1},"id":1,"method":"tools/list"}"""))
+			.build();
+
+		var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_BAD_REQUEST);
+		assertThatJson(response.body()).inPath("message").isEqualTo("Invalid message format");
 	}
 
 	private double evaluateExpression(String expression) {

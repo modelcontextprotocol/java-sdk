@@ -11,6 +11,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -22,6 +23,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.client.McpAsyncClient;
+import io.modelcontextprotocol.client.transport.customizer.DelegatingMcpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpHttpClientAuthorizationErrorHandler;
 import io.modelcontextprotocol.client.transport.customizer.McpHttpClientTransportAuthorizationErrorHandler;
@@ -672,7 +674,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
-		private McpAsyncHttpClientRequestCustomizer httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.NOOP;
+		private final List<McpAsyncHttpClientRequestCustomizer> httpRequestCustomizers = new ArrayList<>();
 
 		private Duration connectTimeout = Duration.ofSeconds(10);
 
@@ -776,10 +778,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		/**
 		 * Sets the customizer for {@link HttpRequest.Builder}, to modify requests before
-		 * executing them.
+		 * executing them. The customizer is internally converted to
+		 * {@link McpAsyncHttpClientRequestCustomizer}.
 		 * <p>
-		 * This overrides the customizer from
-		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)}.
+		 * This replaces all customizers previously registered on this builder.
 		 * <p>
 		 * Do NOT use a blocking {@link McpSyncHttpClientRequestCustomizer} in a
 		 * non-blocking context. Use
@@ -787,25 +789,81 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 * instead.
 		 * @param syncHttpRequestCustomizer the request customizer
 		 * @return this builder
+		 * @deprecated Use {@link #addHttpRequestCustomizer} instead.
 		 */
+		@Deprecated
 		public Builder httpRequestCustomizer(McpSyncHttpClientRequestCustomizer syncHttpRequestCustomizer) {
-			this.httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.fromSync(syncHttpRequestCustomizer);
-			return this;
+			Assert.notNull(syncHttpRequestCustomizer, "syncHttpRequestCustomizer must not be null");
+			this.httpRequestCustomizers.clear();
+			return addHttpRequestCustomizer(syncHttpRequestCustomizer);
 		}
 
 		/**
 		 * Sets the customizer for {@link HttpRequest.Builder}, to modify requests before
 		 * executing them.
 		 * <p>
-		 * This overrides the customizer from
-		 * {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)}.
+		 * This replaces all customizers previously registered on this builder.
+		 * <p>
+		 * Do NOT use a blocking implementation in a non-blocking context.
+		 * @param asyncHttpRequestCustomizer the request customizer
+		 * @return this builder
+		 * @deprecated Use {@link #addAsyncHttpRequestCustomizer} instead.
+		 */
+		@Deprecated
+		public Builder asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer asyncHttpRequestCustomizer) {
+			Assert.notNull(asyncHttpRequestCustomizer, "asyncHttpRequestCustomizer must not be null");
+			this.httpRequestCustomizers.clear();
+			return addAsyncHttpRequestCustomizer(asyncHttpRequestCustomizer);
+		}
+
+		/**
+		 * Adds a customizer for {@link HttpRequest.Builder}, to modify requests before
+		 * executing them. Customizers are applied in the order they are added, after
+		 * those already registered on this builder. The customizer is internally
+		 * converted to {@link McpAsyncHttpClientRequestCustomizer}.
+		 * <p>
+		 * Do NOT use a blocking {@link McpSyncHttpClientRequestCustomizer} in a
+		 * non-blocking context. Use
+		 * {@link #addAsyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)}
+		 * instead.
+		 * @param syncHttpRequestCustomizer the request customizer
+		 * @return this builder
+		 */
+		public Builder addHttpRequestCustomizer(McpSyncHttpClientRequestCustomizer syncHttpRequestCustomizer) {
+			Assert.notNull(syncHttpRequestCustomizer, "syncHttpRequestCustomizer must not be null");
+			this.httpRequestCustomizers.add(McpAsyncHttpClientRequestCustomizer.fromSync(syncHttpRequestCustomizer));
+			return this;
+		}
+
+		/**
+		 * Adds a customizer for {@link HttpRequest.Builder}, to modify requests before
+		 * executing them. Customizers are applied in the order they are added, after
+		 * those already registered on this builder.
 		 * <p>
 		 * Do NOT use a blocking implementation in a non-blocking context.
 		 * @param asyncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer asyncHttpRequestCustomizer) {
-			this.httpRequestCustomizer = asyncHttpRequestCustomizer;
+		public Builder addAsyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer asyncHttpRequestCustomizer) {
+			Assert.notNull(asyncHttpRequestCustomizer, "asyncHttpRequestCustomizer must not be null");
+			this.httpRequestCustomizers.add(asyncHttpRequestCustomizer);
+			return this;
+		}
+
+		/**
+		 * Provides access to the mutable list of request customizers registered on this
+		 * builder, so they can be inspected, reordered, added or removed. Customizers are
+		 * applied in list order. Synchronous customizers registered through
+		 * {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)} or
+		 * {@link #addHttpRequestCustomizer(McpSyncHttpClientRequestCustomizer)} appear in
+		 * the list wrapped as {@link McpAsyncHttpClientRequestCustomizer}.
+		 * @param customizersConsumer a consumer of the list of customizers
+		 * @return this builder
+		 */
+		public Builder asyncHttpRequestCustomizers(
+				Consumer<List<McpAsyncHttpClientRequestCustomizer>> customizersConsumer) {
+			Assert.notNull(customizersConsumer, "customizersConsumer must not be null");
+			customizersConsumer.accept(this.httpRequestCustomizers);
 			return this;
 		}
 
@@ -910,7 +968,16 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
-					httpRequestCustomizer, authorizationErrorHandler, supportedProtocolVersions, maxResponseSize);
+					httpRequestCustomizer(), authorizationErrorHandler, supportedProtocolVersions, maxResponseSize);
+		}
+
+		private McpAsyncHttpClientRequestCustomizer httpRequestCustomizer() {
+			Assert.noNullElements(this.httpRequestCustomizers, "httpRequestCustomizers must not contain null elements");
+			return switch (this.httpRequestCustomizers.size()) {
+				case 0 -> McpAsyncHttpClientRequestCustomizer.NOOP;
+				case 1 -> this.httpRequestCustomizers.get(0);
+				default -> new DelegatingMcpAsyncHttpClientRequestCustomizer(List.copyOf(this.httpRequestCustomizers));
+			};
 		}
 
 	}

@@ -108,7 +108,7 @@ public class HttpClientStreamableHttpTransportEmptyResponseTests {
 		var uri = new URI(host + "/mcp");
 		var mockRequestCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
 		var transport = HttpClientStreamableHttpTransport.builder(host)
-			.httpRequestCustomizer(mockRequestCustomizer)
+			.addHttpRequestCustomizer(mockRequestCustomizer)
 			.build();
 
 		// Some servers answer a notification with an empty JSON body rather than 202.

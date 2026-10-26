@@ -3,14 +3,17 @@ name: Release to Maven Central
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -22,19 +25,21 @@ jobs:
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
       # Deploy runs the integration tests, but only with Jackson 3
       # We run Jackson 2 IT manually
       - name: Jackson 2 Integration Tests
-        run: mvn -pl mcp-test -am -Pjackson2 test
+        run: ./mvnw -pl mcp-test -am -Pjackson2 test
 
       # Deploy runs all previous maven goals, including test and verify
+      # Use the wrapper (Maven 3.9.x): with Maven 3.10, central-publishing 0.7.0 leaves
+      # maven-metadata-local.xml files in the bundle, and Central rejects it.
       - name: Publish to Maven Central
         run: |
-          mvn --batch-mode \
+          ./mvnw --batch-mode \
             -Prelease \
             -Pjavadoc \
             clean deploy

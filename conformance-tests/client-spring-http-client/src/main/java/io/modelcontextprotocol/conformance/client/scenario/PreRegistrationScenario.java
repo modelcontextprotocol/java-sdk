@@ -55,7 +55,7 @@ public class PreRegistrationScenario implements Scenario {
 
 		var customizer = new OAuth2ClientCredentialsSyncHttpRequestCustomizer(authorizedClientManager, REGISTRATION_ID);
 		HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(serverUrl)
-			.httpRequestCustomizer(customizer)
+			.addHttpRequestCustomizer(customizer)
 			.build();
 
 		var client = McpClient.sync(transport)

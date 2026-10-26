@@ -426,10 +426,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		try {
-			response.setContentType(TEXT_EVENT_STREAM);
-			response.setCharacterEncoding(UTF_8);
-			response.setHeader("Cache-Control", "no-cache");
-			response.setHeader("Connection", "keep-alive");
+			HttpServletResponseUtils.prepareSseResponse(response);
 
 			AsyncContext asyncContext = request.startAsync();
 			asyncContext.setTimeout(0);
@@ -502,6 +499,14 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 		if (accept == null || !accept.contains(APPLICATION_JSON)) {
 			badRequestErrors.add("application/json required in Accept header");
+		}
+
+		if (!HttpServletRequestUtils.isJsonContentType(request.getContentType())) {
+			this.responseError(response, HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE,
+					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Unsupported Media Type: Content-Type must be application/json")
+						.build());
+			return;
 		}
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
@@ -594,10 +599,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
 				// For streaming responses, we need to return SSE
-				response.setContentType(TEXT_EVENT_STREAM);
-				response.setCharacterEncoding(UTF_8);
-				response.setHeader("Cache-Control", "no-cache");
-				response.setHeader("Connection", "keep-alive");
+				HttpServletResponseUtils.prepareSseResponse(response);
 
 				AsyncContext asyncContext = request.startAsync();
 				asyncContext.setTimeout(0);

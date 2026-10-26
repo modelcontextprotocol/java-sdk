@@ -4,37 +4,40 @@ on:
   pull_request: {}
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build and Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: 'maven'
 
       - name: Build
-        run: mvn verify
+        run: ./mvnw verify
 
   jackson2-tests:
     name: Jackson 2 Integration Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: 'maven'
 
       - name: Jackson 2 Integration Tests
-        run: mvn -pl mcp-test -am -Pjackson2 test
+        run: ./mvnw -pl mcp-test -am -Pjackson2 test

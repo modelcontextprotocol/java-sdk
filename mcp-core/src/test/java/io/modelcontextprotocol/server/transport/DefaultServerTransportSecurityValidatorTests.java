@@ -10,6 +10,8 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -116,6 +118,25 @@ class DefaultServerTransportSecurityValidatorTests {
 				var accessor = originAccessor("http://localhost:8080");
 
 				assertThatCode(() -> wildcardValidator.validate(accessor)).doesNotThrowAnyException();
+			}
+
+			@ParameterizedTest
+			@ValueSource(strings = { "http://localhost:1", "http://localhost:65535" })
+			void boundaryPortsWithWildcard(String origin) {
+				var accessor = originAccessor(origin);
+
+				assertThatCode(() -> wildcardValidator.validate(accessor)).doesNotThrowAnyException();
+			}
+
+			@ParameterizedTest
+			@ValueSource(strings = { "http://localhost:", "http://localhost:evil.com", "http://localhost:3000.evil.com",
+					"http://localhost:@evil.com", "http://localhost:80a", "http://localhost: 80",
+					"http://localhost:3000/path", "http://localhost:0", "http://localhost:65536",
+					"http://localhost:123456", "http://localhost:-1", "http://localhost:+80" })
+			void invalidPortWithWildcard(String origin) {
+				var accessor = originAccessor(origin);
+
+				assertThatThrownBy(() -> wildcardValidator.validate(accessor)).isEqualTo(INVALID_ORIGIN);
 			}
 
 			@Test
@@ -271,6 +292,33 @@ class DefaultServerTransportSecurityValidatorTests {
 				var accessor = hostAccessor("localhost");
 
 				assertThatCode(() -> wildcardHostValidator.validate(accessor)).doesNotThrowAnyException();
+			}
+
+			@ParameterizedTest
+			@ValueSource(strings = { "localhost:1", "localhost:65535" })
+			void boundaryPorts(String host) {
+				var accessor = hostAccessor(host);
+
+				assertThatCode(() -> wildcardHostValidator.validate(accessor)).doesNotThrowAnyException();
+			}
+
+			@ParameterizedTest
+			@ValueSource(strings = { "localhost:", "localhost:evil.com", "localhost:3000.evil.com",
+					"localhost:@evil.com", "localhost:80a", "localhost: 80", "localhost:3000/path", "localhost:0",
+					"localhost:65536", "localhost:123456", "localhost:-1", "localhost:+80" })
+			void invalidPort(String host) {
+				var accessor = hostAccessor(host);
+
+				assertThatThrownBy(() -> wildcardHostValidator.validate(accessor)).isEqualTo(INVALID_HOST);
+			}
+
+			@ParameterizedTest
+			@ValueSource(strings = { "127.0.0.1:evil.com", "127.0.0.1:80.evil.com", "127.0.0.1:@evil.com" })
+			void nonNumericPortIpv4(String host) {
+				var ipValidator = DefaultServerTransportSecurityValidator.builder().allowedHost("127.0.0.1:*").build();
+
+				assertThatThrownBy(() -> ipValidator.validate(hostAccessor(host))).isEqualTo(INVALID_HOST);
+				assertThatCode(() -> ipValidator.validate(hostAccessor("127.0.0.1:8080"))).doesNotThrowAnyException();
 			}
 
 			@Test

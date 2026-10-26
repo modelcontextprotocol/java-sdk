@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.client.transport;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.time.Duration;
@@ -30,21 +31,21 @@ import org.mockito.ArgumentCaptor;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
-import org.springframework.http.codec.ServerSentEvent;
-import org.springframework.web.util.UriComponentsBuilder;
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.matches;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -75,8 +76,6 @@ class HttpClientSseClientTransportTests {
 
 		private final AtomicInteger inboundMessageCount = new AtomicInteger(0);
 
-		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
-
 		public TestHttpClientSseClientTransport(final String baseUri,
 				SseMessageEndpointValidator sseMessageEndpointValidator) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
@@ -88,13 +87,7 @@ class HttpClientSseClientTransportTests {
 			return inboundMessageCount.get();
 		}
 
-		public void simulateEndpointEvent(String jsonMessage) {
-			events.tryEmitNext(ServerSentEvent.<String>builder().event("endpoint").data(jsonMessage).build());
-			inboundMessageCount.incrementAndGet();
-		}
-
 		public void simulateMessageEvent(String jsonMessage) {
-			events.tryEmitNext(ServerSentEvent.<String>builder().event("message").data(jsonMessage).build());
 			inboundMessageCount.incrementAndGet();
 		}
 
@@ -330,12 +323,12 @@ class HttpClientSseClientTransportTests {
 	}
 
 	@Test
-	void testRequestCustomizer() {
+	void testRequestCustomizer() throws URISyntaxException {
 		var mockCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
 
 		// Create a transport with the customizer
 		var customizedTransport = HttpClientSseClientTransport.builder(host)
-			.httpRequestCustomizer(mockCustomizer)
+			.addHttpRequestCustomizer(mockCustomizer)
 			.build();
 
 		// Connect
@@ -345,8 +338,7 @@ class HttpClientSseClientTransportTests {
 			.verifyComplete();
 
 		// Verify the customizer was called
-		verify(mockCustomizer).customize(any(), eq("GET"),
-				eq(UriComponentsBuilder.fromUriString(host).path("/sse").build().toUri()), isNull(), eq(context));
+		verify(mockCustomizer).customize(any(), eq("GET"), eq(new URI(host + "/sse")), isNull(), eq(context));
 		clearInvocations(mockCustomizer);
 
 		// Send test message
@@ -370,14 +362,14 @@ class HttpClientSseClientTransportTests {
 	}
 
 	@Test
-	void testAsyncRequestCustomizer() {
+	void testAsyncRequestCustomizer() throws URISyntaxException {
 		var mockCustomizer = mock(McpAsyncHttpClientRequestCustomizer.class);
 		when(mockCustomizer.customize(any(), any(), any(), any(), any()))
 			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
 
 		// Create a transport with the customizer
 		var customizedTransport = HttpClientSseClientTransport.builder(host)
-			.asyncHttpRequestCustomizer(mockCustomizer)
+			.addAsyncHttpRequestCustomizer(mockCustomizer)
 			.build();
 
 		// Connect
@@ -387,8 +379,7 @@ class HttpClientSseClientTransportTests {
 			.verifyComplete();
 
 		// Verify the customizer was called
-		verify(mockCustomizer).customize(any(), eq("GET"),
-				eq(UriComponentsBuilder.fromUriString(host).path("/sse").build().toUri()), isNull(), eq(context));
+		verify(mockCustomizer).customize(any(), eq("GET"), eq(new URI(host + "/sse")), isNull(), eq(context));
 		clearInvocations(mockCustomizer);
 
 		// Send test message
@@ -409,6 +400,74 @@ class HttpClientSseClientTransportTests {
 
 		// Clean up
 		customizedTransport.closeGracefully().block();
+	}
+
+	@Test
+	void testRequestCustomizersAreAppliedInOrder() {
+		var first = mock(McpSyncHttpClientRequestCustomizer.class);
+		var second = mock(McpAsyncHttpClientRequestCustomizer.class);
+		when(second.customize(any(), any(), any(), any(), any()))
+			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
+		var third = mock(McpSyncHttpClientRequestCustomizer.class);
+
+		var customizedTransport = HttpClientSseClientTransport.builder(host)
+			.addHttpRequestCustomizer(first)
+			.addAsyncHttpRequestCustomizer(second)
+			.addHttpRequestCustomizer(third)
+			.build();
+
+		StepVerifier.create(customizedTransport.connect(Function.identity())).verifyComplete();
+
+		var inOrder = inOrder(first, second, third);
+		inOrder.verify(first).customize(any(), eq("GET"), any(), isNull(), any());
+		inOrder.verify(second).customize(any(), eq("GET"), any(), isNull(), any());
+		inOrder.verify(third).customize(any(), eq("GET"), any(), isNull(), any());
+
+		customizedTransport.closeGracefully().block();
+	}
+
+	@Test
+	@SuppressWarnings("deprecation")
+	void testRequestCustomizerSettersReplacePreviousCustomizers() {
+		var replacedSync = mock(McpSyncHttpClientRequestCustomizer.class);
+		var replacedAsync = mock(McpAsyncHttpClientRequestCustomizer.class);
+		var syncCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
+		var asyncCustomizer = mock(McpAsyncHttpClientRequestCustomizer.class);
+		when(asyncCustomizer.customize(any(), any(), any(), any(), any()))
+			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
+
+		var syncTransport = HttpClientSseClientTransport.builder(host)
+			.addHttpRequestCustomizer(replacedSync)
+			.addAsyncHttpRequestCustomizer(replacedAsync)
+			.httpRequestCustomizer(syncCustomizer)
+			.build();
+		var asyncTransport = HttpClientSseClientTransport.builder(host)
+			.addHttpRequestCustomizer(replacedSync)
+			.addAsyncHttpRequestCustomizer(replacedAsync)
+			.asyncHttpRequestCustomizer(asyncCustomizer)
+			.build();
+
+		StepVerifier.create(syncTransport.connect(Function.identity())).verifyComplete();
+		StepVerifier.create(asyncTransport.connect(Function.identity())).verifyComplete();
+
+		verify(syncCustomizer).customize(any(), eq("GET"), any(), isNull(), any());
+		verify(asyncCustomizer).customize(any(), eq("GET"), any(), isNull(), any());
+		verifyNoInteractions(replacedSync, replacedAsync);
+
+		syncTransport.closeGracefully().block();
+		asyncTransport.closeGracefully().block();
+	}
+
+	@Test
+	void testNullRequestCustomizerIsRejected() {
+		var builder = HttpClientSseClientTransport.builder(host);
+
+		assertThatIllegalArgumentException().isThrownBy(() -> builder.addHttpRequestCustomizer(null));
+		assertThatIllegalArgumentException().isThrownBy(() -> builder.addAsyncHttpRequestCustomizer(null));
+
+		builder.asyncHttpRequestCustomizers(customizers -> customizers.add(null));
+		assertThatIllegalArgumentException().isThrownBy(builder::build)
+			.withMessage("httpRequestCustomizers must not contain null elements");
 	}
 
 	@Test
