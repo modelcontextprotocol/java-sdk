@@ -6,13 +6,16 @@ package io.modelcontextprotocol.modern.server.feature;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpException;
+import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.ReadResourceOutcome;
+import io.modelcontextprotocol.modern.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
@@ -65,6 +68,23 @@ class ResourcesFeatureTests {
 
 		assertThat(response.error().code()).isEqualTo(ErrorCodes.INVALID_PARAMS);
 		assertThat(response.error().data()).isEqualTo(Map.of("uri", "test://missing"));
+	}
+
+	@Test
+	void missingRequiredCapabilityIsRejectedWithoutReading() {
+		AtomicBoolean called = new AtomicBoolean();
+		McpServer server = server(
+				finding(Mono.just(McpAsyncResource.of(ClientCapabilities.builder().roots().build(), (ctx, request) -> {
+					called.set(true);
+					return Mono.just(McpAsyncResponse.result(ReadResourceResult.builder(List.of()).build()));
+				}))));
+		JSONRPCRequest request = new JSONRPCRequest(McpSchema.METHOD_RESOURCES_READ, 1,
+				Map.of("_meta", meta(), "uri", "test://roots"));
+
+		JSONRPCResponse response = respond(server, request).block();
+
+		assertThat(response.error().code()).isEqualTo(ErrorCodes.MISSING_REQUIRED_CLIENT_CAPABILITY);
+		assertThat(called).isFalse();
 	}
 
 	@Test

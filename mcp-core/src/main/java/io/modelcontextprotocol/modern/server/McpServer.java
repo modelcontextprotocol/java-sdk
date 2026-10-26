@@ -27,6 +27,7 @@ import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.CacheableResult;
 import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
+import io.modelcontextprotocol.modern.McpSchema.ElicitUrlRequest;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.Implementation;
 import io.modelcontextprotocol.modern.McpSchema.InputRequired;
@@ -238,6 +239,17 @@ public final class McpServer implements McpRequestManager {
 			return bug(ctx, "Method does not support input-required results");
 		}
 		Map<String, Object> resultMap = new LinkedHashMap<>(this.jsonMapper.convertValue(result, MAP_TYPE_REF));
+		if (result instanceof InputRequired) {
+			// Checked on the serialized form, so a request's elicitation mode is read the
+			// same way the client will read it.
+			String undeclared = undeclaredInputRequest(ctx.clientCapabilities(), resultMap.get("inputRequests"));
+			if (undeclared != null) {
+				return bug(ctx,
+						"Input request '" + undeclared
+								+ "' needs a client capability the request did not declare; require the capability"
+								+ " up front or only request input the client declared");
+			}
+		}
 		Map<String, Object> resultMeta = new LinkedHashMap<>();
 		if (resultMap.get("_meta") instanceof Map<?, ?> existingMeta) {
 			existingMeta.forEach((k, v) -> resultMeta.put(String.valueOf(k), v));
@@ -265,6 +277,31 @@ public final class McpServer implements McpRequestManager {
 		// server-side.
 		logger.warn("Unhandled exception while handling request {}", id, throwable);
 		return JSONRPCResponse.error(id, new JSONRPCError(ErrorCodes.INTERNAL_ERROR, "Internal error"));
+	}
+
+	// The key of the first input request the client cannot answer, or null if it can
+	// answer all of them. Methods outside the spec's three are not checked.
+	private static String undeclaredInputRequest(ClientCapabilities declared, Object inputRequests) {
+		if (!(inputRequests instanceof Map<?, ?> requests)) {
+			return null;
+		}
+		for (Map.Entry<?, ?> entry : requests.entrySet()) {
+			if (!(entry.getValue() instanceof Map<?, ?> request)) {
+				continue;
+			}
+			boolean supported = switch (String.valueOf(request.get("method"))) {
+				case McpSchema.METHOD_ELICITATION_CREATE -> request.get("params") instanceof Map<?, ?> params
+						&& ElicitUrlRequest.MODE.equals(params.get("mode")) ? declared.supportsElicitationUrl()
+								: declared.supportsElicitationForm();
+				case McpSchema.METHOD_SAMPLING_CREATE_MESSAGE -> declared.supportsSampling();
+				case McpSchema.METHOD_ROOTS_LIST -> declared.supportsRoots();
+				default -> true;
+			};
+			if (!supported) {
+				return String.valueOf(entry.getKey());
+			}
+		}
+		return null;
 	}
 
 	private static JSONRPCResponse bug(McpRequestContext ctx, String problem) {

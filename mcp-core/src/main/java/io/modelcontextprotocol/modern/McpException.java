@@ -42,6 +42,13 @@ public class McpException extends RuntimeException {
 		return new McpException(ErrorCodes.INVALID_PARAMS, message, data);
 	}
 
+	/**
+	 * The request cannot be served without {@code required}, which the client did not
+	 * declare. Answered with {@code -32021}. Tools, prompts and resources declare such
+	 * capabilities up front instead (see
+	 * {@link io.modelcontextprotocol.modern.server.feature.McpAsyncTool}); this is for
+	 * extension methods.
+	 */
 	public static McpException missingClientCapability(ClientCapabilities required) {
 		return new McpException(ErrorCodes.MISSING_REQUIRED_CLIENT_CAPABILITY, "Missing required client capability",
 				new MissingRequiredClientCapabilityData(required));

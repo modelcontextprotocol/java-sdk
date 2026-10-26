@@ -93,6 +93,10 @@ public final class PromptsFeature implements McpFeature {
 
 	private Mono<McpAsyncResponse<GetPromptOutcome>> get(McpRequestContext ctx, McpAsyncPrompt prompt,
 			GetPromptRequest request) {
+		McpException missing = RequiredCapabilities.check(prompt.requiredCapabilities(), ctx);
+		if (missing != null) {
+			return Mono.error(missing);
+		}
 		List<PromptArgument> declared = prompt.definition().arguments();
 		if (declared != null) {
 			Map<String, String> arguments = request.arguments() != null ? request.arguments() : Map.of();
@@ -138,7 +142,7 @@ public final class PromptsFeature implements McpFeature {
 	}
 
 	private static McpAsyncPrompt adapt(McpSyncPrompt prompt) {
-		return McpAsyncPrompt.of(prompt.definition(),
+		return McpAsyncPrompt.of(prompt.definition(), prompt.requiredCapabilities(),
 				(ctx, request) -> SyncAdapters.respond(ctx, () -> prompt.handler().get(ctx, request)));
 	}
 

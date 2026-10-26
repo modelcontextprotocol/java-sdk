@@ -24,6 +24,7 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
 import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
+import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
@@ -183,6 +184,107 @@ class ToolsFeatureTests {
 		JSONRPCResponse response = respond(server, CALL_STRUCTURED).block();
 
 		assertThat(greetingText(response)).isEqualTo("{\"n\":1}");
+	}
+
+	private static final ClientCapabilities FORM_ELICITATION = ClientCapabilities.builder()
+		.elicitation(new ClientCapabilities.Elicitation(null, null))
+		.build();
+
+	private static McpAsyncToolRepository requiring(ClientCapabilities required, AtomicBoolean called) {
+		return new McpAsyncToolRepository() {
+			@Override
+			public Mono<ToolsPage> list(McpRequestContext ctx, String cursor) {
+				return Mono.just(ToolsPage.of(List.of(ECHO_TOOL)));
+			}
+
+			@Override
+			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
+				return Mono.just(McpAsyncTool.of(ECHO_TOOL, required, (c, request) -> {
+					called.set(true);
+					return Mono.just(McpAsyncResponse.result(greeting("client")));
+				}));
+			}
+		};
+	}
+
+	private static JSONRPCRequest callEchoDeclaring(Map<String, Object> clientCapabilities) {
+		return new JSONRPCRequest("tools/call", 1,
+				Map.of("_meta", meta(MetaKeys.CLIENT_CAPABILITIES, clientCapabilities), "name", "echo"));
+	}
+
+	@SuppressWarnings("unchecked")
+	private static Map<String, Object> requiredCapabilities(JSONRPCResponse response) {
+		Map<String, Object> data = McpJsonDefaults.getMapper().convertValue(response.error().data(), Map.class);
+		return (Map<String, Object>) data.get("requiredCapabilities");
+	}
+
+	@Test
+	void missingRequiredCapabilityIsRejectedWithoutCallingTheTool() {
+		AtomicBoolean called = new AtomicBoolean();
+		McpServer server = baseBuilder().feature(tools(requiring(FORM_ELICITATION, called))).build();
+
+		JSONRPCResponse response = respond(server, callEchoDeclaring(Map.of())).block();
+
+		assertThat(response.error().code()).isEqualTo(ErrorCodes.MISSING_REQUIRED_CLIENT_CAPABILITY);
+		assertThat(requiredCapabilities(response)).isEqualTo(Map.of("elicitation", Map.of("form", Map.of())));
+		assertThat(called).isFalse();
+	}
+
+	@Test
+	void declaredRequiredCapabilityLetsTheCallThrough() {
+		AtomicBoolean called = new AtomicBoolean();
+		McpServer server = baseBuilder().feature(tools(requiring(FORM_ELICITATION, called))).build();
+
+		JSONRPCResponse response = respond(server, callEchoDeclaring(Map.of("elicitation", Map.of()))).block();
+
+		assertThat(greetingText(response)).isEqualTo("hello client");
+		assertThat(called).isTrue();
+	}
+
+	@Test
+	void onlyTheMissingCapabilitiesAreReported() {
+		ClientCapabilities required = ClientCapabilities.builder()
+			.sampling()
+			.elicitation(new ClientCapabilities.Elicitation(new ClientCapabilities.Elicitation.Form(),
+					new ClientCapabilities.Elicitation.Url()))
+			.extensions(Map.of("io.example/a", Map.of(), "io.example/b", Map.of()))
+			.build();
+		McpServer server = baseBuilder().feature(tools(requiring(required, new AtomicBoolean()))).build();
+
+		JSONRPCResponse response = respond(server, callEchoDeclaring(
+				Map.of("sampling", Map.of(), "elicitation", Map.of(), "extensions", Map.of("io.example/a", Map.of()))))
+			.block();
+
+		assertThat(requiredCapabilities(response))
+			.isEqualTo(Map.of("elicitation", Map.of("url", Map.of()), "extensions", Map.of("io.example/b", Map.of())));
+	}
+
+	@Test
+	void syncToolRequirementIsCheckedBeforeTheStreamStarts() {
+		AtomicBoolean called = new AtomicBoolean();
+		McpSyncToolRepository repo = new McpSyncToolRepository() {
+			@Override
+			public ToolsPage list(McpRequestContext ctx, String cursor) {
+				return ToolsPage.of(List.of(ECHO_TOOL));
+			}
+
+			@Override
+			public McpSyncTool find(McpRequestContext ctx, String name) {
+				return McpSyncTool.of(ECHO_TOOL, ClientCapabilities.builder().sampling().build(),
+						(c, request) -> McpSyncResponse.streaming(notifier -> {
+							called.set(true);
+							return greeting("client");
+						}));
+			}
+		};
+		McpServer server = baseBuilder().feature(tools(repo)).build();
+
+		McpTransportResponse response = server.handle(McpTransportContext.EMPTY, callEchoDeclaring(Map.of())).block();
+
+		assertThat(response).isInstanceOf(McpTransportResponse.Error.class);
+		assertThat(((McpTransportResponse.Error) response).response().error().code())
+			.isEqualTo(ErrorCodes.MISSING_REQUIRED_CLIENT_CAPABILITY);
+		assertThat(called).isFalse();
 	}
 
 	@Test

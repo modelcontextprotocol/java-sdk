@@ -9,6 +9,7 @@ import java.util.Map;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.Implementation;
+import io.modelcontextprotocol.modern.McpSchema.InputRequired;
 import io.modelcontextprotocol.util.Assert;
 
 /**
@@ -76,7 +77,10 @@ public final class McpRequestContext {
 		return this.protocolVersion;
 	}
 
-	/** The client capabilities declared in {@code _meta} for this request. */
+	/**
+	 * The client capabilities declared in {@code _meta} for this request. Input requests
+	 * may only use these; see {@link InputRequired}.
+	 */
 	public ClientCapabilities clientCapabilities() {
 		return this.clientCapabilities;
 	}

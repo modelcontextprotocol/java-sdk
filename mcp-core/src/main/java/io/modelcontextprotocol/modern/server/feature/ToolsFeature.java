@@ -105,6 +105,10 @@ public final class ToolsFeature implements McpFeature {
 
 	private Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, McpAsyncTool tool,
 			CallToolRequest request) {
+		McpException missing = RequiredCapabilities.check(tool.requiredCapabilities(), ctx);
+		if (missing != null) {
+			return Mono.error(missing);
+		}
 		Map<String, Object> arguments = request.arguments() != null ? request.arguments() : Map.of();
 		ValidationResponse input = this.jsonSchemaValidator.validate(tool.definition().inputSchema(), arguments);
 		if (!input.valid()) {
@@ -190,7 +194,7 @@ public final class ToolsFeature implements McpFeature {
 	}
 
 	private static McpAsyncTool adapt(McpSyncTool tool) {
-		return McpAsyncTool.of(tool.definition(),
+		return McpAsyncTool.of(tool.definition(), tool.requiredCapabilities(),
 				(ctx, request) -> SyncAdapters.respond(ctx, () -> tool.handler().call(ctx, request)));
 	}
 
