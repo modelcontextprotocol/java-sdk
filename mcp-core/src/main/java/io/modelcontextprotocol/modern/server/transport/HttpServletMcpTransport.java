@@ -11,7 +11,6 @@ import java.io.PrintWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -29,6 +28,7 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
+import io.modelcontextprotocol.modern.server.McpParamHeaders;
 import io.modelcontextprotocol.modern.server.McpRequestManager;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.McpTransportResponse;
@@ -240,6 +240,13 @@ public class HttpServletMcpTransport extends HttpServlet {
 			return;
 		}
 
+		if (McpSchema.METHOD_TOOLS_CALL.equals(jsonRpcRequest.method())) {
+			// Added after the user's extractor ran, so this entry always wins.
+			var mcpParamHeaders = McpHeaderDecoder.paramHeaders(headerAccessor(request));
+			transportContext = transportContext
+				.putAllMap(Map.of(McpParamHeaders.TRANSPORT_CONTEXT_KEY, mcpParamHeaders));
+		}
+
 		boolean listen = McpSchema.METHOD_SUBSCRIPTIONS_LISTEN.equals(jsonRpcRequest.method());
 		McpTransportResponse transportResponse = (listen ? this.requestManager.handle(transportContext, jsonRpcRequest)
 				: this.requestManager.handleBlocking(transportContext, jsonRpcRequest))
@@ -425,9 +432,9 @@ public class HttpServletMcpTransport extends HttpServlet {
 		if (nameHeader == null) {
 			return "Missing required header: Mcp-Name";
 		}
-		String decoded = decodeMcpNameHeader(nameHeader);
+		String decoded = McpHeaderDecoder.decodeValue(nameHeader);
 		if (decoded == null) {
-			return "Mcp-Name header has a malformed Base64 value";
+			return "Mcp-Name header has a malformed value";
 		}
 		if (!expectedName.equals(decoded)) {
 			return "Mcp-Name header does not match request name/uri";
@@ -455,19 +462,6 @@ public class HttpServletMcpTransport extends HttpServlet {
 				return Collections.list(request.getHeaderNames());
 			}
 		};
-	}
-
-	private static String decodeMcpNameHeader(String value) {
-		if (value.startsWith("=?base64?") && value.endsWith("?=")) {
-			String base64 = value.substring("=?base64?".length(), value.length() - "?=".length());
-			try {
-				return new String(Base64.getDecoder().decode(base64), StandardCharsets.UTF_8);
-			}
-			catch (IllegalArgumentException ex) {
-				return null;
-			}
-		}
-		return value;
 	}
 
 	private static String readBody(HttpServletRequest request, int maxSize) throws IOException, BodyTooLargeException {
