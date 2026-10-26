@@ -17,6 +17,14 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 | 1.1.x  | [1.1.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v1.1.4) (2026-08-19) | 2025-06-18 | Security patches only |
 | 0.18.x | [0.18.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v0.18.4) (2026-08-19) | 2025-06-18 | Security patches only |
 
+## Unreleased (2.2.0)
+
+- `McpTransportContext` gains the default methods `stream()`, `putAll` and
+  `putAllMap` to list and merge contexts. The default `stream()` throws
+  `UnsupportedOperationException`; custom implementations used with the
+  modern server must implement it, as the servlet transport merges the
+  `Mcp-Param-*` headers into the context of `tools/call` requests.
+
 ## 2.0.1 — 2026-08-19
 
 - Bound STDIO and HTTP client/server reads to a configurable maximum size
