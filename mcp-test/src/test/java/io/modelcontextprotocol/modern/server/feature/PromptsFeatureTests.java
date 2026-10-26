@@ -12,8 +12,6 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
-import io.modelcontextprotocol.modern.McpSchema.GetPromptOutcome;
-import io.modelcontextprotocol.modern.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.modern.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.modern.McpSchema.Prompt;
 import io.modelcontextprotocol.modern.McpSchema.PromptArgument;
@@ -44,13 +42,12 @@ class PromptsFeatureTests {
 			}
 
 			@Override
-			public Mono<Prompt> find(McpRequestContext ctx, String name) {
-				return GREETING.name().equals(name) ? Mono.just(GREETING) : Mono.empty();
-			}
-
-			@Override
-			public Mono<McpAsyncResponse<GetPromptOutcome>> get(McpRequestContext ctx, GetPromptRequest request) {
-				return Mono.just(McpAsyncResponse.result(GetPromptResult.builder(List.of()).build()));
+			public Mono<McpAsyncPrompt> find(McpRequestContext ctx, String name) {
+				return GREETING.name().equals(name)
+						? Mono.just(McpAsyncPrompt.of(GREETING,
+								(c, request) -> Mono
+									.just(McpAsyncResponse.result(GetPromptResult.builder(List.of()).build()))))
+						: Mono.empty();
 			}
 		}, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
 		.build();

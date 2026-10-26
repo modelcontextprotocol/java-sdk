@@ -21,11 +21,8 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCMessage;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
-import io.modelcontextprotocol.modern.McpException;
-import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
-import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
@@ -116,13 +113,8 @@ class ToolsFeatureTests {
 			}
 
 			@Override
-			public Mono<Tool> find(McpRequestContext ctx, String name) {
-				return Mono.just(STRUCTURED_TOOL);
-			}
-
-			@Override
-			public Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, CallToolRequest request) {
-				return Mono.just(response);
+			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
+				return Mono.just(McpAsyncTool.of(STRUCTURED_TOOL, (c, request) -> Mono.just(response)));
 			}
 		};
 		return baseBuilder()
@@ -230,14 +222,11 @@ class ToolsFeatureTests {
 			}
 
 			@Override
-			public Tool find(McpRequestContext ctx, String name) {
-				return ECHO_TOOL;
-			}
-
-			@Override
-			public McpSyncResponse<CallToolOutcome> call(McpRequestContext ctx, CallToolRequest request) {
-				handlerThread.set(Thread.currentThread().getName());
-				return McpSyncResponse.result(greeting(principal.apply(ctx)));
+			public McpSyncTool find(McpRequestContext ctx, String name) {
+				return McpSyncTool.of(ECHO_TOOL, (c, request) -> {
+					handlerThread.set(Thread.currentThread().getName());
+					return McpSyncResponse.result(greeting(principal.apply(c)));
+				});
 			}
 		};
 	}
@@ -254,18 +243,13 @@ class ToolsFeatureTests {
 			}
 
 			@Override
-			public Tool find(McpRequestContext ctx, String name) {
-				return ECHO_TOOL;
-			}
-
-			@Override
-			public McpSyncResponse<CallToolOutcome> call(McpRequestContext ctx, CallToolRequest request) {
-				return McpSyncResponse.streaming(notifier -> {
+			public McpSyncTool find(McpRequestContext ctx, String name) {
+				return McpSyncTool.of(ECHO_TOOL, (c, request) -> McpSyncResponse.streaming(notifier -> {
 					handlerThread.set(Thread.currentThread().getName());
 					notifier.progress(1.0, 1.0, "greeting");
 					deliveredWhenProgressReturned.set(delivered.size());
-					return greeting(principal.apply(ctx));
-				});
+					return greeting(principal.apply(c));
+				}));
 			}
 		};
 	}
@@ -335,13 +319,8 @@ class ToolsFeatureTests {
 			}
 
 			@Override
-			public Tool find(McpRequestContext ctx, String name) {
+			public McpSyncTool find(McpRequestContext ctx, String name) {
 				return null;
-			}
-
-			@Override
-			public McpSyncResponse<CallToolOutcome> call(McpRequestContext ctx, CallToolRequest request) {
-				throw McpException.invalidParams("Unknown tool: " + request.name());
 			}
 		};
 		McpServer server = baseBuilder().feature(tools(repo)).build();
