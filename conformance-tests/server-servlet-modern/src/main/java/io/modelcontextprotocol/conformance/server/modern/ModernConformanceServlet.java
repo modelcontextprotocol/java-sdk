@@ -31,8 +31,6 @@ import io.modelcontextprotocol.modern.McpSchema.InputRequiredResult;
 import io.modelcontextprotocol.modern.McpSchema.Prompt;
 import io.modelcontextprotocol.modern.McpSchema.PromptArgument;
 import io.modelcontextprotocol.modern.McpSchema.PromptMessage;
-import io.modelcontextprotocol.modern.McpSchema.ReadResourceOutcome;
-import io.modelcontextprotocol.modern.McpSchema.ReadResourceRequest;
 import io.modelcontextprotocol.modern.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.modern.McpSchema.Resource;
 import io.modelcontextprotocol.modern.McpSchema.Result;
@@ -50,8 +48,11 @@ import io.modelcontextprotocol.modern.server.McpSyncResponse;
 import io.modelcontextprotocol.modern.server.feature.CompletionsFeature;
 import io.modelcontextprotocol.modern.server.feature.McpChangeBroadcaster;
 import io.modelcontextprotocol.modern.server.feature.McpChangeFeed;
+import io.modelcontextprotocol.modern.server.feature.McpSyncPrompt;
 import io.modelcontextprotocol.modern.server.feature.McpSyncPromptRepository;
+import io.modelcontextprotocol.modern.server.feature.McpSyncResource;
 import io.modelcontextprotocol.modern.server.feature.McpSyncResourceRepository;
+import io.modelcontextprotocol.modern.server.feature.McpSyncTool;
 import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.PromptsFeature;
 import io.modelcontextprotocol.modern.server.feature.PromptsPage;
@@ -254,12 +255,9 @@ public class ModernConformanceServlet {
 		return (ctx, request) -> McpSyncResponse.streaming(notifier -> tool.run(ctx, request, notifier));
 	}
 
-	private record ToolEntry(Tool tool, Handler<CallToolRequest, CallToolOutcome> handler) {
-	}
-
 	private static final class ConformanceTools implements McpSyncToolRepository {
 
-		private final Map<String, ToolEntry> tools = new LinkedHashMap<>();
+		private final Map<String, McpSyncTool> tools = new LinkedHashMap<>();
 
 		ConformanceTools(McpChangeBroadcaster changes) {
 			add("test_simple_text", "Returns simple text content for testing",
@@ -465,27 +463,17 @@ public class ModernConformanceServlet {
 		}
 
 		private void add(Tool tool, Handler<CallToolRequest, CallToolOutcome> handler) {
-			this.tools.put(tool.name(), new ToolEntry(tool, handler));
+			this.tools.put(tool.name(), McpSyncTool.of(tool, handler::handle));
 		}
 
 		@Override
 		public ToolsPage list(McpRequestContext ctx, String cursor) {
-			return ToolsPage.of(this.tools.values().stream().map(ToolEntry::tool).toList());
+			return ToolsPage.of(this.tools.values().stream().map(McpSyncTool::definition).toList());
 		}
 
 		@Override
-		public Tool find(McpRequestContext ctx, String name) {
-			ToolEntry entry = this.tools.get(name);
-			return entry != null ? entry.tool() : null;
-		}
-
-		@Override
-		public McpSyncResponse<CallToolOutcome> call(McpRequestContext ctx, CallToolRequest request) {
-			ToolEntry entry = this.tools.get(request.name());
-			if (entry == null) {
-				throw McpException.invalidParams("Unknown tool: " + request.name());
-			}
-			return entry.handler().handle(ctx, request);
+		public McpSyncTool find(McpRequestContext ctx, String name) {
+			return this.tools.get(name);
 		}
 
 		private static void sleep(long millis) {
@@ -530,9 +518,13 @@ public class ModernConformanceServlet {
 		}
 
 		@Override
-		public McpSyncResponse<ReadResourceOutcome> read(McpRequestContext ctx, ReadResourceRequest request) {
-			String uri = request.uri();
-			ReadResourceResult result = switch (uri) {
+		public McpSyncResource find(McpRequestContext ctx, String uri) {
+			ReadResourceResult result = read(uri);
+			return result != null ? McpSyncResource.of((c, request) -> McpSyncResponse.result(result)) : null;
+		}
+
+		private static ReadResourceResult read(String uri) {
+			return switch (uri) {
 				case "test://static-text" -> textResource(uri, "This is the content of the static text resource.");
 				case "test://watched-resource" -> textResource(uri, "This is a watched resource content.");
 				case "test://static-binary" -> ReadResourceResult
@@ -540,10 +532,6 @@ public class ModernConformanceServlet {
 					.build();
 				default -> templateResource(uri);
 			};
-			if (result == null) {
-				throw McpException.invalidParams("Unknown resource: " + uri, Map.of("uri", uri));
-			}
-			return McpSyncResponse.result(result);
 		}
 
 		@Override
@@ -571,12 +559,9 @@ public class ModernConformanceServlet {
 
 	}
 
-	private record PromptEntry(Prompt prompt, Handler<GetPromptRequest, GetPromptOutcome> handler) {
-	}
-
 	private static final class ConformancePrompts implements McpSyncPromptRepository {
 
-		private final Map<String, PromptEntry> prompts = new LinkedHashMap<>();
+		private final Map<String, McpSyncPrompt> prompts = new LinkedHashMap<>();
 
 		ConformancePrompts() {
 			add(Prompt.builder("test_simple_prompt").description("A simple prompt for testing").build(),
@@ -637,7 +622,7 @@ public class ModernConformanceServlet {
 		}
 
 		private void add(Prompt prompt, Handler<GetPromptRequest, GetPromptOutcome> handler) {
-			this.prompts.put(prompt.name(), new PromptEntry(prompt, handler));
+			this.prompts.put(prompt.name(), McpSyncPrompt.of(prompt, handler::handle));
 		}
 
 		private static GetPromptResult messages(PromptMessage... messages) {
@@ -646,22 +631,12 @@ public class ModernConformanceServlet {
 
 		@Override
 		public PromptsPage list(McpRequestContext ctx, String cursor) {
-			return PromptsPage.of(this.prompts.values().stream().map(PromptEntry::prompt).toList());
+			return PromptsPage.of(this.prompts.values().stream().map(McpSyncPrompt::definition).toList());
 		}
 
 		@Override
-		public Prompt find(McpRequestContext ctx, String name) {
-			PromptEntry entry = this.prompts.get(name);
-			return entry != null ? entry.prompt() : null;
-		}
-
-		@Override
-		public McpSyncResponse<GetPromptOutcome> get(McpRequestContext ctx, GetPromptRequest request) {
-			PromptEntry entry = this.prompts.get(request.name());
-			if (entry == null) {
-				throw McpException.invalidParams("Unknown prompt: " + request.name());
-			}
-			return entry.handler().handle(ctx, request);
+		public McpSyncPrompt find(McpRequestContext ctx, String name) {
+			return this.prompts.get(name);
 		}
 
 	}

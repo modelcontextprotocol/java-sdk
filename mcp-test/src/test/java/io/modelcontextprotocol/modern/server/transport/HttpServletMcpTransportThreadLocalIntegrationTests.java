@@ -35,6 +35,7 @@ import io.modelcontextprotocol.modern.server.McpSyncResponse;
 import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
 import io.modelcontextprotocol.modern.server.feature.ToolsPage;
+import io.modelcontextprotocol.modern.server.feature.McpSyncTool;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.util.ToolsUtils;
 import jakarta.servlet.Filter;
@@ -116,16 +117,16 @@ class HttpServletMcpTransportThreadLocalIntegrationTests {
 			}
 
 			@Override
-			public Tool find(McpRequestContext ctx, String name) {
+			public McpSyncTool find(McpRequestContext ctx, String name) {
 				return list(ctx, null).tools()
 					.stream()
 					.filter(tool -> tool.name().equals(name))
 					.findFirst()
+					.map(tool -> McpSyncTool.of(tool, this::call))
 					.orElse(null);
 			}
 
-			@Override
-			public McpSyncResponse<CallToolOutcome> call(McpRequestContext ctx, CallToolRequest request) {
+			private McpSyncResponse<CallToolOutcome> call(McpRequestContext ctx, CallToolRequest request) {
 				return switch (request.name()) {
 					case "whoami" -> McpSyncResponse.result(text(whoami()));
 					case "whoami-streaming" -> McpSyncResponse.streaming(notifier -> {

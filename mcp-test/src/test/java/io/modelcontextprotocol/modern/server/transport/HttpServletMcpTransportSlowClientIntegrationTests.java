@@ -19,14 +19,9 @@ import java.util.concurrent.TimeUnit;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.modern.McpException;
 import io.modelcontextprotocol.modern.McpSchema;
-import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
-import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.modern.McpSchema.Implementation;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
-import io.modelcontextprotocol.modern.McpSchema.Tool;
-import io.modelcontextprotocol.modern.server.McpAsyncResponse;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncToolRepository;
@@ -35,6 +30,7 @@ import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
 import io.modelcontextprotocol.modern.server.feature.ToolsPage;
+import io.modelcontextprotocol.modern.server.feature.McpAsyncTool;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
@@ -76,13 +72,8 @@ class HttpServletMcpTransportSlowClientIntegrationTests {
 				}
 
 				@Override
-				public Mono<Tool> find(McpRequestContext ctx, String name) {
+				public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
 					return Mono.empty();
-				}
-
-				@Override
-				public Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, CallToolRequest request) {
-					return Mono.error(McpException.invalidParams("Unknown tool: " + request.name()));
 				}
 			}))
 			.subscriptions(publisher)

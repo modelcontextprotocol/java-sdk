@@ -14,7 +14,6 @@ import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator.ValidationResponse;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
-import io.modelcontextprotocol.modern.McpException;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
 import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
@@ -23,6 +22,7 @@ import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.ToolsPage;
+import io.modelcontextprotocol.modern.server.feature.McpAsyncTool;
 import io.modelcontextprotocol.util.ToolsUtils;
 import reactor.core.publisher.Mono;
 
@@ -82,13 +82,9 @@ public final class ModernTestFixtures {
 			}
 
 			@Override
-			public Mono<Tool> find(McpRequestContext ctx, String name) {
-				return Mono.just(Tool.builder(name, ToolsUtils.EMPTY_JSON_SCHEMA).build());
-			}
-
-			@Override
-			public Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, CallToolRequest request) {
-				return call.apply(ctx, request);
+			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
+				return Mono
+					.just(McpAsyncTool.of(Tool.builder(name, ToolsUtils.EMPTY_JSON_SCHEMA).build(), call::apply));
 			}
 		};
 	}
@@ -102,13 +98,8 @@ public final class ModernTestFixtures {
 			}
 
 			@Override
-			public Mono<Tool> find(McpRequestContext ctx, String name) {
+			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
 				return Mono.empty();
-			}
-
-			@Override
-			public Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, CallToolRequest request) {
-				return Mono.error(McpException.invalidParams("Unknown tool: " + request.name()));
 			}
 		};
 	}

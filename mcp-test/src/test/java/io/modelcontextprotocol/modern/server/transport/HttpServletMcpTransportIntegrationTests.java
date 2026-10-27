@@ -42,6 +42,7 @@ import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
 import io.modelcontextprotocol.modern.server.feature.ToolsPage;
+import io.modelcontextprotocol.modern.server.feature.McpAsyncTool;
 import io.modelcontextprotocol.server.transport.DefaultServerTransportSecurityValidator;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.util.ToolsUtils;
@@ -87,13 +88,12 @@ class HttpServletMcpTransportIntegrationTests {
 			}
 
 			@Override
-			public Mono<Tool> find(McpRequestContext ctx, String name) {
-				return "does-not-exist".equals(name) ? Mono.empty()
-						: Mono.just(Tool.builder(name, ToolsUtils.EMPTY_JSON_SCHEMA).build());
+			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
+				return "does-not-exist".equals(name) ? Mono.empty() : Mono
+					.just(McpAsyncTool.of(Tool.builder(name, ToolsUtils.EMPTY_JSON_SCHEMA).build(), this::call));
 			}
 
-			@Override
-			public Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, CallToolRequest request) {
+			private Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, CallToolRequest request) {
 				McpAsyncResponse<CallToolOutcome> response = switch (request.name()) {
 					case "echo" -> McpAsyncResponse.result(text("echo:" + request.name()));
 					case "streamer" -> McpAsyncResponse

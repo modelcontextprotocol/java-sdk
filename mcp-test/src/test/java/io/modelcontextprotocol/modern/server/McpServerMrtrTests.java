@@ -26,6 +26,7 @@ import io.modelcontextprotocol.modern.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.TextResourceContents;
+import io.modelcontextprotocol.modern.server.feature.McpAsyncResource;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncResourceRepository;
 import io.modelcontextprotocol.modern.server.feature.ResourcesFeature;
 import io.modelcontextprotocol.modern.server.feature.ResourcesPage;
@@ -179,7 +180,11 @@ class McpServerMrtrTests {
 			}
 
 			@Override
-			public Mono<McpAsyncResponse<McpSchema.ReadResourceOutcome>> read(McpRequestContext ctx,
+			public Mono<McpAsyncResource> find(McpRequestContext ctx, String uri) {
+				return Mono.just(McpAsyncResource.of(this::read));
+			}
+
+			private Mono<McpAsyncResponse<McpSchema.ReadResourceOutcome>> read(McpRequestContext ctx,
 					McpSchema.ReadResourceRequest request) {
 				return Mono.just(McpAsyncResponse.result(ReadResourceResult
 					.builder(List.of(new TextResourceContents(request.uri(), "text/plain", "content", null)))
@@ -215,7 +220,11 @@ class McpServerMrtrTests {
 			}
 
 			@Override
-			public Mono<McpAsyncResponse<McpSchema.ReadResourceOutcome>> read(McpRequestContext ctx,
+			public Mono<McpAsyncResource> find(McpRequestContext ctx, String uri) {
+				return Mono.just(McpAsyncResource.of(this::read));
+			}
+
+			private Mono<McpAsyncResponse<McpSchema.ReadResourceOutcome>> read(McpRequestContext ctx,
 					McpSchema.ReadResourceRequest request) {
 				if (request.requestState() != null) {
 					seenRequestState.set(request.requestState());

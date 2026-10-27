@@ -4,10 +4,12 @@
 
 package io.modelcontextprotocol.modern.server.feature;
 
+import java.util.Map;
 import java.util.Set;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.modern.McpException;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.ListResourceTemplatesResult;
@@ -81,7 +83,10 @@ public final class ResourcesFeature implements McpFeature {
 	public Mono<? extends McpAsyncResponse<? extends Result>> handle(McpRequestContext ctx, Object params) {
 		if (McpSchema.METHOD_RESOURCES_READ.equals(ctx.method())) {
 			return Params.decode(this.jsonMapper, params, ReadResourceRequest.class)
-				.flatMap(request -> this.repository.read(ctx, request));
+				.flatMap(request -> this.repository.find(ctx, request.uri())
+					.switchIfEmpty(Mono.error(() -> McpException.invalidParams("Unknown resource: " + request.uri(),
+							Map.of("uri", request.uri()))))
+					.flatMap(resource -> resource.handler().read(ctx, request)));
 		}
 		Mono<PaginatedRequest> request = Params.decode(this.jsonMapper, params, PaginatedRequest.class);
 		if (McpSchema.METHOD_RESOURCES_LIST.equals(ctx.method())) {
@@ -131,9 +136,8 @@ public final class ResourcesFeature implements McpFeature {
 			}
 
 			@Override
-			public Mono<McpAsyncResponse<ReadResourceOutcome>> read(McpRequestContext ctx,
-					ReadResourceRequest request) {
-				return SyncAdapters.respond(ctx, () -> repository.read(ctx, request));
+			public Mono<McpAsyncResource> find(McpRequestContext ctx, String uri) {
+				return SyncAdapters.call(ctx, () -> repository.find(ctx, uri)).map(ResourcesFeature::adapt);
 			}
 
 			@Override
@@ -141,6 +145,11 @@ public final class ResourcesFeature implements McpFeature {
 				return repository.supportsSubscribe();
 			}
 		};
+	}
+
+	private static McpAsyncResource adapt(McpSyncResource resource) {
+		return McpAsyncResource
+			.of((ctx, request) -> SyncAdapters.respond(ctx, () -> resource.handler().read(ctx, request)));
 	}
 
 }

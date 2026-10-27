@@ -13,13 +13,12 @@ import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
-import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
-import io.modelcontextprotocol.modern.McpSchema.ReadResourceOutcome;
-import io.modelcontextprotocol.modern.McpSchema.ReadResourceRequest;
 import io.modelcontextprotocol.modern.McpSchema.SubscriptionFilter;
 import io.modelcontextprotocol.modern.McpSchema.SubscriptionsAcknowledgedParams;
+import io.modelcontextprotocol.modern.McpSchema;
+import io.modelcontextprotocol.modern.server.feature.McpAsyncResource;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncResourceRepository;
 import io.modelcontextprotocol.modern.server.feature.McpChangeFeed;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
@@ -213,8 +212,7 @@ class SubscriptionsFeatureTests {
 			}
 
 			@Override
-			public Mono<McpAsyncResponse<ReadResourceOutcome>> read(McpRequestContext ctx,
-					ReadResourceRequest request) {
+			public Mono<McpAsyncResource> find(McpRequestContext ctx, String uri) {
 				return Mono.empty();
 			}
 
