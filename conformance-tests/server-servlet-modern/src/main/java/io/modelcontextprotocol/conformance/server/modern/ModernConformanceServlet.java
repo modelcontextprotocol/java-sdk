@@ -11,7 +11,6 @@ import java.util.regex.Pattern;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.modern.McpException;
 import io.modelcontextprotocol.modern.McpSchema.AudioContent;
 import io.modelcontextprotocol.modern.McpSchema.BlobResourceContents;
 import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
@@ -31,8 +30,6 @@ import io.modelcontextprotocol.modern.McpSchema.InputRequiredResult;
 import io.modelcontextprotocol.modern.McpSchema.Prompt;
 import io.modelcontextprotocol.modern.McpSchema.PromptArgument;
 import io.modelcontextprotocol.modern.McpSchema.PromptMessage;
-import io.modelcontextprotocol.modern.McpSchema.ReadResourceOutcome;
-import io.modelcontextprotocol.modern.McpSchema.ReadResourceRequest;
 import io.modelcontextprotocol.modern.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.modern.McpSchema.Resource;
 import io.modelcontextprotocol.modern.McpSchema.Result;
@@ -50,8 +47,11 @@ import io.modelcontextprotocol.modern.server.McpSyncResponse;
 import io.modelcontextprotocol.modern.server.feature.CompletionsFeature;
 import io.modelcontextprotocol.modern.server.feature.McpChangeBroadcaster;
 import io.modelcontextprotocol.modern.server.feature.McpChangeFeed;
+import io.modelcontextprotocol.modern.server.feature.McpSyncPrompt;
 import io.modelcontextprotocol.modern.server.feature.McpSyncPromptRepository;
+import io.modelcontextprotocol.modern.server.feature.McpSyncResource;
 import io.modelcontextprotocol.modern.server.feature.McpSyncResourceRepository;
+import io.modelcontextprotocol.modern.server.feature.McpSyncTool;
 import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.PromptsFeature;
 import io.modelcontextprotocol.modern.server.feature.PromptsPage;
@@ -263,12 +263,18 @@ public class ModernConformanceServlet {
 		return (ctx, request) -> McpSyncResponse.streaming(notifier -> tool.run(ctx, request, notifier));
 	}
 
-	private record ToolEntry(Tool tool, Handler<CallToolRequest, CallToolOutcome> handler) {
-	}
+	private static final ClientCapabilities.Elicitation FORM = new ClientCapabilities.Elicitation(
+			new ClientCapabilities.Elicitation.Form(), null);
+
+	private static final ClientCapabilities ELICITATION = ClientCapabilities.builder().elicitation(FORM).build();
+
+	private static final ClientCapabilities SAMPLING = ClientCapabilities.builder().sampling().build();
+
+	private static final ClientCapabilities ROOTS = ClientCapabilities.builder().roots().build();
 
 	private static final class ConformanceTools implements McpSyncToolRepository {
 
-		private final Map<String, ToolEntry> tools = new LinkedHashMap<>();
+		private final Map<String, McpSyncTool> tools = new LinkedHashMap<>();
 
 		ConformanceTools(McpChangeBroadcaster changes) {
 			add("test_simple_text", "Returns simple text content for testing",
@@ -334,12 +340,8 @@ public class ModernConformanceServlet {
 							"Region: " + (req.arguments() == null ? null : req.arguments().get("region")))));
 
 			// SEP-2575 diagnostic tools
-			add("test_missing_capability", "Test tool requiring sampling", (ctx, req) -> {
-				if (!ctx.clientCapabilities().supportsSampling()) {
-					throw McpException.missingClientCapability(ClientCapabilities.builder().sampling().build());
-				}
-				return McpSyncResponse.result(text("Success"));
-			});
+			add("test_missing_capability", "Test tool requiring sampling", SAMPLING,
+					respond((ctx, req) -> text("Success")));
 			add("test_streaming_elicitation", "Diagnostic tool validating response progress streams",
 					stream((ctx, req, notifier) -> {
 						notifier.progress(50, 100.0, null);
@@ -360,7 +362,7 @@ public class ModernConformanceServlet {
 
 			// SEP-2322 MRTR tools
 			add("test_input_required_result_elicitation", "MRTR: returns InputRequiredResult with elicitation request",
-					respond((ctx, req) -> {
+					ELICITATION, respond((ctx, req) -> {
 						Map<String, Object> content = acceptedContent(req.inputResponses(), "user_name");
 						if (content == null || !(content.get("name") instanceof String name)) {
 							return InputRequiredResult.builder()
@@ -370,7 +372,7 @@ public class ModernConformanceServlet {
 						return text("Hello, " + name + "!");
 					}));
 			add("test_input_required_result_sampling", "MRTR: returns InputRequiredResult with sampling request",
-					respond((ctx, req) -> {
+					SAMPLING, respond((ctx, req) -> {
 						Map<String, Object> response = responseObject(req.inputResponses(), "capital_question");
 						if (response == null) {
 							return InputRequiredResult.builder()
@@ -382,7 +384,7 @@ public class ModernConformanceServlet {
 						return text("Sampling result: " + answer);
 					}));
 			add("test_input_required_result_list_roots", "MRTR: returns InputRequiredResult with roots/list request",
-					respond((ctx, req) -> {
+					ROOTS, respond((ctx, req) -> {
 						Map<String, Object> response = responseObject(req.inputResponses(), "client_roots");
 						if (response == null || !(response.get("roots") instanceof List<?> roots)) {
 							return InputRequiredResult.builder().listRoots("client_roots").build();
@@ -390,7 +392,7 @@ public class ModernConformanceServlet {
 						return text("Found " + roots.size() + " root(s): " + roots);
 					}));
 			add("test_input_required_result_request_state", "MRTR: returns InputRequiredResult with requestState",
-					respond((ctx, req) -> {
+					ELICITATION, respond((ctx, req) -> {
 						Map<String, Object> content = acceptedContent(req.inputResponses(), "confirm");
 						if ("request-state".equals(req.requestState()) && content != null
 								&& Boolean.TRUE.equals(content.get("ok"))) {
@@ -402,7 +404,8 @@ public class ModernConformanceServlet {
 							.build();
 					}));
 			add("test_input_required_result_multiple_inputs",
-					"MRTR: returns InputRequiredResult with multiple input requests", respond((ctx, req) -> {
+					"MRTR: returns InputRequiredResult with multiple input requests",
+					ClientCapabilities.builder().elicitation(FORM).sampling().roots().build(), respond((ctx, req) -> {
 						Map<String, Object> user = acceptedContent(req.inputResponses(), "user_name");
 						Map<String, Object> greeting = responseObject(req.inputResponses(), "greeting");
 						Map<String, Object> roots = responseObject(req.inputResponses(), "client_roots");
@@ -418,7 +421,7 @@ public class ModernConformanceServlet {
 							.requestState("multiple-inputs")
 							.build();
 					}));
-			add("test_input_required_result_multi_round", "MRTR: multi-round InputRequiredResult workflow",
+			add("test_input_required_result_multi_round", "MRTR: multi-round InputRequiredResult workflow", ELICITATION,
 					respond((ctx, req) -> {
 						String state = req.requestState();
 						if (state != null && state.startsWith("round-1")) {
@@ -445,7 +448,7 @@ public class ModernConformanceServlet {
 			// Integrity protection comes from the server's RequestStateCodec: a tampered
 			// requestState is rejected before this handler runs.
 			add("test_input_required_result_tampered_state", "MRTR: HMAC-signed requestState integrity test",
-					respond((ctx, req) -> {
+					ELICITATION, respond((ctx, req) -> {
 						if ("tamper-test".equals(req.requestState())
 								&& responseObject(req.inputResponses(), "confirm") != null) {
 							return text("integrity-ok: state verified");
@@ -477,31 +480,31 @@ public class ModernConformanceServlet {
 		}
 
 		private void add(String name, String description, Handler<CallToolRequest, CallToolOutcome> handler) {
-			add(Tool.builder(name, EMPTY_JSON_SCHEMA).description(description).build(), handler);
+			add(name, description, ClientCapabilities.NONE, handler);
+		}
+
+		private void add(String name, String description, ClientCapabilities requiredCapabilities,
+				Handler<CallToolRequest, CallToolOutcome> handler) {
+			add(Tool.builder(name, EMPTY_JSON_SCHEMA).description(description).build(), requiredCapabilities, handler);
 		}
 
 		private void add(Tool tool, Handler<CallToolRequest, CallToolOutcome> handler) {
-			this.tools.put(tool.name(), new ToolEntry(tool, handler));
+			add(tool, ClientCapabilities.NONE, handler);
+		}
+
+		private void add(Tool tool, ClientCapabilities requiredCapabilities,
+				Handler<CallToolRequest, CallToolOutcome> handler) {
+			this.tools.put(tool.name(), McpSyncTool.of(tool, requiredCapabilities, handler::handle));
 		}
 
 		@Override
 		public ToolsPage list(McpRequestContext ctx, String cursor) {
-			return ToolsPage.of(this.tools.values().stream().map(ToolEntry::tool).toList());
+			return ToolsPage.of(this.tools.values().stream().map(McpSyncTool::definition).toList());
 		}
 
 		@Override
-		public Tool find(McpRequestContext ctx, String name) {
-			ToolEntry entry = this.tools.get(name);
-			return entry != null ? entry.tool() : null;
-		}
-
-		@Override
-		public McpSyncResponse<CallToolOutcome> call(McpRequestContext ctx, CallToolRequest request) {
-			ToolEntry entry = this.tools.get(request.name());
-			if (entry == null) {
-				throw McpException.invalidParams("Unknown tool: " + request.name());
-			}
-			return entry.handler().handle(ctx, request);
+		public McpSyncTool find(McpRequestContext ctx, String name) {
+			return this.tools.get(name);
 		}
 
 		private static void sleep(long millis) {
@@ -546,9 +549,13 @@ public class ModernConformanceServlet {
 		}
 
 		@Override
-		public McpSyncResponse<ReadResourceOutcome> read(McpRequestContext ctx, ReadResourceRequest request) {
-			String uri = request.uri();
-			ReadResourceResult result = switch (uri) {
+		public McpSyncResource find(McpRequestContext ctx, String uri) {
+			ReadResourceResult result = read(uri);
+			return result != null ? McpSyncResource.of((c, request) -> McpSyncResponse.result(result)) : null;
+		}
+
+		private static ReadResourceResult read(String uri) {
+			return switch (uri) {
 				case "test://static-text" -> textResource(uri, "This is the content of the static text resource.");
 				case "test://watched-resource" -> textResource(uri, "This is a watched resource content.");
 				case "test://static-binary" -> ReadResourceResult
@@ -556,10 +563,6 @@ public class ModernConformanceServlet {
 					.build();
 				default -> templateResource(uri);
 			};
-			if (result == null) {
-				throw McpException.invalidParams("Unknown resource: " + uri, Map.of("uri", uri));
-			}
-			return McpSyncResponse.result(result);
 		}
 
 		@Override
@@ -587,12 +590,9 @@ public class ModernConformanceServlet {
 
 	}
 
-	private record PromptEntry(Prompt prompt, Handler<GetPromptRequest, GetPromptOutcome> handler) {
-	}
-
 	private static final class ConformancePrompts implements McpSyncPromptRepository {
 
-		private final Map<String, PromptEntry> prompts = new LinkedHashMap<>();
+		private final Map<String, McpSyncPrompt> prompts = new LinkedHashMap<>();
 
 		ConformancePrompts() {
 			add(Prompt.builder("test_simple_prompt").description("A simple prompt for testing").build(),
@@ -639,7 +639,7 @@ public class ModernConformanceServlet {
 								.build())));
 			add(Prompt.builder("test_input_required_result_prompt")
 				.description("MRTR: prompt that requires elicitation input")
-				.build(), respond((ctx, req) -> {
+				.build(), ELICITATION, respond((ctx, req) -> {
 					Map<String, Object> content = acceptedContent(req.inputResponses(), "user_context");
 					if (content == null || !(content.get("context") instanceof String context)) {
 						return InputRequiredResult.builder()
@@ -653,7 +653,12 @@ public class ModernConformanceServlet {
 		}
 
 		private void add(Prompt prompt, Handler<GetPromptRequest, GetPromptOutcome> handler) {
-			this.prompts.put(prompt.name(), new PromptEntry(prompt, handler));
+			add(prompt, ClientCapabilities.NONE, handler);
+		}
+
+		private void add(Prompt prompt, ClientCapabilities requiredCapabilities,
+				Handler<GetPromptRequest, GetPromptOutcome> handler) {
+			this.prompts.put(prompt.name(), McpSyncPrompt.of(prompt, requiredCapabilities, handler::handle));
 		}
 
 		private static GetPromptResult messages(PromptMessage... messages) {
@@ -662,22 +667,12 @@ public class ModernConformanceServlet {
 
 		@Override
 		public PromptsPage list(McpRequestContext ctx, String cursor) {
-			return PromptsPage.of(this.prompts.values().stream().map(PromptEntry::prompt).toList());
+			return PromptsPage.of(this.prompts.values().stream().map(McpSyncPrompt::definition).toList());
 		}
 
 		@Override
-		public Prompt find(McpRequestContext ctx, String name) {
-			PromptEntry entry = this.prompts.get(name);
-			return entry != null ? entry.prompt() : null;
-		}
-
-		@Override
-		public McpSyncResponse<GetPromptOutcome> get(McpRequestContext ctx, GetPromptRequest request) {
-			PromptEntry entry = this.prompts.get(request.name());
-			if (entry == null) {
-				throw McpException.invalidParams("Unknown prompt: " + request.name());
-			}
-			return entry.handler().handle(ctx, request);
+		public McpSyncPrompt find(McpRequestContext ctx, String name) {
+			return this.prompts.get(name);
 		}
 
 	}

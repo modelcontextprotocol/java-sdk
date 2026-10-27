@@ -112,16 +112,21 @@ public final class ToolsFeature implements McpFeature {
 				.flatMap(tool -> call(ctx, tool, request)));
 	}
 
-	private Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, Tool tool, CallToolRequest request) {
+	private Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, McpAsyncTool tool,
+			CallToolRequest request) {
+		McpException missing = RequiredCapabilities.check(tool.requiredCapabilities(), ctx);
+		if (missing != null) {
+			return Mono.error(missing);
+		}
 		Map<String, Object> arguments = request.arguments() != null ? request.arguments() : Map.of();
 		TransportParams params = TransportParams.from(ctx.transportContext());
 		if (params.isMirrored()) {
-			String headerMismatch = McpParamHeaders.validate(tool.inputSchema(), arguments, params);
+			String headerMismatch = McpParamHeaders.validate(tool.definition().inputSchema(), arguments, params);
 			if (headerMismatch != null) {
 				return Mono.error(new McpException(ErrorCodes.HEADER_MISMATCH, headerMismatch));
 			}
 		}
-		ValidationResponse input = this.jsonSchemaValidator.validate(tool.inputSchema(), arguments);
+		ValidationResponse input = this.jsonSchemaValidator.validate(tool.definition().inputSchema(), arguments);
 		if (!input.valid()) {
 			// A tool execution error, so the model can fix the call.
 			return Mono.just(McpAsyncResponse.result(CallToolResult.builder()
@@ -129,7 +134,7 @@ public final class ToolsFeature implements McpFeature {
 				.isError(true)
 				.build()));
 		}
-		return this.repository.call(ctx, request).map(response -> checkOutput(tool, response));
+		return tool.handler().call(ctx, request).map(response -> checkOutput(tool.definition(), response));
 	}
 
 	private McpAsyncResponse<CallToolOutcome> checkOutput(Tool tool, McpAsyncResponse<CallToolOutcome> response) {
@@ -198,15 +203,15 @@ public final class ToolsFeature implements McpFeature {
 			}
 
 			@Override
-			public Mono<Tool> find(McpRequestContext ctx, String name) {
-				return SyncAdapters.call(ctx, () -> repository.find(ctx, name));
-			}
-
-			@Override
-			public Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, CallToolRequest request) {
-				return SyncAdapters.respond(ctx, () -> repository.call(ctx, request));
+			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
+				return SyncAdapters.call(ctx, () -> repository.find(ctx, name)).map(ToolsFeature::adapt);
 			}
 		};
+	}
+
+	private static McpAsyncTool adapt(McpSyncTool tool) {
+		return McpAsyncTool.of(tool.definition(), tool.requiredCapabilities(),
+				(ctx, request) -> SyncAdapters.respond(ctx, () -> tool.handler().call(ctx, request)));
 	}
 
 }

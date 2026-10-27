@@ -6,18 +6,21 @@ package io.modelcontextprotocol.modern.server.feature;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
+import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpException;
-import io.modelcontextprotocol.modern.McpSchema;
+import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.ReadResourceOutcome;
-import io.modelcontextprotocol.modern.McpSchema.ReadResourceRequest;
-import io.modelcontextprotocol.modern.server.McpTransportResponse;
-import io.modelcontextprotocol.modern.server.McpRequestContext;
+import io.modelcontextprotocol.modern.McpSchema.ReadResourceResult;
+import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
+import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpServer;
+import io.modelcontextprotocol.modern.server.McpTransportResponse;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -38,6 +41,10 @@ class ResourcesFeatureTests {
 	}
 
 	private static McpAsyncResourceRepository reading(Mono<McpAsyncResponse<ReadResourceOutcome>> response) {
+		return finding(Mono.just(McpAsyncResource.of((ctx, request) -> response)));
+	}
+
+	private static McpAsyncResourceRepository finding(Mono<McpAsyncResource> resource) {
 		return new McpAsyncResourceRepository() {
 			@Override
 			public Mono<ResourcesPage> list(McpRequestContext ctx, String cursor) {
@@ -45,17 +52,45 @@ class ResourcesFeatureTests {
 			}
 
 			@Override
-			public Mono<McpAsyncResponse<ReadResourceOutcome>> read(McpRequestContext ctx,
-					ReadResourceRequest request) {
-				return response;
+			public Mono<McpAsyncResource> find(McpRequestContext ctx, String uri) {
+				return resource;
 			}
 		};
 	}
 
 	@Test
+	void unknownResourceIsInvalidParamsCarryingItsUri() {
+		McpServer server = server(finding(Mono.empty()));
+		JSONRPCRequest request = new JSONRPCRequest(McpSchema.METHOD_RESOURCES_READ, 1,
+				Map.of("_meta", meta(), "uri", "test://missing"));
+
+		JSONRPCResponse response = respond(server, request).block();
+
+		assertThat(response.error().code()).isEqualTo(ErrorCodes.INVALID_PARAMS);
+		assertThat(response.error().data()).isEqualTo(Map.of("uri", "test://missing"));
+	}
+
+	@Test
+	void missingRequiredCapabilityIsRejectedWithoutReading() {
+		AtomicBoolean called = new AtomicBoolean();
+		McpServer server = server(
+				finding(Mono.just(McpAsyncResource.of(ClientCapabilities.builder().roots().build(), (ctx, request) -> {
+					called.set(true);
+					return Mono.just(McpAsyncResponse.result(ReadResourceResult.builder(List.of()).build()));
+				}))));
+		JSONRPCRequest request = new JSONRPCRequest(McpSchema.METHOD_RESOURCES_READ, 1,
+				Map.of("_meta", meta(), "uri", "test://roots"));
+
+		JSONRPCResponse response = respond(server, request).block();
+
+		assertThat(response.error().code()).isEqualTo(ErrorCodes.MISSING_REQUIRED_CLIENT_CAPABILITY);
+		assertThat(called).isFalse();
+	}
+
+	@Test
 	void readFailureIsAnsweredWithItsError() {
 		McpServer server = server(
-				reading(Mono.error(McpException.invalidParams("Unknown resource", Map.of("uri", "test://missing")))));
+				reading(Mono.error(McpException.invalidParams("Bad resource", Map.of("uri", "test://missing")))));
 		JSONRPCRequest request = new JSONRPCRequest(McpSchema.METHOD_RESOURCES_READ, 1,
 				Map.of("_meta", meta(), "uri", "test://missing"));
 

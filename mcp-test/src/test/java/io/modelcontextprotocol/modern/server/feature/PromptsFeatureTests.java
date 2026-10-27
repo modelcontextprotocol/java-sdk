@@ -6,14 +6,14 @@ package io.modelcontextprotocol.modern.server.feature;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
+import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
-import io.modelcontextprotocol.modern.McpSchema.GetPromptOutcome;
-import io.modelcontextprotocol.modern.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.modern.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.modern.McpSchema.Prompt;
 import io.modelcontextprotocol.modern.McpSchema.PromptArgument;
@@ -44,13 +44,12 @@ class PromptsFeatureTests {
 			}
 
 			@Override
-			public Mono<Prompt> find(McpRequestContext ctx, String name) {
-				return GREETING.name().equals(name) ? Mono.just(GREETING) : Mono.empty();
-			}
-
-			@Override
-			public Mono<McpAsyncResponse<GetPromptOutcome>> get(McpRequestContext ctx, GetPromptRequest request) {
-				return Mono.just(McpAsyncResponse.result(GetPromptResult.builder(List.of()).build()));
+			public Mono<McpAsyncPrompt> find(McpRequestContext ctx, String name) {
+				return GREETING.name().equals(name)
+						? Mono.just(McpAsyncPrompt.of(GREETING,
+								(c, request) -> Mono
+									.just(McpAsyncResponse.result(GetPromptResult.builder(List.of()).build()))))
+						: Mono.empty();
 			}
 		}, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
 		.build();
@@ -74,6 +73,36 @@ class PromptsFeatureTests {
 
 		assertThat(response.error().code()).isEqualTo(ErrorCodes.INVALID_PARAMS);
 		assertThat(response.error().message()).isEqualTo("Missing required argument: name");
+	}
+
+	@Test
+	void missingRequiredCapabilityIsRejectedWithoutRendering() {
+		AtomicBoolean called = new AtomicBoolean();
+		Prompt sampled = Prompt.builder("sampled").build();
+		McpServer server = McpServer.builder()
+			.serverInfo(SERVER_INFO)
+			.feature(PromptsFeature.ofAsync(new McpAsyncPromptRepository() {
+				@Override
+				public Mono<PromptsPage> list(McpRequestContext ctx, String cursor) {
+					return Mono.just(PromptsPage.of(List.of(sampled)));
+				}
+
+				@Override
+				public Mono<McpAsyncPrompt> find(McpRequestContext ctx, String name) {
+					return Mono.just(McpAsyncPrompt.of(sampled, ClientCapabilities.builder().sampling().build(),
+							(c, request) -> {
+								called.set(true);
+								return Mono.just(McpAsyncResponse.result(GetPromptResult.builder(List.of()).build()));
+							}));
+				}
+			}, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
+			.build();
+		JSONRPCRequest request = new JSONRPCRequest("prompts/get", 1, Map.of("_meta", meta(), "name", "sampled"));
+
+		JSONRPCResponse response = respond(server, request).block();
+
+		assertThat(response.error().code()).isEqualTo(ErrorCodes.MISSING_REQUIRED_CLIENT_CAPABILITY);
+		assertThat(called).isFalse();
 	}
 
 	@Test

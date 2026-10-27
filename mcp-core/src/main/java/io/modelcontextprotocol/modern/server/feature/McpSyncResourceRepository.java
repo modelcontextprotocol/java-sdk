@@ -6,10 +6,7 @@ package io.modelcontextprotocol.modern.server.feature;
 
 import java.util.List;
 
-import io.modelcontextprotocol.modern.McpSchema.ReadResourceOutcome;
-import io.modelcontextprotocol.modern.McpSchema.ReadResourceRequest;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
-import io.modelcontextprotocol.modern.server.McpSyncResponse;
 
 /**
  * The blocking counterpart of {@link McpAsyncResourceRepository}.
@@ -24,7 +21,8 @@ public interface McpSyncResourceRepository {
 		return ResourceTemplatesPage.of(List.of());
 	}
 
-	McpSyncResponse<ReadResourceOutcome> read(McpRequestContext ctx, ReadResourceRequest request);
+	/** See {@link McpAsyncResourceRepository#find}. */
+	McpSyncResource find(McpRequestContext ctx, String uri);
 
 	/** See {@link McpAsyncResourceRepository#supportsSubscribe()}. */
 	default boolean supportsSubscribe() {

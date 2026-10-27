@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.modern.server.feature;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -16,7 +17,6 @@ import io.modelcontextprotocol.modern.McpSchema.GetPromptOutcome;
 import io.modelcontextprotocol.modern.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.modern.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.modern.McpSchema.PaginatedRequest;
-import io.modelcontextprotocol.modern.McpSchema.Prompt;
 import io.modelcontextprotocol.modern.McpSchema.PromptArgument;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
@@ -91,17 +91,22 @@ public final class PromptsFeature implements McpFeature {
 				.flatMap(prompt -> get(ctx, prompt, request)));
 	}
 
-	private Mono<McpAsyncResponse<GetPromptOutcome>> get(McpRequestContext ctx, Prompt prompt,
+	private Mono<McpAsyncResponse<GetPromptOutcome>> get(McpRequestContext ctx, McpAsyncPrompt prompt,
 			GetPromptRequest request) {
-		if (prompt.arguments() != null) {
+		McpException missing = RequiredCapabilities.check(prompt.requiredCapabilities(), ctx);
+		if (missing != null) {
+			return Mono.error(missing);
+		}
+		List<PromptArgument> declared = prompt.definition().arguments();
+		if (declared != null) {
 			Map<String, String> arguments = request.arguments() != null ? request.arguments() : Map.of();
-			for (PromptArgument argument : prompt.arguments()) {
+			for (PromptArgument argument : declared) {
 				if (Boolean.TRUE.equals(argument.required()) && arguments.get(argument.name()) == null) {
 					return Mono.error(McpException.invalidParams("Missing required argument: " + argument.name()));
 				}
 			}
 		}
-		return this.repository.get(ctx, request);
+		return prompt.handler().get(ctx, request);
 	}
 
 	@Override
@@ -130,15 +135,15 @@ public final class PromptsFeature implements McpFeature {
 			}
 
 			@Override
-			public Mono<Prompt> find(McpRequestContext ctx, String name) {
-				return SyncAdapters.call(ctx, () -> repository.find(ctx, name));
-			}
-
-			@Override
-			public Mono<McpAsyncResponse<GetPromptOutcome>> get(McpRequestContext ctx, GetPromptRequest request) {
-				return SyncAdapters.respond(ctx, () -> repository.get(ctx, request));
+			public Mono<McpAsyncPrompt> find(McpRequestContext ctx, String name) {
+				return SyncAdapters.call(ctx, () -> repository.find(ctx, name)).map(PromptsFeature::adapt);
 			}
 		};
+	}
+
+	private static McpAsyncPrompt adapt(McpSyncPrompt prompt) {
+		return McpAsyncPrompt.of(prompt.definition(), prompt.requiredCapabilities(),
+				(ctx, request) -> SyncAdapters.respond(ctx, () -> prompt.handler().get(ctx, request)));
 	}
 
 }

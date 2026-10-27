@@ -16,8 +16,6 @@ import io.modelcontextprotocol.json.schema.JsonSchemaValidator.ValidationRespons
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
-import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
-import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
@@ -70,14 +68,11 @@ class ToolsFeatureParamHeaderTests {
 			}
 
 			@Override
-			public Mono<Tool> find(McpRequestContext ctx, String name) {
-				return Mono.just(TOOL);
-			}
-
-			@Override
-			public Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, CallToolRequest request) {
-				called.set(true);
-				return Mono.just(McpAsyncResponse.result(CallToolResult.builder().build()));
+			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
+				return Mono.just(McpAsyncTool.of(TOOL, (c, request) -> {
+					called.set(true);
+					return Mono.just(McpAsyncResponse.result(CallToolResult.builder().build()));
+				}));
 			}
 		};
 		this.server = McpServer.builder()
