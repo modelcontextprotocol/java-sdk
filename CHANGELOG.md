@@ -17,6 +17,11 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 | 1.1.x  | [1.1.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v1.1.4) (2026-08-19) | 2025-06-18 | Security patches only |
 | 0.18.x | [0.18.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v0.18.4) (2026-08-19) | 2025-06-18 | Security patches only |
 
+## Unreleased (2.2.0)
+
+- Add `McpTransportContext.putAll(Map)`, returning a context that combines an
+  existing context with additional entries, which take precedence.
+
 ## 2.0.1 — 2026-08-19
 
 - Bound STDIO and HTTP client/server reads to a configurable maximum size
