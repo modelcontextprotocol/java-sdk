@@ -161,6 +161,34 @@ class McpAsyncServerExchangeTests {
 	}
 
 	@Test
+	void testListRootsStopsOnEmptyNextCursor() {
+
+		List<McpSchema.Root> page1Roots = Arrays
+			.asList(McpSchema.Root.builder("file:///home/user/project1").name("Project 1").build());
+		List<McpSchema.Root> page2Roots = Arrays
+			.asList(McpSchema.Root.builder("file:///home/user/project2").name("Project 2").build());
+
+		McpSchema.ListRootsResult page1Result = McpSchema.ListRootsResult.builder(page1Roots).nextCursor("").build();
+		McpSchema.ListRootsResult page2Result = McpSchema.ListRootsResult.builder(page2Roots).build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest()),
+				any(TypeRef.class)))
+			.thenReturn(Mono.just(page1Result));
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest("")),
+				any(TypeRef.class)))
+			.thenReturn(Mono.just(page2Result));
+
+		StepVerifier.create(exchange.listRoots()).assertNext(result -> {
+			assertThat(result.roots()).extracting(McpSchema.Root::uri).containsExactly("file:///home/user/project1");
+			assertThat(result.nextCursor()).isNull();
+		}).verifyComplete();
+
+		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_ROOTS_LIST),
+				any(McpSchema.PaginatedRequest.class), any(TypeRef.class));
+	}
+
+	@Test
 	void testListRootsWithSpecificCursor() {
 
 		List<McpSchema.Root> roots = Arrays
