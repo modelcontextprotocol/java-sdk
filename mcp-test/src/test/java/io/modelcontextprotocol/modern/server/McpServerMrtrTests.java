@@ -13,9 +13,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
-import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
 import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
+import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.ElicitFormRequest;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.InputRequest;
@@ -26,6 +26,7 @@ import io.modelcontextprotocol.modern.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.TextResourceContents;
+import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncResource;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncResourceRepository;
 import io.modelcontextprotocol.modern.server.feature.ResourcesFeature;
@@ -51,6 +52,10 @@ class McpServerMrtrTests {
 		return McpServer.builder().serverInfo(SERVER_INFO);
 	}
 
+	private static final ClientCapabilities FORM_ELICITATION = ClientCapabilities.builder()
+		.elicitation(new ClientCapabilities.Elicitation(new ClientCapabilities.Elicitation.Form(), null))
+		.build();
+
 	private static Map<String, Object> metaWithElicitation() {
 		Map<String, Object> meta = meta();
 		meta.put(MetaKeys.CLIENT_CAPABILITIES, Map.of("elicitation", Map.of("form", Map.of())));
@@ -68,7 +73,7 @@ class McpServerMrtrTests {
 	}
 
 	private static McpServer serverRecordingState(AtomicReference<String> seenRequestState) {
-		return baseBuilder().feature(ToolsFeature.ofAsync(tools((ctx, req) -> {
+		return baseBuilder().feature(ToolsFeature.ofAsync(tools(FORM_ELICITATION, (ctx, req) -> {
 			if (req.requestState() != null) {
 				seenRequestState.set(req.requestState());
 				return Mono.just(McpAsyncResponse.result(CallToolResult.builder().build()));
@@ -137,7 +142,7 @@ class McpServerMrtrTests {
 	@Test
 	@SuppressWarnings("unchecked")
 	void unparseableInputResponseIsInvalidParams() {
-		McpServer server = baseBuilder().feature(ToolsFeature.ofAsync(tools((ctx, req) -> {
+		McpServer server = baseBuilder().feature(ToolsFeature.ofAsync(tools(FORM_ELICITATION, (ctx, req) -> {
 			InputResponses.get(req.inputResponses(), "q1", ElicitAnswer.class, McpJsonDefaults.getMapper());
 			return Mono.just(McpAsyncResponse.result(CallToolResult.builder().build()));
 		}), McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE)).build();
@@ -154,21 +159,88 @@ class McpServerMrtrTests {
 	record ElicitAnswer(String action, Map<String, Object> content) {
 	}
 
-	@Test
-	void inputRequestsAreNotCheckedAgainstClientCapabilities() {
-		// Checking capabilities is the handler's job; the server sends what it is given.
-		McpServer server = baseBuilder()
-			.feature(
-					ToolsFeature.ofAsync(
-							tools((ctx,
-									req) -> Mono.just(McpAsyncResponse
-										.result(InputRequiredResult.builder().elicit("q1", CONFIRM).build()))),
-							McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE))
+	private static McpServer serverRequesting(InputRequiredResult result) {
+		return baseBuilder()
+			.feature(ToolsFeature.ofAsync(tools((ctx, req) -> Mono.just(McpAsyncResponse.result(result))),
+					McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE))
 			.build();
+	}
 
-		JSONRPCResponse response = respond(server, toolCall(1, meta(), null)).block();
+	private static Map<String, Object> metaDeclaring(Map<String, Object> clientCapabilities) {
+		Map<String, Object> meta = meta();
+		meta.put(MetaKeys.CLIENT_CAPABILITIES, clientCapabilities);
+		return meta;
+	}
+
+	@Test
+	void inputRequestForAnUndeclaredCapabilityIsAnInternalError() {
+		McpServer server = serverRequesting(InputRequiredResult.builder()
+			.elicit("q1", CONFIRM)
+			.createMessage("q2", McpSchema.CreateMessageRequest.builder(List.of(), 10).build())
+			.build());
+
+		JSONRPCResponse response = respond(server, toolCall(1, metaDeclaring(Map.of("elicitation", Map.of())), null))
+			.block();
+
+		assertThat(response.error().code()).isEqualTo(ErrorCodes.INTERNAL_ERROR);
+	}
+
+	@Test
+	void urlElicitationNeedsTheUrlMode() {
+		McpServer server = serverRequesting(
+				InputRequiredResult.builder().elicitUrl("q1", "Sign in", "https://example.com/login").build());
+
+		JSONRPCResponse formOnly = respond(server, toolCall(1, metaWithElicitation(), null)).block();
+		JSONRPCResponse withUrl = respond(server,
+				toolCall(2, metaDeclaring(Map.of("elicitation", Map.of("url", Map.of()))), null))
+			.block();
+
+		assertThat(formOnly.error().code()).isEqualTo(ErrorCodes.INTERNAL_ERROR);
+		assertThat(withUrl.error()).isNull();
+	}
+
+	@Test
+	void inputRequestsForDeclaredCapabilitiesAreSent() {
+		McpServer server = serverRequesting(InputRequiredResult.builder()
+			.elicit("q1", CONFIRM)
+			.createMessage("q2", McpSchema.CreateMessageRequest.builder(List.of(), 10).build())
+			.listRoots("q3")
+			.build());
+
+		JSONRPCResponse response = respond(server, toolCall(1,
+				metaDeclaring(Map.of("elicitation", Map.of(), "sampling", Map.of(), "roots", Map.of())), null))
+			.block();
 
 		assertThat(response.error()).isNull();
+	}
+
+	@Test
+	void resourceInputRequestsAreCheckedToo() {
+		McpAsyncResourceRepository repo = new McpAsyncResourceRepository() {
+			@Override
+			public Mono<ResourcesPage> list(McpRequestContext ctx, String cursor) {
+				return Mono.just(ResourcesPage.of(List.of()));
+			}
+
+			@Override
+			public Mono<McpAsyncResource> find(McpRequestContext ctx, String uri) {
+				return Mono.just(McpAsyncResource.of(this::read));
+			}
+
+			private Mono<McpAsyncResponse<McpSchema.ReadResourceOutcome>> read(McpRequestContext ctx,
+					McpSchema.ReadResourceRequest request) {
+				return Mono.just(McpAsyncResponse.result(InputRequiredResult.builder().listRoots("q1").build()));
+			}
+		};
+		McpServer server = baseBuilder()
+			.feature(ResourcesFeature.ofAsync(repo, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
+			.build();
+
+		JSONRPCResponse response = respond(server,
+				new JSONRPCRequest("resources/read", 1, Map.of("_meta", meta(), "uri", "file:///a.txt")))
+			.block();
+
+		assertThat(response.error().code()).isEqualTo(ErrorCodes.INTERNAL_ERROR);
 	}
 
 	@Test

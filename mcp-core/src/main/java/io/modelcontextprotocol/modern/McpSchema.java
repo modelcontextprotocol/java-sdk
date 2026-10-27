@@ -192,6 +192,11 @@ public final class McpSchema {
 	 * A result asking the client for more input before the request can complete. An
 	 * extension method supporting multi round-trip requests returns its own record
 	 * implementing this interface and the method's outcome type.
+	 * <p>
+	 * Each input request needs a client capability: {@code elicitation} in the request's
+	 * mode, {@code sampling} or {@code roots}. Only input whose capability the client
+	 * declared for this request may be requested; a result asking for anything else is
+	 * answered with an internal error.
 	 */
 	public interface InputRequired extends Result {
 
@@ -1410,7 +1415,8 @@ public final class McpSchema {
 	/**
 	 * A result signalling that the server needs more input before it can complete the
 	 * original request. Only {@code tools/call}, {@code resources/read} and
-	 * {@code prompts/get} may return it.
+	 * {@code prompts/get} may return it, and only with the input requests
+	 * {@link InputRequired} allows.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)

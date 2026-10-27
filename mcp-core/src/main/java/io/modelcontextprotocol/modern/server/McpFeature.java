@@ -7,6 +7,7 @@ package io.modelcontextprotocol.modern.server;
 import java.util.Set;
 
 import io.modelcontextprotocol.modern.McpException;
+import io.modelcontextprotocol.modern.McpSchema.InputRequired;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
 import reactor.core.publisher.Mono;
@@ -38,8 +39,8 @@ public interface McpFeature {
 
 	/**
 	 * The methods that support multi round-trip requests: they may answer with an
-	 * {@code InputRequired} result and accept its {@code requestState} on retry. Default:
-	 * none.
+	 * {@link InputRequired} result, within the input requests it allows, and accept its
+	 * {@code requestState} on retry. Default: none.
 	 */
 	default Set<String> inputRequiredMethods() {
 		return Set.of();

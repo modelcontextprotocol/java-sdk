@@ -17,6 +17,7 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
 import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
+import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.Implementation;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
@@ -75,6 +76,15 @@ public final class ModernTestFixtures {
 	 */
 	public static McpAsyncToolRepository tools(
 			BiFunction<McpRequestContext, CallToolRequest, Mono<McpAsyncResponse<CallToolOutcome>>> call) {
+		return tools(ClientCapabilities.NONE, call);
+	}
+
+	/**
+	 * Like {@link #tools(BiFunction)}, with every tool requiring
+	 * {@code requiredCapabilities}.
+	 */
+	public static McpAsyncToolRepository tools(ClientCapabilities requiredCapabilities,
+			BiFunction<McpRequestContext, CallToolRequest, Mono<McpAsyncResponse<CallToolOutcome>>> call) {
 		return new McpAsyncToolRepository() {
 			@Override
 			public Mono<ToolsPage> list(McpRequestContext ctx, String cursor) {
@@ -83,8 +93,8 @@ public final class ModernTestFixtures {
 
 			@Override
 			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
-				return Mono
-					.just(McpAsyncTool.of(Tool.builder(name, ToolsUtils.EMPTY_JSON_SCHEMA).build(), call::apply));
+				return Mono.just(McpAsyncTool.of(Tool.builder(name, ToolsUtils.EMPTY_JSON_SCHEMA).build(),
+						requiredCapabilities, call::apply));
 			}
 		};
 	}

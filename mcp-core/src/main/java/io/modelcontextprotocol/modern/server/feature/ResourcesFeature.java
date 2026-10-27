@@ -86,7 +86,7 @@ public final class ResourcesFeature implements McpFeature {
 				.flatMap(request -> this.repository.find(ctx, request.uri())
 					.switchIfEmpty(Mono.error(() -> McpException.invalidParams("Unknown resource: " + request.uri(),
 							Map.of("uri", request.uri()))))
-					.flatMap(resource -> resource.handler().read(ctx, request)));
+					.flatMap(resource -> read(ctx, resource, request)));
 		}
 		Mono<PaginatedRequest> request = Params.decode(this.jsonMapper, params, PaginatedRequest.class);
 		if (McpSchema.METHOD_RESOURCES_LIST.equals(ctx.method())) {
@@ -95,6 +95,15 @@ public final class ResourcesFeature implements McpFeature {
 		}
 		return request.flatMap(r -> this.repository.listTemplates(ctx, r.cursor()))
 			.map(page -> McpAsyncResponse.result(toListTemplatesResult(page)));
+	}
+
+	private Mono<McpAsyncResponse<ReadResourceOutcome>> read(McpRequestContext ctx, McpAsyncResource resource,
+			ReadResourceRequest request) {
+		McpException missing = RequiredCapabilities.check(resource.requiredCapabilities(), ctx);
+		if (missing != null) {
+			return Mono.error(missing);
+		}
+		return resource.handler().read(ctx, request);
 	}
 
 	@Override
@@ -148,8 +157,8 @@ public final class ResourcesFeature implements McpFeature {
 	}
 
 	private static McpAsyncResource adapt(McpSyncResource resource) {
-		return McpAsyncResource
-			.of((ctx, request) -> SyncAdapters.respond(ctx, () -> resource.handler().read(ctx, request)));
+		return McpAsyncResource.of(resource.requiredCapabilities(),
+				(ctx, request) -> SyncAdapters.respond(ctx, () -> resource.handler().read(ctx, request)));
 	}
 
 }
