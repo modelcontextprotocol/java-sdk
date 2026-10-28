@@ -261,9 +261,9 @@ public class McpClientSession implements McpSession {
 	 */
 	@Override
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeRef<T> typeRef) {
-		String requestId = this.generateRequestId();
-
 		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(pendingResponseSink -> {
+			// A new id per subscription, so that a retried request does not reuse one
+			String requestId = this.generateRequestId();
 			logger.debug("Sending message for method {}", method);
 			this.pendingResponses.put(requestId, pendingResponseSink);
 			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(method, requestId, requestParams);
