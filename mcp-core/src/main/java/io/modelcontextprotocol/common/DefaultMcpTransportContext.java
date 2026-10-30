@@ -19,7 +19,7 @@ class DefaultMcpTransportContext implements McpTransportContext {
 
 	private final Map<String, Object> metadata;
 
-	DefaultMcpTransportContext(Map<String, Object> metadata) {
+	DefaultMcpTransportContext(Map<String, ?> metadata) {
 		Assert.notNull(metadata, "The metadata cannot be null");
 		this.metadata = Map.copyOf(metadata);
 	}
@@ -34,6 +34,9 @@ class DefaultMcpTransportContext implements McpTransportContext {
 		Assert.notNull(map, "The map cannot be null");
 		if (map.isEmpty()) {
 			return this;
+		}
+		if (this.metadata.isEmpty()) {
+			return new DefaultMcpTransportContext(map);
 		}
 		Map<String, Object> merged = new HashMap<>(this.metadata);
 		merged.putAll(map);
