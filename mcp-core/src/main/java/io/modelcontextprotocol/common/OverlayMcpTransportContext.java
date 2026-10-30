@@ -6,7 +6,6 @@ package io.modelcontextprotocol.common;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 
 import io.modelcontextprotocol.util.Assert;
 
@@ -44,20 +43,6 @@ final class OverlayMcpTransportContext implements McpTransportContext {
 		Map<String, Object> merged = new HashMap<>(this.overlay);
 		merged.putAll(map);
 		return new OverlayMcpTransportContext(this.base, merged);
-	}
-
-	@Override
-	public boolean equals(Object o) {
-		if (o == null || getClass() != o.getClass())
-			return false;
-
-		OverlayMcpTransportContext that = (OverlayMcpTransportContext) o;
-		return this.base.equals(that.base) && this.overlay.equals(that.overlay);
-	}
-
-	@Override
-	public int hashCode() {
-		return Objects.hash(this.base, this.overlay);
 	}
 
 }

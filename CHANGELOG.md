@@ -21,6 +21,10 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 - Add `McpTransportContext.putAll(Map)`, returning a context that combines an
   existing context with additional entries, which take precedence.
+- `McpTransportContext` no longer compares contexts by their contents in
+  `equals` and `hashCode`. With `putAll`, transports can layer their own entries
+  over the context a user's extractor returns, and comparing contexts was never
+  a goal; read entries via `get(String)` instead.
 
 ## 2.0.1 — 2026-08-19
 

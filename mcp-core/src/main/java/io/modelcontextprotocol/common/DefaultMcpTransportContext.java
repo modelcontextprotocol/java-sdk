@@ -40,18 +40,4 @@ class DefaultMcpTransportContext implements McpTransportContext {
 		return new DefaultMcpTransportContext(merged);
 	}
 
-	@Override
-	public boolean equals(Object o) {
-		if (o == null || getClass() != o.getClass())
-			return false;
-
-		DefaultMcpTransportContext that = (DefaultMcpTransportContext) o;
-		return this.metadata.equals(that.metadata);
-	}
-
-	@Override
-	public int hashCode() {
-		return this.metadata.hashCode();
-	}
-
 }

@@ -1416,7 +1416,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		var clientBuilder = clientBuilders.get(clientType);
 
 		var transportContextIsNull = new AtomicBoolean(false);
-		var transportContextIsEmpty = new AtomicBoolean(false);
+		var importantValue = new AtomicReference<Object>();
 		var responseBodyIsNullOrBlank = new AtomicBoolean(false);
 
 		var expectedCallResponse = McpSchema.CallToolResult.builder()
@@ -1428,7 +1428,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 				McpTransportContext transportContext = exchange.transportContext();
 				transportContextIsNull.set(transportContext == null);
-				transportContextIsEmpty.set(transportContext.equals(McpTransportContext.EMPTY));
+				importantValue.set(transportContext.get("important"));
 				String ctxValue = (String) transportContext.get("important");
 
 				try {
@@ -1460,7 +1460,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build());
 
 			assertThat(transportContextIsNull.get()).isFalse();
-			assertThat(transportContextIsEmpty.get()).isFalse();
+			assertThat(importantValue.get()).isEqualTo("value");
 			assertThat(responseBodyIsNullOrBlank.get()).isFalse();
 			assertThat(response).isNotNull().isEqualTo(expectedCallResponse);
 		}
