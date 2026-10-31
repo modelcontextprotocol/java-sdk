@@ -831,7 +831,11 @@ public class McpStatelessAsyncServer {
 					}
 				}
 				else {
-					var templateSpec = this.findResourceTemplateSpecification(resourceReference.uri()).orElse(null);
+					// The reference names a template: matching it as a URI could pick
+					// another template whose pattern also matches it
+					var templateSpec = Optional.ofNullable(this.resourceTemplates.get(resourceReference.uri()))
+						.or(() -> this.findResourceTemplateSpecification(resourceReference.uri()))
+						.orElse(null);
 					if (templateSpec != null) {
 
 						if (!uriTemplateManagerFactory.create(templateSpec.resourceTemplate().uriTemplate())
