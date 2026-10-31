@@ -3,6 +3,57 @@
 Thank you for your interest in contributing to the Model Context Protocol Java SDK!
 This document outlines how to contribute to this project.
 
+## Before you start
+
+> [!IMPORTANT]
+> **The most useful contribution is a good issue.** Pull requests from outside
+> the maintainer team are closed automatically unless they link an issue
+> assigned to their author.
+
+### Why issues rather than pull requests
+
+Coding agents can now turn any open issue into a plausible-looking pull request within
+hours, and generate speculative bug reports from a scan of the code, so we
+receive far more issues and PRs than we can read carefully. Reviewing a PR
+properly still takes as long as it always did. When an issue is well described,
+it is usually quicker for a maintainer to write a fix that fits the codebase
+than to review and reshape someone else's.
+
+What we can't produce ourselves is your context: what you were doing, what you
+expected, a minimal reproduction, and the system where it broke.
+That is what a good issue carries, so that is what we ask for first.
+
+### How pull requests get in
+
+A PR from someone outside the maintainer team stays open when both of these
+hold:
+
+1. Its description links an open issue in this repository with `Fixes #123`
+   (or `Closes`, `Resolves`), or with `Updates #123` for a partial fix.
+2. A maintainer has assigned that issue to you, or the issue carries the [`help
+   wanted`](https://github.com/modelcontextprotocol/java-sdk/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22help%20wanted%22)
+   label, which means we'd welcome a PR for it from anyone.
+
+Otherwise a bot labels the PR `missing-issue-link`, leaves a comment explaining
+this, and closes it. Drafts are treated the same way. If that happens to yours,
+there's no need to open a new one: it reopens automatically as soon as a
+maintainer assigns you the issue, or when you edit the description to link one
+that qualifies. While it's closed, push updates as new commits rather than
+force-pushing, since GitHub can't reopen a PR whose branch has been rewritten.
+This applies to small fixes like typos too; for those, an issue pointing at the
+problem is all we need.
+
+Whether to assign an issue, and to whom, is a maintainer call, and it depends
+on our capacity at the time as much as on the change itself. Comments that only
+ask to be assigned don't factor into it, so please skip those (and don't have
+an agent post them). What does help is engaging with the issue itself:
+confirming the reproduction, asking about the intended behavior, or briefly
+describing the approach you'd take. If you reported the issue and would like to
+fix it yourself, say so in the issue.
+
+Maintainers can override the check by reopening the PR, by removing its
+`missing-issue-link` label, or by adding `bypass-issue-check`.
+
 ## Prerequisites
 
 The following software is required to work on the codebase:
@@ -76,18 +127,17 @@ Please don't submit pull requests:
 
 When submitting changes:
 
-1. For non-trivial changes, please clarify with the maintainers in an issue whether 
-   you can contribute the change and the desired scope of the change.
-2. For trivial changes (for example a couple of lines or documentation changes) there 
-   is no need to open an issue first.
-3. Maintainers will triage issues and act on them. There is no such guarantee on pull requests.
-   PRs opened without being discussed in an issue MAY be ignored, and maintainers reserve the right
-   to close these PRs without justification.
-4. Push your changes to your fork.
-5. Submit a pull request to the main repository.
-6. Follow the pull request template.
-7. Wait for review.
-8. For any follow-up work, please add new commits instead of force-pushing. This will
+1. Every PR from outside the maintainer team must link an issue that a maintainer
+   has assigned to you, or one labeled `help wanted`, as described in [How pull
+   requests get in](#how-pull-requests-get-in). For changes that don't relate to an
+   existing issue, file an issue first, clarify the desired scope of the change with
+   the maintainers, and wait for it to be assigned before opening a PR.
+2. Maintainers will triage issues and act on them. There is no such guarantee on pull requests.
+3. Push your changes to your fork.
+4. Submit a pull request to the main repository.
+5. Follow the pull request template.
+6. Wait for review.
+7. For any follow-up work, please add new commits instead of force-pushing. This will
    allow the reviewer to focus on incremental changes instead of having to restart the 
    review process.
 
