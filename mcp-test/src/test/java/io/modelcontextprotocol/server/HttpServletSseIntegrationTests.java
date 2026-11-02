@@ -35,9 +35,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -62,40 +60,15 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 
 	protected static final int MAX_REQUEST_SIZE = 2048;
 
-	// Tomcat is started once for the whole class; each test swaps in its own transport
-	private static final TomcatTestUtil.DelegatingServlet MCP_SERVLET = new TomcatTestUtil.DelegatingServlet();
-
-	private static Tomcat tomcat;
-
 	private HttpServletSseServerTransportProvider mcpServerTransportProvider;
+
+	// One Tomcat per test, unlike other Servlet tests: the SSE transport may keep writing
+	// to a stream after its client has disconnected, and with a shared Tomcat these
+	// writes can land in a connection used by a later test.
+	private Tomcat tomcat;
 
 	static Stream<Arguments> clientsForTesting() {
 		return Stream.of(Arguments.of("httpclient"));
-	}
-
-	@BeforeAll
-	public static void beforeAll() {
-		tomcat = TomcatTestUtil.createTomcatServer("", PORT, MCP_SERVLET);
-		try {
-			tomcat.start();
-			assertThat(tomcat.getServer().getState()).isEqualTo(LifecycleState.STARTED);
-		}
-		catch (Exception e) {
-			throw new RuntimeException("Failed to start Tomcat", e);
-		}
-	}
-
-	@AfterAll
-	public static void afterAll() {
-		if (tomcat != null) {
-			try {
-				tomcat.stop();
-				tomcat.destroy();
-			}
-			catch (LifecycleException e) {
-				throw new RuntimeException("Failed to stop Tomcat", e);
-			}
-		}
 	}
 
 	@BeforeEach
@@ -107,7 +80,15 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 			.sseEndpoint(CUSTOM_SSE_ENDPOINT)
 			.maxRequestSize(MAX_REQUEST_SIZE)
 			.build();
-		MCP_SERVLET.setDelegate(mcpServerTransportProvider);
+
+		tomcat = TomcatTestUtil.createTomcatServer("", PORT, mcpServerTransportProvider);
+		try {
+			tomcat.start();
+			assertThat(tomcat.getServer().getState()).isEqualTo(LifecycleState.STARTED);
+		}
+		catch (Exception e) {
+			throw new RuntimeException("Failed to start Tomcat", e);
+		}
 
 		clientBuilders
 			.put("httpclient",
@@ -130,6 +111,15 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 	public void after() {
 		if (mcpServerTransportProvider != null) {
 			mcpServerTransportProvider.closeGracefully().block();
+		}
+		if (tomcat != null) {
+			try {
+				tomcat.stop();
+				tomcat.destroy();
+			}
+			catch (LifecycleException e) {
+				throw new RuntimeException("Failed to stop Tomcat", e);
+			}
 		}
 	}
 

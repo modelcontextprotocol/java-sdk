@@ -66,14 +66,16 @@ public class TomcatTestUtil {
 
 		var connector = tomcat.getConnector();
 		connector.setAsyncTimeout(3000);
+		// Bound to loopback: with the wildcard address, stopping Tomcat waits a full
+		// second for its acceptor to unlock on macOS
+		connector.setProperty("address", "127.0.0.1");
 
 		return tomcat;
 	}
 
 	/**
-	 * A servlet forwarding all requests to a delegate that can be swapped between tests.
-	 * Register one with {@link #createTomcatServer} to start Tomcat once per test class
-	 * while still handing each test a freshly built transport.
+	 * A servlet forwarding all requests to a delegate that can be swapped during a test,
+	 * and tracking whether a GET SSE stream has been established.
 	 */
 	public static class DelegatingServlet implements Servlet {
 
