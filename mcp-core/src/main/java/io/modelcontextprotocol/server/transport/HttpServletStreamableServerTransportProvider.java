@@ -621,7 +621,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 				catch (Exception e) {
 					logger.error("Failed to handle request stream: {}", e.getMessage());
-					asyncContext.complete();
+					// The transport may already have completed the async context, when
+					// the failure comes from a message it could not send
+					sessionTransport.close();
 				}
 			}
 			else {
