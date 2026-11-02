@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.modern.server.transport;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -21,6 +22,7 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
@@ -36,6 +38,7 @@ import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
+import io.modelcontextprotocol.modern.server.McpParamHeaders;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
@@ -57,6 +60,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class HttpServletMcpTransportIntegrationTests {
@@ -70,6 +74,21 @@ class HttpServletMcpTransportIntegrationTests {
 	private static final McpJsonMapper JSON_MAPPER = McpJsonDefaults.getMapper();
 
 	private static final Tool ECHO_TOOL = Tool.builder("echo", ToolsUtils.EMPTY_JSON_SCHEMA).build();
+
+	private static final Tool REGION_TOOL = Tool.builder("region", JSON_MAPPER, """
+			{
+			  "type": "object",
+			  "properties": {
+			    "region": { "type": "string", "x-mcp-header": "Region" }
+			  }
+			}
+			""").build();
+
+	/**
+	 * A request carrying this header makes the context extractor claim headers aren't
+	 * mirrored.
+	 */
+	private static final String FORGE_NOT_MIRRORED = "X-Forge-Not-Mirrored";
 
 	private static final int QUOTA_EXCEEDED = -32000;
 
@@ -89,6 +108,9 @@ class HttpServletMcpTransportIntegrationTests {
 
 			@Override
 			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
+				if ("region".equals(name)) {
+					return Mono.just(McpAsyncTool.of(REGION_TOOL, this::call));
+				}
 				return "does-not-exist".equals(name) ? Mono.empty() : Mono
 					.just(McpAsyncTool.of(Tool.builder(name, ToolsUtils.EMPTY_JSON_SCHEMA).build(), this::call));
 			}
@@ -96,6 +118,7 @@ class HttpServletMcpTransportIntegrationTests {
 			private Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, CallToolRequest request) {
 				McpAsyncResponse<CallToolOutcome> response = switch (request.name()) {
 					case "echo" -> McpAsyncResponse.result(text("echo:" + request.name()));
+					case "region" -> McpAsyncResponse.result(text("region:" + request.arguments().get("region")));
 					case "streamer" -> McpAsyncResponse
 						.streaming(notifier -> notifier.progress(1.0, 1.0, "done").thenReturn(text("streamed")));
 					case "slow-streamer" -> McpAsyncResponse
@@ -127,6 +150,10 @@ class HttpServletMcpTransportIntegrationTests {
 			.endpoint(ENDPOINT)
 			.keepAliveInterval(Duration.ofMillis(100))
 			.errorStatus(QUOTA_EXCEEDED, 429)
+			.contextExtractor(request -> request.getHeader(FORGE_NOT_MIRRORED) != null
+					? McpTransportContext
+						.create(Map.of(McpParamHeaders.TRANSPORT_CONTEXT_KEY, McpParamHeaders.NOT_MIRRORED))
+					: McpTransportContext.EMPTY)
 			.httpHeaderValidator(DefaultServerTransportSecurityValidator.builder()
 				.allowedOrigin("http://localhost:*")
 				.allowedHost("localhost:*")
@@ -416,6 +443,29 @@ class HttpServletMcpTransportIntegrationTests {
 	}
 
 	@Test
+	void base64McpNameIsAccepted() throws Exception {
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("name", "echo");
+		HttpRequest request = post("tools/call", params).header("Mcp-Name", "=?base64?ZWNobw==?=").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+	}
+
+	@Test
+	void unpaddedBase64McpNameIsRejected() throws Exception {
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("name", "echo");
+		HttpRequest request = post("tools/call", params).header("Mcp-Name", "=?base64?ZWNobw?=").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThat(errorCode(response)).isEqualTo(ErrorCodes.HEADER_MISMATCH);
+	}
+
+	@Test
 	void mcpNameIsCheckedAgainstTheUriOfAResourceRead() throws Exception {
 		Map<String, Object> params = new HashMap<>();
 		params.put("_meta", meta());
@@ -438,6 +488,120 @@ class HttpServletMcpTransportIntegrationTests {
 
 		assertThat(response.statusCode()).isEqualTo(400);
 		assertThat(errorCode(response)).isEqualTo(ErrorCodes.HEADER_MISMATCH);
+	}
+
+	private static HttpRequest.Builder callRegion(String region) throws IOException {
+		return post("tools/call", Map.of("_meta", meta(), "name", "region", "arguments", Map.of("region", region)))
+			.header("Mcp-Name", "region");
+	}
+
+	@Test
+	void paramHeaderMismatchIsRejectedAsJson() throws Exception {
+		HttpRequest request = callRegion("eu-west1").header("Mcp-Param-Region", "us-east1").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThat(response.headers().firstValue("Content-Type"))
+			.hasValueSatisfying(v -> assertThat(v).contains("application/json"));
+		assertThatJson(response.body()).inPath("$.error.code").isEqualTo(ErrorCodes.HEADER_MISMATCH);
+		assertThatJson(response.body()).inPath("$.error.message")
+			.isEqualTo("Mcp-Param-Region header does not match argument 'region'");
+	}
+
+	@Test
+	void missingParamHeaderIsRejected() throws Exception {
+		HttpRequest request = callRegion("eu-west1").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThatJson(response.body()).inPath("$.error.code").isEqualTo(ErrorCodes.HEADER_MISMATCH);
+		assertThatJson(response.body()).inPath("$.error.message")
+			.isEqualTo("Missing required header: Mcp-Param-Region");
+	}
+
+	@Test
+	void matchingBase64ParamHeaderIsAccepted() throws Exception {
+		HttpRequest request = callRegion("Hello").header("Mcp-Param-Region", "=?base64?SGVsbG8=?=").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThatJson(response.body()).inPath("$.result.content[0].text").isEqualTo("region:Hello");
+	}
+
+	@Test
+	void contextExtractorCannotSwitchOffParamHeaderValidation() throws Exception {
+		HttpRequest request = callRegion("eu-west1").header("Mcp-Param-Region", "us-east1")
+			.header(FORGE_NOT_MIRRORED, "true")
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThatJson(response.body()).inPath("$.error.code").isEqualTo(ErrorCodes.HEADER_MISMATCH);
+	}
+
+	@Test
+	void lowercaseParamHeaderNameIsAccepted() throws Exception {
+		HttpRequest request = callRegion("eu-west1").header("mcp-param-region", "eu-west1").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThatJson(response.body()).inPath("$.result.content[0].text").isEqualTo("region:eu-west1");
+	}
+
+	@Test
+	void whitespaceAroundPlainParamHeaderValueIsTrimmed() throws Exception {
+		HttpRequest request = callRegion("eu-west1").header("Mcp-Param-Region", "  eu-west1\t ").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThatJson(response.body()).inPath("$.result.content[0].text").isEqualTo("region:eu-west1");
+	}
+
+	@Test
+	void duplicatedParamHeaderIsRejected() throws Exception {
+		HttpRequest request = callRegion("eu-west1").header("Mcp-Param-Region", "eu-west1")
+			.header("mcp-param-region", "eu-west1")
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThatJson(response.body()).inPath("$.error.code").isEqualTo(ErrorCodes.HEADER_MISMATCH);
+		assertThatJson(response.body()).inPath("$.error.message").isEqualTo("Mcp-Param-Region header is malformed");
+	}
+
+	@Test
+	void rawNonAsciiBytesInPlainParamHeaderValueAreRejected() throws Exception {
+		// HttpClient replaces non-ASCII header characters with '?', so the raw UTF-8
+		// bytes of "café" are written to a socket instead.
+		Map<String, Object> params = Map.of("_meta", meta(), "name", "region", "arguments", Map.of("region", "café"));
+		byte[] body = JSON_MAPPER
+			.writeValueAsString(Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/call", "params", params))
+			.getBytes(StandardCharsets.UTF_8);
+		ByteArrayOutputStream request = new ByteArrayOutputStream();
+		// HTTP/1.0, so the response is not chunked and ends when the server closes
+		request.write(("POST " + ENDPOINT + " HTTP/1.0\r\n" + "Host: localhost:" + PORT + "\r\n"
+				+ "Content-Type: application/json\r\n" + "Accept: application/json, text/event-stream\r\n"
+				+ "Mcp-Method: tools/call\r\n" + "Mcp-Name: region\r\n" + "MCP-Protocol-Version: "
+				+ McpSchema.LATEST_PROTOCOL_VERSION + "\r\n" + "Content-Length: " + body.length + "\r\n"
+				+ "Mcp-Param-Region: ")
+			.getBytes(StandardCharsets.US_ASCII));
+		request.write("café".getBytes(StandardCharsets.UTF_8));
+		request.write("\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+		request.write(body);
+
+		String response;
+		try (Socket socket = new Socket("localhost", PORT)) {
+			socket.setSoTimeout(5000);
+			socket.getOutputStream().write(request.toByteArray());
+			socket.getOutputStream().flush();
+			response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+		}
+		String statusLine = response.substring(0, response.indexOf("\r\n"));
+		String responseBody = response.substring(response.indexOf("\r\n\r\n") + 4);
+
+		assertThat(statusLine).contains(" 400 ");
+		assertThatJson(responseBody).inPath("$.error.code").isEqualTo(ErrorCodes.HEADER_MISMATCH);
+		assertThatJson(responseBody).inPath("$.error.message").isEqualTo("Mcp-Param-Region header is malformed");
 	}
 
 	@Test

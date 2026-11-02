@@ -67,18 +67,18 @@
 		<junit.version>6.1.3</junit.version>
 		<mockito.version>5.24.0</mockito.version>
 		<testcontainers.version>2.0.5</testcontainers.version>
-		<byte-buddy.version>1.18.15</byte-buddy.version>
+		<byte-buddy.version>1.18.16</byte-buddy.version>
 		<toxiproxy.version>2.0.5</toxiproxy.version>
 
 		<slf4j-api.version>2.0.20</slf4j-api.version>
-		<logback.version>1.6.5</logback.version>
+		<logback.version>1.6.6</logback.version>
 		<jackson-annotations.version>2.22</jackson-annotations.version>
 		<jackson2.version>2.22.4</jackson2.version>
 		<jackson3.version>3.1.8</jackson3.version>
 
 		<!-- plugin versions -->
 		<maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
-		<maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
+		<maven-surefire-plugin.version>3.6.1</maven-surefire-plugin.version>
 		<maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
 		<maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
 		<maven-source-plugin.version>3.4.0</maven-source-plugin.version>

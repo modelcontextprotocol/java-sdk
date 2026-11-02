@@ -45,6 +45,7 @@ nav:
     - MCP Components:
       - MCP Client: client.md
       - MCP Server: server.md
+      - MCP Server (2026-07-28, Preview): server-modern.md
   - Contributing:
     - Contributing Guide: contribute.md
     - Documentation: development.md
