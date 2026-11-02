@@ -36,6 +36,11 @@ Key Interactions:
 - **Message Flow**: JSON-RPC message handling with validation, type-safe response processing, and error handling.
 - **Resource Management**: Resource discovery, URI template-based access, subscription system, and content retrieval.
 
+!!! note "2026-07-28 specification"
+    The architecture and interactions above describe the classic client and server. The preview server for the stateless
+    2026-07-28 revision, in `io.modelcontextprotocol.modern`, has no sessions: a single `McpServer` dispatches
+    each request to features backed by repositories you implement. See [MCP Server (2026-07-28)](server-modern.md).
+
 ## Module Structure
 
 The SDK is organized into modules to separate concerns and allow adopters to bring in only what they need:
