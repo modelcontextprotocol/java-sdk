@@ -1,0 +1,2284 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Build a stateless MCP server for the 2026-07-28 specification revision with the modern server API">
+      
+      
+      
+        <link rel="canonical" href="https://modelcontextprotocol.github.io/java-sdk/2.2.0-SNAPSHOT/server-modern/">
+      
+      
+        <link rel="prev" href="../server/">
+      
+      
+        <link rel="next" href="../contribute/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../images/favicon.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>MCP Server (2026-07-28) - MCP Java SDK</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="blue-grey">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#mcp-server-2026-07-28" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="MCP Java SDK" class="md-header__button md-logo" aria-label="MCP Java SDK" data-md-component="logo">
+      
+  <img src="../images/logo-light.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            MCP Java SDK
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              MCP Server (2026-07-28)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="blue-grey"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="blue-grey" data-md-color-accent="blue-grey"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/modelcontextprotocol/java-sdk" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    modelcontextprotocol/java-sdk
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../overview/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Documentation
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../contribute/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://javadoc.io/doc/io.modelcontextprotocol.sdk/mcp-core/2.1.0" class="md-tabs__link">
+        
+  
+  
+    
+  
+  API Reference
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="MCP Java SDK" class="md-nav__button md-logo" aria-label="MCP Java SDK" data-md-component="logo">
+      
+  <img src="../images/logo-light.svg" alt="logo">
+
+    </a>
+    MCP Java SDK
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/modelcontextprotocol/java-sdk" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    modelcontextprotocol/java-sdk
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Documentation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1_3" id="__nav_1_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Components
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    MCP Components
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Server (2026-07-28, Preview)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Server (2026-07-28, Preview)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Overview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#classic-or-modern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Classic or modern?
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick Start
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#transports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transports
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Transports">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#streamable-http-servlet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Streamable HTTP (Servlet)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stdio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        STDIO
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#http-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HTTP Security
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#features-and-repositories" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features and Repositories
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Features and Repositories">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resources
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#prompts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#completions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Completions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sync-and-async" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sync and Async
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#request-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Request Context
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#streaming-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Streaming Responses
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#required-client-capabilities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Required Client Capabilities
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-round-trip-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi Round-Trip Requests
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Multi Round-Trip Requests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#carrying-state-across-rounds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Carrying State Across Rounds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#securing-requeststate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Securing requestState
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#change-notifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Change Notifications
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Caching
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom-headers-sep-2243" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom Headers (SEP-2243)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom Features
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Handling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#not-yet-supported" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Not Yet Supported
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Contributing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contribute/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://javadoc.io/doc/io.modelcontextprotocol.sdk/mcp-core/2.1.0" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Overview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#classic-or-modern" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Classic or modern?
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick Start
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#transports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transports
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Transports">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#streamable-http-servlet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Streamable HTTP (Servlet)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stdio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        STDIO
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#http-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HTTP Security
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#features-and-repositories" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features and Repositories
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Features and Repositories">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resources
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#prompts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#completions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Completions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sync-and-async" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sync and Async
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#request-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Request Context
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#streaming-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Streaming Responses
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#required-client-capabilities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Required Client Capabilities
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-round-trip-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi Round-Trip Requests
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Multi Round-Trip Requests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#carrying-state-across-rounds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Carrying State Across Rounds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#securing-requeststate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Securing requestState
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#change-notifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Change Notifications
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Caching
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom-headers-sep-2243" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom Headers (SEP-2243)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#custom-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom Features
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Handling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#not-yet-supported" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Not Yet Supported
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../overview/" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    Documentation
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../client/" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    MCP Components
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="mcp-server-2026-07-28">MCP Server (2026-07-28)<a class="headerlink" href="#mcp-server-2026-07-28" title="Permanent link">&para;</a></h1>
+<div class="admonition warning">
+<p class="admonition-title">Preview</p>
+<p>The modern server is a <strong>preview</strong> in 2.2.0. Its API, in the <code>io.modelcontextprotocol.modern</code> packages,
+may change in minor releases until 3.0. There is no modern client yet, and
+<a href="#not-yet-supported">some parts of the revision</a> are not implemented. For production servers that
+talk to today's clients, use the <a href="../server/">classic server</a>.</p>
+</div>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>The modern server implements the stateless
+<a href="https://modelcontextprotocol.io/specification/2026-07-28">2026-07-28 MCP specification revision</a>.
+It lives in <code>io.modelcontextprotocol.modern.server</code>, next to the classic server, and shares no types with it:
+it has its own <code>McpServer</code>, its own <code>McpSchema</code>, and its own transports. Both ship in <code>mcp-core</code>, so no extra
+dependency is needed.</p>
+<p>The 2026-07-28 revision removes sessions and the <code>initialize</code> handshake. Every request carries the protocol
+version and client capabilities in its <code>_meta</code>, and the server answers each request on its own. The modern
+server is built around that:</p>
+<ul>
+<li><strong>No sessions.</strong> Any instance can serve any request, so a server scales out without sticky routing.</li>
+<li><strong>No server-to-client requests.</strong> A server that needs input from the user or the model answers with an
+  <code>InputRequiredResult</code>, and the client retries the request with the answers
+  (see <a href="#multi-round-trip-requests">Multi Round-Trip Requests</a>).</li>
+<li><strong>Your catalog, your code.</strong> Tools, resources, prompts and completions come from <em>repositories</em> you implement,
+  not from a registry inside the SDK. Per-tenant, filtered, dynamic and paginated catalogs need no extra API.</li>
+<li><strong>One server, sync or async.</strong> There is a single <code>McpServer</code>. You pick sync or async per repository; sync
+  code never sees a Reactor type.</li>
+<li><strong>Stream only when needed.</strong> A handler returns a single result (sent as <code>application/json</code>) or a streaming
+  body that can send progress before the result (sent as an SSE stream).</li>
+</ul>
+<h3 id="classic-or-modern">Classic or modern?<a class="headerlink" href="#classic-or-modern" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><a href="../server/">Classic server</a></th>
+<th>Modern server</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Package</td>
+<td><code>io.modelcontextprotocol.server</code></td>
+<td><code>io.modelcontextprotocol.modern.server</code></td>
+</tr>
+<tr>
+<td>Spec revision</td>
+<td>2025-11-25 and earlier</td>
+<td>2026-07-28</td>
+</tr>
+<tr>
+<td>Sessions</td>
+<td>Yes (except the stateless transport)</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Primitives</td>
+<td>Registered specifications</td>
+<td>Repositories you implement</td>
+</tr>
+<tr>
+<td>Server-to-client requests</td>
+<td>Sampling, elicitation, roots, ping</td>
+<td>Replaced by <code>InputRequiredResult</code></td>
+</tr>
+<tr>
+<td>Logging</td>
+<td>Supported</td>
+<td>Not supported (deprecated by the revision)</td>
+</tr>
+<tr>
+<td>Status</td>
+<td>Stable</td>
+<td>Preview</td>
+</tr>
+</tbody>
+</table>
+<p>By default the modern server only accepts the 2026-07-28 protocol version; change the set with
+<code>supportedVersions(...)</code> on the builder. A request declaring another version gets an
+<code>Unsupported protocol version</code> error listing the versions the server supports. Clients that start with an
+<code>initialize</code> handshake are not supported; serve those with the classic server.</p>
+<h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
+<p>A server with one tool, served over HTTP:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.List</span><span class="p">;</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.Map</span><span class="p">;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io.modelcontextprotocol.modern.McpSchema.CallToolResult</span><span class="p">;</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io.modelcontextprotocol.modern.McpSchema.Implementation</span><span class="p">;</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io.modelcontextprotocol.modern.McpSchema.TextContent</span><span class="p">;</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io.modelcontextprotocol.modern.McpSchema.Tool</span><span class="p">;</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io.modelcontextprotocol.modern.server.McpRequestContext</span><span class="p">;</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io.modelcontextprotocol.modern.server.McpServer</span><span class="p">;</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io.modelcontextprotocol.modern.server.McpSyncResponse</span><span class="p">;</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io.modelcontextprotocol.modern.server.feature.McpSyncTool</span><span class="p">;</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository</span><span class="p">;</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io.modelcontextprotocol.modern.server.feature.ToolsFeature</span><span class="p">;</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io.modelcontextprotocol.modern.server.feature.ToolsPage</span><span class="p">;</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="kn">import</span><span class="w"> </span><span class="nn">io.modelcontextprotocol.modern.server.transport.HttpServletMcpTransport</span><span class="p">;</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="kd">class</span> <span class="nc">EchoTools</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">McpSyncToolRepository</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">McpSyncTool</span><span class="w"> </span><span class="n">echo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">McpSyncTool</span><span class="p">.</span><span class="na">of</span><span class="p">(</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">            </span><span class="n">Tool</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="s">"echo"</span><span class="p">,</span><span class="w"> </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">                    </span><span class="s">"type"</span><span class="p">,</span><span class="w"> </span><span class="s">"object"</span><span class="p">,</span>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="w">                    </span><span class="s">"properties"</span><span class="p">,</span><span class="w"> </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"text"</span><span class="p">,</span><span class="w"> </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"type"</span><span class="p">,</span><span class="w"> </span><span class="s">"string"</span><span class="p">)),</span>
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="w">                    </span><span class="s">"required"</span><span class="p">,</span><span class="w"> </span><span class="n">List</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"text"</span><span class="p">)))</span>
+</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="w">                </span><span class="p">.</span><span class="na">description</span><span class="p">(</span><span class="s">"Echoes the given text"</span><span class="p">)</span>
+</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="w">                </span><span class="p">.</span><span class="na">build</span><span class="p">(),</span>
+</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="w">            </span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">request</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">McpSyncResponse</span><span class="p">.</span><span class="na">result</span><span class="p">(</span><span class="n">CallToolResult</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="w">                </span><span class="p">.</span><span class="na">addContent</span><span class="p">(</span><span class="n">TextContent</span><span class="p">.</span><span class="na">builder</span><span class="p">((</span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="n">request</span><span class="p">.</span><span class="na">arguments</span><span class="p">().</span><span class="na">get</span><span class="p">(</span><span class="s">"text"</span><span class="p">)).</span><span class="na">build</span><span class="p">())</span>
+</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a><span class="w">                </span><span class="p">.</span><span class="na">build</span><span class="p">()));</span>
+</span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>
+</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a><span class="w">    </span><span class="nd">@Override</span>
+</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">ToolsPage</span><span class="w"> </span><span class="nf">list</span><span class="p">(</span><span class="n">McpRequestContext</span><span class="w"> </span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">cursor</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">ToolsPage</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="n">List</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="na">echo</span><span class="p">.</span><span class="na">definition</span><span class="p">()));</span>
+</span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>
+</span><span id="__span-0-35"><a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a><span class="w">    </span><span class="nd">@Override</span>
+</span><span id="__span-0-36"><a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">McpSyncTool</span><span class="w"> </span><span class="nf">find</span><span class="p">(</span><span class="n">McpRequestContext</span><span class="w"> </span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">name</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-0-37"><a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="s">"echo"</span><span class="p">.</span><span class="na">equals</span><span class="p">(</span><span class="n">name</span><span class="p">)</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="na">echo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+</span><span id="__span-0-38"><a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-0-39"><a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>
+</span><span id="__span-0-40"><a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a><span class="p">}</span>
+</span><span id="__span-0-41"><a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>
+</span><span id="__span-0-42"><a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a><span class="n">McpServer</span><span class="w"> </span><span class="n">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">McpServer</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-0-43"><a id="__codelineno-0-43" name="__codelineno-0-43" href="#__codelineno-0-43"></a><span class="w">    </span><span class="p">.</span><span class="na">serverInfo</span><span class="p">(</span><span class="n">Implementation</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="s">"echo-server"</span><span class="p">,</span><span class="w"> </span><span class="s">"1.0.0"</span><span class="p">).</span><span class="na">build</span><span class="p">())</span>
+</span><span id="__span-0-44"><a id="__codelineno-0-44" name="__codelineno-0-44" href="#__codelineno-0-44"></a><span class="w">    </span><span class="p">.</span><span class="na">feature</span><span class="p">(</span><span class="n">ToolsFeature</span><span class="p">.</span><span class="na">ofSync</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">EchoTools</span><span class="p">()))</span>
+</span><span id="__span-0-45"><a id="__codelineno-0-45" name="__codelineno-0-45" href="#__codelineno-0-45"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span><span id="__span-0-46"><a id="__codelineno-0-46" name="__codelineno-0-46" href="#__codelineno-0-46"></a>
+</span><span id="__span-0-47"><a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a><span class="n">HttpServletMcpTransport</span><span class="w"> </span><span class="n">transport</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">HttpServletMcpTransport</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">server</span><span class="p">)</span>
+</span><span id="__span-0-48"><a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a><span class="w">    </span><span class="p">.</span><span class="na">endpoint</span><span class="p">(</span><span class="s">"/mcp"</span><span class="p">)</span>
+</span><span id="__span-0-49"><a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span><span id="__span-0-50"><a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a>
+</span><span id="__span-0-51"><a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a><span class="c1">// Register `transport` as a servlet in your container, mapped to /mcp,</span>
+</span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a><span class="c1">// with async support enabled.</span>
+</span></code></pre></div>
+<p><code>McpServer</code> is immutable and stateless. <code>build()</code> collects the capabilities of the registered features and
+serves <code>server/discover</code> from them. There is nothing to start; on shutdown, <code>server.closeGracefully()</code> ends
+open <code>subscriptions/listen</code> streams with a <code>complete</code> result (see <a href="#change-notifications">Change Notifications</a>).</p>
+<p>Builder options:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>serverInfo(Implementation)</code></td>
+<td>Required. Sent in <code>_meta</code> of every result.</td>
+</tr>
+<tr>
+<td><code>instructions(String)</code></td>
+<td>Instructions for the model, returned by <code>server/discover</code>.</td>
+</tr>
+<tr>
+<td><code>feature(McpFeature)</code> / <code>features(List)</code></td>
+<td>Register tools, resources, prompts, completions or a <a href="#custom-features">custom feature</a>.</td>
+</tr>
+<tr>
+<td><code>subscriptions(McpChangePublisher)</code></td>
+<td>Enable <code>subscriptions/listen</code>. See <a href="#change-notifications">Change Notifications</a>.</td>
+</tr>
+<tr>
+<td><code>requestStateCodec(RequestStateCodec)</code></td>
+<td>Seal <code>requestState</code>. See <a href="#securing-requeststate">Securing <code>requestState</code></a>.</td>
+</tr>
+<tr>
+<td><code>discoverCache(long ttlMs, CacheScope)</code></td>
+<td>Caching hints for <code>server/discover</code>. See <a href="#caching">Caching</a>.</td>
+</tr>
+<tr>
+<td><code>supportedVersions(List&lt;String&gt;)</code></td>
+<td>Protocol versions to accept. Defaults to <code>2026-07-28</code>.</td>
+</tr>
+<tr>
+<td><code>jsonMapper(McpJsonMapper)</code></td>
+<td>JSON mapper. Defaults to <code>McpJsonDefaults.getMapper()</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="transports">Transports<a class="headerlink" href="#transports" title="Permanent link">&para;</a></h2>
+<h3 id="streamable-http-servlet">Streamable HTTP (Servlet)<a class="headerlink" href="#streamable-http-servlet" title="Permanent link">&para;</a></h3>
+<p><code>HttpServletMcpTransport</code> is a Jakarta Servlet. It accepts <code>POST</code> only, one request or notification per call.
+Requests are served on the container thread, so thread-locals set by servlet filters (security context,
+tracing) are visible to sync handlers. <code>subscriptions/listen</code> streams are served asynchronously, so the servlet
+and all filters in front of it must support async requests.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">HttpServletMcpTransport</span><span class="w"> </span><span class="n">transport</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">HttpServletMcpTransport</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">server</span><span class="p">)</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="p">.</span><span class="na">endpoint</span><span class="p">(</span><span class="s">"/mcp"</span><span class="p">)</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="p">.</span><span class="na">contextExtractor</span><span class="p">(</span><span class="n">request</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">request</span><span class="p">.</span><span class="na">getUserPrincipal</span><span class="p">()</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">null</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">McpTransportContext</span><span class="p">.</span><span class="na">EMPTY</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">            </span><span class="p">:</span><span class="w"> </span><span class="n">McpTransportContext</span><span class="p">.</span><span class="na">create</span><span class="p">(</span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"user"</span><span class="p">,</span><span class="w"> </span><span class="n">request</span><span class="p">.</span><span class="na">getUserPrincipal</span><span class="p">().</span><span class="na">getName</span><span class="p">())))</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="p">.</span><span class="na">httpHeaderValidator</span><span class="p">(</span><span class="n">DefaultServerTransportSecurityValidator</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">        </span><span class="p">.</span><span class="na">allowedOrigin</span><span class="p">(</span><span class="s">"https://app.example.com"</span><span class="p">)</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">        </span><span class="p">.</span><span class="na">allowedHost</span><span class="p">(</span><span class="s">"mcp.example.com"</span><span class="p">)</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">        </span><span class="p">.</span><span class="na">build</span><span class="p">())</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="p">.</span><span class="na">keepAliveInterval</span><span class="p">(</span><span class="n">Duration</span><span class="p">.</span><span class="na">ofSeconds</span><span class="p">(</span><span class="mi">15</span><span class="p">))</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>endpoint(String)</code></td>
+<td><code>/mcp</code></td>
+<td>The path the transport answers on.</td>
+</tr>
+<tr>
+<td><code>contextExtractor(...)</code></td>
+<td>empty context</td>
+<td>Builds the <code>McpTransportContext</code> handlers see. Runs on the container thread before dispatch.</td>
+</tr>
+<tr>
+<td><code>httpHeaderValidator(...)</code></td>
+<td>rejects any <code>Origin</code></td>
+<td>Validates headers before the body is read. See <a href="#http-security">HTTP Security</a>.</td>
+</tr>
+<tr>
+<td><code>maxRequestSize(int)</code></td>
+<td>16 MiB</td>
+<td>Maximum request body size.</td>
+</tr>
+<tr>
+<td><code>keepAliveInterval(Duration)</code></td>
+<td>30 seconds</td>
+<td>SSE comment interval on open streams; also detects clients that went away. <code>null</code> disables it.</td>
+</tr>
+<tr>
+<td><code>errorStatus(int code, int status)</code></td>
+<td>see below</td>
+<td>HTTP status for a JSON-RPC error code.</td>
+</tr>
+</tbody>
+</table>
+<p>JSON-RPC errors are answered with the HTTP status the specification assigns: <code>400</code> for parse errors, invalid
+requests, invalid params, header mismatches, missing client capabilities and unsupported protocol versions,
+and <code>404</code> for unknown methods. Other codes are answered with <code>200</code>. Once a stream has started, errors are sent
+in-band.</p>
+<p>Call <code>transport.closeGracefully()</code> on shutdown. It stops accepting requests and also calls
+<code>server.closeGracefully()</code>, which ends open <code>subscriptions/listen</code> streams with a <code>complete</code> result.</p>
+<p>The servlet requires the routing headers the 2026-07-28 HTTP transport defines, and checks them against the
+request body:</p>
+<ul>
+<li><code>Mcp-Method</code> is required on every request and must equal the JSON-RPC method.</li>
+<li><code>MCP-Protocol-Version</code> is required when the body declares a protocol version in <code>_meta</code>, and must match it.</li>
+<li><code>Mcp-Name</code> is required on <code>tools/call</code> and <code>prompts/get</code> (the <code>name</code>) and <code>resources/read</code> (the <code>uri</code>), and
+  must match it.</li>
+</ul>
+<p>A request with a missing or mismatched header is rejected with error <code>-32020</code> (header mismatch, HTTP <code>400</code>)
+before it is dispatched. Filters can therefore route or authorize on these headers without reading the body.
+Keep this in mind when testing with <code>curl</code> or another hand-written client.</p>
+<h3 id="stdio">STDIO<a class="headerlink" href="#stdio" title="Permanent link">&para;</a></h3>
+<p><code>StdioMcpTransport</code> reads one JSON-RPC message per line from stdin and writes responses to stdout. Requests
+are handled concurrently, cancellation is supported, and a single writer keeps output lines intact.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">StdioMcpTransport</span><span class="w"> </span><span class="n">transport</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">StdioMcpTransport</span><span class="p">(</span><span class="n">server</span><span class="p">,</span><span class="w"> </span><span class="n">McpJsonDefaults</span><span class="p">.</span><span class="na">getMapper</span><span class="p">());</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1">// Serve until stdin is closed or closeGracefully() is called.</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">transport</span><span class="p">.</span><span class="na">start</span><span class="p">().</span><span class="na">block</span><span class="p">();</span>
+</span></code></pre></div>
+<p>The transport's threads are daemon threads, so block on <code>start()</code> to keep the process alive. Messages longer
+than 16M characters are dropped; use the five-argument constructor to change the limit.</p>
+<p>Unlike the Servlet transport, <code>StdioMcpTransport.closeGracefully()</code> does not call <code>server.closeGracefully()</code>:
+it cancels in-flight requests, including open <code>subscriptions/listen</code> streams, without sending their pending
+output. If you use <a href="#change-notifications">change notifications</a>, call <code>server.closeGracefully()</code> before
+closing the transport.</p>
+<p>STDIO has no headers and no <code>contextExtractor</code>: handlers always see a transport context without user entries,
+so anything that reads identity from <code>transportContext()</code>, such as a <code>requestState</code>
+<a href="#securing-requeststate">principal binding</a>, has nothing to read.</p>
+<h3 id="http-security">HTTP Security<a class="headerlink" href="#http-security" title="Permanent link">&para;</a></h3>
+<p>Authentication and authorization belong in servlet filters in front of <code>HttpServletMcpTransport</code>, including
+<code>401</code>/<code>403</code> challenges. To pass the authenticated identity to handlers, read it in the <code>contextExtractor</code> and
+put it in the <code>McpTransportContext</code>.</p>
+<p>Against DNS rebinding, the transport validates headers with a <code>ServerHttpHeaderValidator</code> before reading the
+body. The default validator has no allowed origins and no allowed hosts, which means:</p>
+<ul>
+<li>A request without an <code>Origin</code> header (a non-browser client) passes.</li>
+<li>A request <strong>with</strong> an <code>Origin</code> header is rejected with <code>403</code>, whether it is cross-origin or same-origin. A
+  browser application calling the server must have its origin allowed explicitly.</li>
+<li>The <code>Host</code> header is not checked.</li>
+</ul>
+<p>Configure <code>DefaultServerTransportSecurityValidator</code> with <code>allowedOrigin(...)</code> to accept browser clients, and
+with <code>allowedHost(...)</code> to turn on <code>Host</code> validation, as in the example above. See
+<a href="../server/#http-transport-security">HTTP Transport Security</a> for the validator options.</p>
+<h2 id="features-and-repositories">Features and Repositories<a class="headerlink" href="#features-and-repositories" title="Permanent link">&para;</a></h2>
+<p>A <strong>feature</strong> serves a set of JSON-RPC methods and contributes capabilities to <code>server/discover</code>. The SDK
+provides one feature per primitive, each backed by a <strong>repository</strong> you implement:</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Methods</th>
+<th>Sync repository</th>
+<th>Async repository</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ToolsFeature</code></td>
+<td><code>tools/list</code>, <code>tools/call</code></td>
+<td><code>McpSyncToolRepository</code></td>
+<td><code>McpAsyncToolRepository</code></td>
+</tr>
+<tr>
+<td><code>ResourcesFeature</code></td>
+<td><code>resources/list</code>, <code>resources/templates/list</code>, <code>resources/read</code></td>
+<td><code>McpSyncResourceRepository</code></td>
+<td><code>McpAsyncResourceRepository</code></td>
+</tr>
+<tr>
+<td><code>PromptsFeature</code></td>
+<td><code>prompts/list</code>, <code>prompts/get</code></td>
+<td><code>McpSyncPromptRepository</code></td>
+<td><code>McpAsyncPromptRepository</code></td>
+</tr>
+<tr>
+<td><code>CompletionsFeature</code></td>
+<td><code>completion/complete</code></td>
+<td><code>McpSyncCompletionRepository</code></td>
+<td><code>McpAsyncCompletionRepository</code></td>
+</tr>
+</tbody>
+</table>
+<p>Create a feature with <code>ofSync(repository)</code> or <code>ofAsync(repository)</code>. Register only the features you need; the
+server advertises a capability only when its feature is registered.</p>
+<p>Every repository method receives the <a href="#request-context"><code>McpRequestContext</code></a>, so a repository can return a
+different catalog per tenant or user. Two rules apply to <code>list</code>:</p>
+<ul>
+<li>The order must be deterministic, and the result must not depend on the connection.</li>
+<li>An unrecognized <code>cursor</code> must be answered with <code>McpException.invalidParams(...)</code>.</li>
+</ul>
+<p>To paginate, return a page with a <code>nextCursor</code>, for example <code>new ToolsPage(tools, nextCursor, null, null)</code>.</p>
+<h3 id="tools">Tools<a class="headerlink" href="#tools" title="Permanent link">&para;</a></h3>
+<p>A repository lists tool definitions and finds a tool by name. <code>find</code> returns an <code>McpSyncTool</code>, which pairs a
+<code>Tool</code> definition with its handler, or <code>null</code> if there is no such tool (the client then gets an
+<code>Unknown tool</code> error).</p>
+<div class="highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">McpSyncTool</span><span class="w"> </span><span class="n">weather</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">McpSyncTool</span><span class="p">.</span><span class="na">of</span><span class="p">(</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">        </span><span class="n">Tool</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="s">"get_weather"</span><span class="p">,</span><span class="w"> </span><span class="n">jsonMapper</span><span class="p">,</span><span class="w"> </span><span class="s">"""</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="s">                {</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="s">                  "type": "object",</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="s">                  "properties": { "city": { "type": "string" } },</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="s">                  "required": ["city"]</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="s">                }</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="s">                """</span><span class="p">)</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">            </span><span class="p">.</span><span class="na">outputSchema</span><span class="p">(</span><span class="n">jsonMapper</span><span class="p">,</span><span class="w"> </span><span class="s">"""</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="s">                {</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="s">                  "type": "object",</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="s">                  "properties": { "temperature": { "type": "number" } },</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="s">                  "required": ["temperature"]</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="s">                }</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="s">                """</span><span class="p">)</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="w">            </span><span class="p">.</span><span class="na">build</span><span class="p">(),</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="w">        </span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">request</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="w">            </span><span class="kt">double</span><span class="w"> </span><span class="n">temperature</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">weatherService</span><span class="p">.</span><span class="na">temperature</span><span class="p">((</span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="n">request</span><span class="p">.</span><span class="na">arguments</span><span class="p">().</span><span class="na">get</span><span class="p">(</span><span class="s">"city"</span><span class="p">));</span>
+</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a><span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">McpSyncResponse</span><span class="p">.</span><span class="na">result</span><span class="p">(</span><span class="n">CallToolResult</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a><span class="w">                </span><span class="p">.</span><span class="na">structuredContent</span><span class="p">(</span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"temperature"</span><span class="p">,</span><span class="w"> </span><span class="n">temperature</span><span class="p">))</span>
+</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a><span class="w">                </span><span class="p">.</span><span class="na">build</span><span class="p">());</span>
+</span><span id="__span-3-22"><a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a><span class="w">        </span><span class="p">});</span>
+</span></code></pre></div>
+<p>The tools feature validates both directions:</p>
+<ul>
+<li><strong>Input:</strong> arguments are validated against <code>inputSchema</code> before the handler runs. Invalid arguments are
+  answered with a <code>CallToolResult</code> with <code>isError: true</code>, so the model can correct the call.</li>
+<li><strong>Output:</strong> when the tool declares an <code>outputSchema</code>, a successful result must carry <code>structuredContent</code> that
+  conforms to it. A missing or invalid <code>structuredContent</code> is a server bug and is answered with an internal
+  error. When a result has <code>structuredContent</code> but no <code>content</code>, the feature adds its JSON as text content.</li>
+</ul>
+<p>To use a different JSON mapper, schema validator or <a href="#caching">cache defaults</a>, use
+<code>ToolsFeature.ofSync(repository, jsonMapper, jsonSchemaValidator, defaultTtlMs, defaultCacheScope)</code>.</p>
+<h3 id="resources">Resources<a class="headerlink" href="#resources" title="Permanent link">&para;</a></h3>
+<p>A resource repository lists resources and, optionally, resource templates, and finds a resource by URI.
+<code>find</code> returns an <code>McpSyncResource</code> holding the read handler, or <code>null</code> if the URI is unknown. Templates are
+not matched for you: <code>find</code> receives every URI and decides what it serves.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kd">class</span> <span class="nc">FileResources</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">McpSyncResourceRepository</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nd">@Override</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">ResourcesPage</span><span class="w"> </span><span class="nf">list</span><span class="p">(</span><span class="n">McpRequestContext</span><span class="w"> </span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">cursor</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">ResourcesPage</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="n">List</span><span class="p">.</span><span class="na">of</span><span class="p">(</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">                </span><span class="n">Resource</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="s">"file:///config.json"</span><span class="p">,</span><span class="w"> </span><span class="s">"Configuration"</span><span class="p">)</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">                    </span><span class="p">.</span><span class="na">mimeType</span><span class="p">(</span><span class="s">"application/json"</span><span class="p">)</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">                    </span><span class="p">.</span><span class="na">build</span><span class="p">()));</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">    </span><span class="nd">@Override</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">ResourceTemplatesPage</span><span class="w"> </span><span class="nf">listTemplates</span><span class="p">(</span><span class="n">McpRequestContext</span><span class="w"> </span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">cursor</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">ResourceTemplatesPage</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="n">List</span><span class="p">.</span><span class="na">of</span><span class="p">(</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">                </span><span class="n">ResourceTemplate</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="s">"file:///logs/{date}"</span><span class="p">,</span><span class="w"> </span><span class="s">"Daily log"</span><span class="p">).</span><span class="na">build</span><span class="p">()));</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">    </span><span class="nd">@Override</span>
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">McpSyncResource</span><span class="w"> </span><span class="nf">find</span><span class="p">(</span><span class="n">McpRequestContext</span><span class="w"> </span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">uri</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="w">        </span><span class="n">String</span><span class="w"> </span><span class="n">content</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">files</span><span class="p">.</span><span class="na">read</span><span class="p">(</span><span class="n">uri</span><span class="p">);</span><span class="w"> </span><span class="c1">// null if the URI is unknown</span>
+</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">content</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-4-21"><a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+</span><span id="__span-4-22"><a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="w">        </span><span class="p">}</span>
+</span><span id="__span-4-23"><a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">McpSyncResource</span><span class="p">.</span><span class="na">of</span><span class="p">((</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">request</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">McpSyncResponse</span><span class="p">.</span><span class="na">result</span><span class="p">(</span><span class="n">ReadResourceResult</span>
+</span><span id="__span-4-24"><a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="w">            </span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">List</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="n">TextResourceContents</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span><span class="w"> </span><span class="n">content</span><span class="p">).</span><span class="na">build</span><span class="p">()))</span>
+</span><span id="__span-4-25"><a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a><span class="w">            </span><span class="p">.</span><span class="na">build</span><span class="p">()));</span>
+</span><span id="__span-4-26"><a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-4-27"><a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>
+</span><span id="__span-4-28"><a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a><span class="w">    </span><span class="nd">@Override</span>
+</span><span id="__span-4-29"><a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">boolean</span><span class="w"> </span><span class="nf">supportsSubscribe</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-4-30"><a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span><span class="w"> </span><span class="c1">// see Change Notifications</span>
+</span><span id="__span-4-31"><a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-4-32"><a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a>
+</span><span id="__span-4-33"><a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><code>listTemplates</code> and <code>supportsSubscribe</code> have defaults: no templates, and no subscriptions. Returning <code>true</code>
+from <code>supportsSubscribe</code> advertises <code>resources.subscribe</code> only when the server also has a change publisher
+registered with <code>subscriptions(...)</code>, because resource updates are only delivered over <code>subscriptions/listen</code>.</p>
+<h3 id="prompts">Prompts<a class="headerlink" href="#prompts" title="Permanent link">&para;</a></h3>
+<p>A prompt repository lists <code>Prompt</code> definitions and finds an <code>McpSyncPrompt</code> by name, which pairs the definition
+with a handler returning a <code>GetPromptResult</code>. Required prompt arguments declared in the definition are
+checked before the handler runs; a missing one is answered with an invalid-params error.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">McpSyncPrompt</span><span class="w"> </span><span class="n">review</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">McpSyncPrompt</span><span class="p">.</span><span class="na">of</span><span class="p">(</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">        </span><span class="n">Prompt</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="s">"code_review"</span><span class="p">)</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">            </span><span class="p">.</span><span class="na">description</span><span class="p">(</span><span class="s">"Review a piece of code"</span><span class="p">)</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">            </span><span class="p">.</span><span class="na">arguments</span><span class="p">(</span><span class="n">List</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="n">PromptArgument</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="s">"code"</span><span class="p">).</span><span class="na">required</span><span class="p">(</span><span class="kc">true</span><span class="p">).</span><span class="na">build</span><span class="p">()))</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">            </span><span class="p">.</span><span class="na">build</span><span class="p">(),</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">        </span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">request</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">McpSyncResponse</span><span class="p">.</span><span class="na">result</span><span class="p">(</span><span class="n">GetPromptResult</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">            </span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">List</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="n">PromptMessage</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">                </span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">Role</span><span class="p">.</span><span class="na">USER</span><span class="p">,</span><span class="w"> </span><span class="n">TextContent</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="s">"Please review:\n"</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">request</span><span class="p">.</span><span class="na">arguments</span><span class="p">().</span><span class="na">get</span><span class="p">(</span><span class="s">"code"</span><span class="p">)).</span><span class="na">build</span><span class="p">())</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">                </span><span class="p">.</span><span class="na">build</span><span class="p">()))</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">            </span><span class="p">.</span><span class="na">build</span><span class="p">()));</span>
+</span></code></pre></div>
+<h3 id="completions">Completions<a class="headerlink" href="#completions" title="Permanent link">&para;</a></h3>
+<p>A completion repository is a single function from a <code>CompleteRequest</code> to a <code>CompleteResult</code>:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">CompletionsFeature</span><span class="w"> </span><span class="n">completions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">CompletionsFeature</span><span class="p">.</span><span class="na">ofSync</span><span class="p">((</span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">request</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">        </span><span class="n">CompleteResult</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">CompleteResult</span><span class="p">.</span><span class="na">Completion</span><span class="p">(</span><span class="n">List</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"python"</span><span class="p">,</span><span class="w"> </span><span class="s">"java"</span><span class="p">,</span><span class="w"> </span><span class="s">"javascript"</span><span class="p">))));</span>
+</span></code></pre></div>
+<h3 id="sync-and-async">Sync and Async<a class="headerlink" href="#sync-and-async" title="Permanent link">&para;</a></h3>
+<p>Sync and async repositories can be mixed in one server. A sync repository is adapted to the async API inside
+the feature; where its code runs depends on the transport:</p>
+<ul>
+<li><code>HttpServletMcpTransport</code> resolves requests in blocking mode, so sync code runs on the container thread.</li>
+<li>Otherwise, sync code runs on Reactor's <code>boundedElastic</code> scheduler.</li>
+</ul>
+<p><code>McpRequestContext.isBlocking()</code> tells you which applies to the current request.</p>
+<p>An async repository returns <code>Mono</code>s: <code>list</code> returns <code>Mono&lt;ToolsPage&gt;</code>, <code>find</code> returns <code>Mono&lt;McpAsyncTool&gt;</code>
+(empty if there is no such tool), and handlers return <code>Mono&lt;McpAsyncResponse&lt;...&gt;&gt;</code>.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">McpAsyncTool</span><span class="w"> </span><span class="n">echo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">McpAsyncTool</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="n">echoDefinition</span><span class="p">,</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">        </span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">request</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Mono</span><span class="p">.</span><span class="na">just</span><span class="p">(</span><span class="n">McpAsyncResponse</span><span class="p">.</span><span class="na">result</span><span class="p">(</span><span class="n">CallToolResult</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">            </span><span class="p">.</span><span class="na">addContent</span><span class="p">(</span><span class="n">TextContent</span><span class="p">.</span><span class="na">builder</span><span class="p">((</span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="n">request</span><span class="p">.</span><span class="na">arguments</span><span class="p">().</span><span class="na">get</span><span class="p">(</span><span class="s">"text"</span><span class="p">)).</span><span class="na">build</span><span class="p">())</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">            </span><span class="p">.</span><span class="na">build</span><span class="p">())));</span>
+</span></code></pre></div>
+<h2 id="request-context">Request Context<a class="headerlink" href="#request-context" title="Permanent link">&para;</a></h2>
+<p>Every repository method and handler receives an <code>McpRequestContext</code>, built fresh for each request:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>method()</code></td>
+<td>The JSON-RPC method, e.g. <code>tools/call</code>.</td>
+</tr>
+<tr>
+<td><code>requestId()</code></td>
+<td>The JSON-RPC request id.</td>
+</tr>
+<tr>
+<td><code>protocolVersion()</code></td>
+<td>The protocol version from <code>_meta</code>.</td>
+</tr>
+<tr>
+<td><code>clientCapabilities()</code></td>
+<td>The client capabilities from <code>_meta</code>.</td>
+</tr>
+<tr>
+<td><code>clientInfo()</code></td>
+<td>The client info from <code>_meta</code>, if sent. For display and logging only.</td>
+</tr>
+<tr>
+<td><code>progressToken()</code></td>
+<td>The progress token, or <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>meta()</code></td>
+<td>The raw <code>_meta</code> map.</td>
+</tr>
+<tr>
+<td><code>transportContext()</code></td>
+<td>The <code>McpTransportContext</code> built by the Servlet transport's <code>contextExtractor</code>. Over STDIO it carries no user entries.</td>
+</tr>
+<tr>
+<td><code>isRetry()</code></td>
+<td>Whether the request is a <a href="#multi-round-trip-requests">multi round-trip</a> retry.</td>
+</tr>
+<tr>
+<td><code>isBlocking()</code></td>
+<td>Whether sync code runs on the calling thread.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="streaming-responses">Streaming Responses<a class="headerlink" href="#streaming-responses" title="Permanent link">&para;</a></h2>
+<p>A handler answers with <code>McpSyncResponse.result(...)</code> for a single JSON response, or with
+<code>McpSyncResponse.streaming(...)</code> to send notifications before the result. The streaming body runs once the
+transport has opened the response stream and receives an <code>McpSyncNotifier</code>:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">(</span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">request</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">McpSyncResponse</span><span class="p">.</span><span class="na">streaming</span><span class="p">(</span><span class="n">notifier</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">10</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">        </span><span class="n">processChunk</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">        </span><span class="n">notifier</span><span class="p">.</span><span class="na">progress</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="mf">100.0</span><span class="p">,</span><span class="w"> </span><span class="s">"Processed chunk "</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">i</span><span class="p">);</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">CallToolResult</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">        </span><span class="p">.</span><span class="na">addContent</span><span class="p">(</span><span class="n">TextContent</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="s">"Done"</span><span class="p">).</span><span class="na">build</span><span class="p">())</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">        </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="p">})</span>
+</span></code></pre></div>
+<p><code>progress</code> is a no-op when the request carries no progress token, or when the value does not increase.
+<code>notify(method, params)</code> sends any other request-scoped notification. The async equivalent is
+<code>McpAsyncResponse.streaming(notifier -&gt; ...)</code> with an <code>McpAsyncNotifier</code> whose methods return <code>Mono&lt;Void&gt;</code>.</p>
+<p>Return a streaming response only when you send notifications; a plain result is cheaper for the client and any
+proxies in between.</p>
+<h2 id="required-client-capabilities">Required Client Capabilities<a class="headerlink" href="#required-client-capabilities" title="Permanent link">&para;</a></h2>
+<p>A tool, resource or prompt that only works with clients declaring certain capabilities can say so. The server
+rejects calls from other clients with error <code>-32021</code> (missing required client capability), listing what is
+missing, without running the handler:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">ClientCapabilities</span><span class="w"> </span><span class="n">needsSampling</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ClientCapabilities</span><span class="p">.</span><span class="na">builder</span><span class="p">().</span><span class="na">sampling</span><span class="p">().</span><span class="na">build</span><span class="p">();</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">McpSyncTool</span><span class="w"> </span><span class="n">summarize</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">McpSyncTool</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="n">summarizeDefinition</span><span class="p">,</span><span class="w"> </span><span class="n">needsSampling</span><span class="p">,</span><span class="w"> </span><span class="n">handler</span><span class="p">);</span>
+</span></code></pre></div>
+<p><code>McpSyncResource.of(...)</code> and <code>McpSyncPrompt.of(...)</code> take the same optional argument.</p>
+<h2 id="multi-round-trip-requests">Multi Round-Trip Requests<a class="headerlink" href="#multi-round-trip-requests" title="Permanent link">&para;</a></h2>
+<p>The 2026-07-28 revision has no server-to-client requests. Instead, a <code>tools/call</code>, <code>resources/read</code> or
+<code>prompts/get</code> handler that needs input answers with an <code>InputRequiredResult</code>. It lists the input requests
+(elicitation, sampling, roots), each under a key you choose. The client fulfils them and retries the original
+request with the answers in <code>inputResponses</code>, keyed the same way.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="p">(</span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">request</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">    </span><span class="n">Optional</span><span class="o">&lt;</span><span class="n">ElicitResponse</span><span class="o">&gt;</span><span class="w"> </span><span class="n">answer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">InputResponses</span><span class="p">.</span><span class="na">get</span><span class="p">(</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">            </span><span class="n">request</span><span class="p">.</span><span class="na">inputResponses</span><span class="p">(),</span><span class="w"> </span><span class="s">"user_name"</span><span class="p">,</span><span class="w"> </span><span class="n">ElicitResponse</span><span class="p">.</span><span class="na">class</span><span class="p">,</span><span class="w"> </span><span class="n">jsonMapper</span><span class="p">);</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">answer</span><span class="p">.</span><span class="na">isEmpty</span><span class="p">()</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="o">!</span><span class="s">"accept"</span><span class="p">.</span><span class="na">equals</span><span class="p">(</span><span class="n">answer</span><span class="p">.</span><span class="na">get</span><span class="p">().</span><span class="na">action</span><span class="p">()))</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">McpSyncResponse</span><span class="p">.</span><span class="na">result</span><span class="p">(</span><span class="n">InputRequiredResult</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">            </span><span class="p">.</span><span class="na">elicit</span><span class="p">(</span><span class="s">"user_name"</span><span class="p">,</span><span class="w"> </span><span class="n">ElicitFormRequest</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="s">"What is your name?"</span><span class="p">,</span><span class="w"> </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">                    </span><span class="s">"type"</span><span class="p">,</span><span class="w"> </span><span class="s">"object"</span><span class="p">,</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">                    </span><span class="s">"properties"</span><span class="p">,</span><span class="w"> </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"name"</span><span class="p">,</span><span class="w"> </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"type"</span><span class="p">,</span><span class="w"> </span><span class="s">"string"</span><span class="p">)),</span>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">                    </span><span class="s">"required"</span><span class="p">,</span><span class="w"> </span><span class="n">List</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"name"</span><span class="p">)))</span>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="w">                </span><span class="p">.</span><span class="na">build</span><span class="p">())</span>
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="w">            </span><span class="p">.</span><span class="na">build</span><span class="p">());</span>
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">McpSyncResponse</span><span class="p">.</span><span class="na">result</span><span class="p">(</span><span class="n">CallToolResult</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-10-14"><a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="w">        </span><span class="p">.</span><span class="na">addContent</span><span class="p">(</span><span class="n">TextContent</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="s">"Hello, "</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">answer</span><span class="p">.</span><span class="na">get</span><span class="p">().</span><span class="na">content</span><span class="p">().</span><span class="na">get</span><span class="p">(</span><span class="s">"name"</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">"!"</span><span class="p">).</span><span class="na">build</span><span class="p">())</span>
+</span><span id="__span-10-15"><a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a><span class="w">        </span><span class="p">.</span><span class="na">build</span><span class="p">());</span>
+</span><span id="__span-10-16"><a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a><span class="p">}</span>
+</span><span id="__span-10-17"><a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a>
+</span><span id="__span-10-18"><a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a><span class="c1">// Your own type for the shape of an elicitation response</span>
+</span><span id="__span-10-19"><a id="__codelineno-10-19" name="__codelineno-10-19" href="#__codelineno-10-19"></a><span class="nd">@JsonIgnoreProperties</span><span class="p">(</span><span class="n">ignoreUnknown</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">)</span>
+</span><span id="__span-10-20"><a id="__codelineno-10-20" name="__codelineno-10-20" href="#__codelineno-10-20"></a><span class="kd">record</span> <span class="nc">ElicitResponse</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">action</span><span class="p">,</span><span class="w"> </span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Object</span><span class="o">&gt;</span><span class="w"> </span><span class="n">content</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-10-21"><a id="__codelineno-10-21" name="__codelineno-10-21" href="#__codelineno-10-21"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><code>InputRequiredResult.builder()</code> offers <code>elicit(key, ElicitFormRequest)</code>, <code>elicitUrl(key, message, url)</code>,
+<code>createMessage(key, CreateMessageRequest)</code> and <code>listRoots(key)</code>. <code>InputResponses.get(...)</code> converts a response
+to a type of your choice and answers malformed responses with an invalid-params error.</p>
+<p>A handler may only request input the client declared it can provide. Requesting anything else is a server bug
+and is answered with an internal error. Either check <code>ctx.clientCapabilities()</code> before asking, or declare the
+capability as <a href="#required-client-capabilities">required</a> so that other clients are rejected up front.</p>
+<h3 id="carrying-state-across-rounds">Carrying State Across Rounds<a class="headerlink" href="#carrying-state-across-rounds" title="Permanent link">&para;</a></h3>
+<p>A handler that needs to remember something between rounds puts it in <code>requestState(String)</code>. The client
+returns it unchanged with the retry, and the handler reads it from <code>request.requestState()</code>:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">return</span><span class="w"> </span><span class="n">McpSyncResponse</span><span class="p">.</span><span class="na">result</span><span class="p">(</span><span class="n">InputRequiredResult</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">    </span><span class="p">.</span><span class="na">elicit</span><span class="p">(</span><span class="s">"step2"</span><span class="p">,</span><span class="w"> </span><span class="n">ElicitFormRequest</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="s">"What is your favorite color?"</span><span class="p">,</span><span class="w"> </span><span class="n">colorSchema</span><span class="p">).</span><span class="na">build</span><span class="p">())</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span><span class="p">.</span><span class="na">requestState</span><span class="p">(</span><span class="s">"round-2:"</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">name</span><span class="p">)</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">());</span>
+</span></code></pre></div>
+<h3 id="securing-requeststate">Securing <code>requestState</code><a class="headerlink" href="#securing-requeststate" title="Permanent link">&para;</a></h3>
+<p>The server seals <code>requestState</code> before sending it and opens it on retry, so handlers only ever see state they
+issued themselves. A tampered, expired or misdirected state is rejected with an invalid-params error before
+the handler runs.</p>
+<p>The default <code>HmacRequestStateCodec</code> signs the state with HMAC-SHA256 and binds it to an expiry (10 minutes by
+default), to the method and tool, resource or prompt name, and optionally to a principal. Without a configured
+key it generates a random key per process, and logs a warning. That works for a single instance; with more than
+one instance, configure a shared key so that any instance can open state sealed by another:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">McpServer</span><span class="w"> </span><span class="n">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">McpServer</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">    </span><span class="p">.</span><span class="na">serverInfo</span><span class="p">(</span><span class="n">serverInfo</span><span class="p">)</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">    </span><span class="p">.</span><span class="na">feature</span><span class="p">(</span><span class="n">ToolsFeature</span><span class="p">.</span><span class="na">ofSync</span><span class="p">(</span><span class="n">tools</span><span class="p">))</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">    </span><span class="p">.</span><span class="na">requestStateCodec</span><span class="p">(</span><span class="n">HmacRequestStateCodec</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">        </span><span class="p">.</span><span class="na">key</span><span class="p">(</span><span class="n">sharedSecret</span><span class="p">)</span><span class="w"> </span><span class="c1">// byte[], at least 32 bytes recommended</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">        </span><span class="p">.</span><span class="na">ttl</span><span class="p">(</span><span class="n">Duration</span><span class="p">.</span><span class="na">ofMinutes</span><span class="p">(</span><span class="mi">5</span><span class="p">))</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">        </span><span class="p">.</span><span class="na">principalExtractor</span><span class="p">(</span><span class="n">transportContext</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="n">transportContext</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="s">"user"</span><span class="p">))</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">        </span><span class="p">.</span><span class="na">build</span><span class="p">())</span>
+</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span></code></pre></div>
+<p>The principal binding only applies when the transport puts an identity in the transport context; over STDIO
+the extractor above always returns <code>null</code>, so state is not bound to a user.</p>
+<p>Sealing bounds the replay window but does not make the state single-use. Where that matters, enforce it in your
+handler. To use another scheme, implement <code>RequestStateCodec</code>.</p>
+<p>Results of retried requests are marked as not cacheable.</p>
+<h2 id="change-notifications">Change Notifications<a class="headerlink" href="#change-notifications" title="Permanent link">&para;</a></h2>
+<p>Clients learn about catalog changes through <code>subscriptions/listen</code>, a long-lived stream that the server feeds
+from an <code>McpChangePublisher</code>. <code>McpChangeFeed</code> is a ready-made in-memory publisher; register it with
+<code>subscriptions(...)</code> and call <code>broadcast(...)</code> when something changes:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">McpChangeFeed</span><span class="w"> </span><span class="n">changes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">McpChangeFeed</span><span class="p">();</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">McpServer</span><span class="w"> </span><span class="n">server</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">McpServer</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">    </span><span class="p">.</span><span class="na">serverInfo</span><span class="p">(</span><span class="n">serverInfo</span><span class="p">)</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="p">.</span><span class="na">feature</span><span class="p">(</span><span class="n">ToolsFeature</span><span class="p">.</span><span class="na">ofSync</span><span class="p">(</span><span class="n">tools</span><span class="p">))</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">    </span><span class="p">.</span><span class="na">feature</span><span class="p">(</span><span class="n">ResourcesFeature</span><span class="p">.</span><span class="na">ofSync</span><span class="p">(</span><span class="n">resources</span><span class="p">))</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">    </span><span class="p">.</span><span class="na">subscriptions</span><span class="p">(</span><span class="n">changes</span><span class="p">)</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="c1">// Later, when the catalog changes:</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="n">changes</span><span class="p">.</span><span class="na">broadcast</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">ServerChange</span><span class="p">.</span><span class="na">ToolsListChanged</span><span class="p">());</span>
+</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="n">changes</span><span class="p">.</span><span class="na">broadcast</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">ServerChange</span><span class="p">.</span><span class="na">ResourceUpdated</span><span class="p">(</span><span class="s">"file:///config.json"</span><span class="p">));</span>
+</span></code></pre></div>
+<p>The change types are <code>ToolsListChanged</code>, <code>PromptsListChanged</code>, <code>ResourcesListChanged</code> and
+<code>ResourceUpdated(uri)</code>. Each is forwarded only if the matching feature is registered; <code>ResourceUpdated</code> also
+requires the resource repository's <code>supportsSubscribe()</code> to return <code>true</code>. Changes broadcast while no client is
+listening are dropped.</p>
+<p><code>McpChangeFeed</code> only reaches listeners connected to the same instance. With several instances, implement
+<code>McpChangePublisher</code> over a shared message bus so that every instance sees every change.</p>
+<h2 id="caching">Caching<a class="headerlink" href="#caching" title="Permanent link">&para;</a></h2>
+<p>The 2026-07-28 revision lets list results, <code>resources/read</code> results and <code>server/discover</code> carry caching
+hints: <code>ttlMs</code> and a <code>cacheScope</code> of <code>PUBLIC</code> or <code>PRIVATE</code>. By default the server sends <code>ttlMs: 0</code> with
+<code>PRIVATE</code>, meaning "do not cache".</p>
+<ul>
+<li>Set defaults for a feature with its full factory, for example
+  <code>PromptsFeature.ofSync(repository, jsonMapper, 60_000, CacheScope.PRIVATE)</code>.</li>
+<li>Override them per page through the <code>ttlMs</code> and <code>cacheScope</code> fields of <code>ToolsPage</code>, <code>ResourcesPage</code>,
+  <code>ResourceTemplatesPage</code> or <code>PromptsPage</code>. Every page of one listing must use the same <code>cacheScope</code>.</li>
+<li>Set hints for a resource read on the result itself, with <code>ReadResourceResult.builder(...).ttlMs(...)</code> and
+  <code>.cacheScope(...)</code>. The feature defaults apply to list results only.</li>
+<li>Set hints for <code>server/discover</code> with <code>McpServer.builder().discoverCache(ttlMs, cacheScope)</code>.</li>
+</ul>
+<p>Use <code>PUBLIC</code> only for results that contain nothing user-specific; a shared cache may serve them to any user.</p>
+<h2 id="custom-headers-sep-2243">Custom Headers (SEP-2243)<a class="headerlink" href="#custom-headers-sep-2243" title="Permanent link">&para;</a></h2>
+<p>A tool can ask clients to mirror selected arguments into HTTP headers, so that gateways and filters can route or
+authorize on them without parsing the body. Mark the argument in the input schema with <code>x-mcp-header</code>:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"object"</span><span class="p">,</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">"properties"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">    </span><span class="nt">"region"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"string"</span><span class="p">,</span><span class="w"> </span><span class="nt">"x-mcp-header"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Region"</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="p">}</span>
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>A client calling this tool over HTTP sends <code>Mcp-Param-Region</code> with the value of <code>region</code>. The tools feature
+checks the header against the argument and rejects a mismatch with error <code>-32020</code> (header mismatch, HTTP <code>400</code>)
+before input-schema validation. Annotations that are not valid are logged as a warning and not enforced;
+compliant clients drop such tools from their listing. Over STDIO there are no headers, and the check is skipped.</p>
+<h2 id="custom-features">Custom Features<a class="headerlink" href="#custom-features" title="Permanent link">&para;</a></h2>
+<p><code>McpFeature</code> is the extension point the built-in features use, and it is open to you. A feature declares the
+methods it serves, handles them, and can contribute capabilities and opt methods into multi round-trip
+requests:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kd">class</span> <span class="nc">EchoFeature</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">McpFeature</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="nd">@Override</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">Set</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="nf">methods</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">Set</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"example/echo"</span><span class="p">);</span>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">    </span><span class="nd">@Override</span>
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">Mono</span><span class="o">&lt;?</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">McpAsyncResponse</span><span class="o">&lt;?</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">Result</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="nf">handle</span><span class="p">(</span><span class="n">McpRequestContext</span><span class="w"> </span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="n">Object</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">        </span><span class="c1">// EchoResult is your own type implementing McpSchema.Result</span>
+</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">Mono</span><span class="p">.</span><span class="na">just</span><span class="p">(</span><span class="n">McpAsyncResponse</span><span class="p">.</span><span class="na">result</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">EchoResult</span><span class="p">(</span><span class="n">params</span><span class="p">)));</span>
+</span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a>
+</span><span id="__span-15-14"><a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a><span class="w">    </span><span class="nd">@Override</span>
+</span><span id="__span-15-15"><a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">capabilities</span><span class="p">(</span><span class="n">ServerCapabilities</span><span class="p">.</span><span class="na">Builder</span><span class="w"> </span><span class="n">builder</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-15-16"><a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a><span class="w">        </span><span class="c1">// Optional: advertise what this feature adds in server/discover</span>
+</span><span id="__span-15-17"><a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-15-18"><a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a>
+</span><span id="__span-15-19"><a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>Each method may be served by one feature only; <code>build()</code> fails on duplicates. <code>server/discover</code> and
+<code>subscriptions/listen</code> are provided by the server. A result must have a non-empty <code>resultType</code>; one without is
+answered with an internal error.</p>
+<p>Methods listed in <code>inputRequiredMethods()</code> may answer with an <code>InputRequiredResult</code>. On retry, the server opens
+and verifies their <code>requestState</code> before calling the handler, which receives the original, unsealed value.
+For methods <strong>not</strong> listed, the server does not touch <code>requestState</code>: a handler that reads it gets whatever the
+client sent, unverified. List every method that relies on <code>requestState</code>.</p>
+<h2 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Throw (or, in async code, signal) an <code>McpException</code> to answer with a JSON-RPC error. Its code, message and
+  data are sent to the client as given. <code>McpException.invalidParams(...)</code> covers the common case.</li>
+<li>Any other exception is treated as a bug: it is logged, and the client gets a generic <code>Internal error</code>, so
+  exception messages that may expose internals stay on the server.</li>
+<li>For tool failures the model should see and react to, return a <code>CallToolResult</code> with <code>isError(true)</code> instead
+  of throwing. See <a href="../server/#error-handling">Error Handling</a> for the distinction between the two tiers.</li>
+</ul>
+<h2 id="not-yet-supported">Not Yet Supported<a class="headerlink" href="#not-yet-supported" title="Permanent link">&para;</a></h2>
+<ul>
+<li>A modern client. Use the conformance suite or another SDK's client to exercise the server.</li>
+<li>Tasks.</li>
+<li>Logging, which the 2026-07-28 revision deprecates. The modern server never sends log messages.</li>
+<li>Spring WebMVC and WebFlux transports. Spring AI's transports target the classic server.</li>
+</ul>
+<p>For a larger working example, see the
+<a href="https://github.com/modelcontextprotocol/java-sdk/tree/main/conformance-tests/server-servlet-modern">modern conformance server</a>,
+which passes all required 2026-07-28 conformance scenarios. It covers the Servlet transport, tools, resources,
+prompts, completions, streaming, required capabilities, multi round-trip requests and change notifications.</p>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/modelcontextprotocol/java-sdk" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "navigation.path", "navigation.indexes", "toc.follow", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": ["latest-snapshot", "latest"], "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>
