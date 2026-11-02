@@ -49,7 +49,7 @@ nav:
   - Contributing:
     - Contributing Guide: contribute.md
     - Documentation: development.md
-  - API Reference: https://javadoc.io/doc/io.modelcontextprotocol.sdk/mcp-core/2.1.0
+  - API Reference: https://javadoc.io/doc/io.modelcontextprotocol.sdk/mcp/2.2.0-M2
 
 markdown_extensions:
   - admonition
