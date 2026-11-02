@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -39,6 +40,7 @@ import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
+import io.modelcontextprotocol.util.ToolsUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.catalina.LifecycleException;
@@ -55,6 +57,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 import reactor.test.scheduler.VirtualTimeScheduler;
@@ -205,8 +208,9 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	}
 
 	@Test
-	void listeningStreamHasStreamingHeaders() throws Exception {
-		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+	void listeningStreamSendsHeadersBeforeFirstEvent() throws Exception {
+		// Without keep-alive nothing is written, so only an early flush sends the headers
+		withTransportProvider(null, null);
 		var sessionId = initializeSession(httpClient);
 
 		var get = HttpRequest.newBuilder()
@@ -216,8 +220,10 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 			.GET()
 			.build();
 
-		var response = httpClient.send(get, HttpResponse.BodyHandlers.ofInputStream());
+		// Completes once the headers arrive, before any event
+		var response = httpClient.sendAsync(get, HttpResponse.BodyHandlers.ofInputStream()).get(5, TimeUnit.SECONDS);
 		try {
+			assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_OK);
 			assertSseHeaders(response);
 		}
 		finally {
@@ -226,17 +232,28 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	}
 
 	@Test
-	void toolCallSseResponseHasStreamingHeaders() throws Exception {
-		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
-			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
+	void toolCallSseResponseSendsHeadersBeforeResult() throws Exception {
+		mcpServerTransportProvider.closeGracefully().block();
+		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
+			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
+			.mcpEndpoint(MESSAGE_ENDPOINT)
+			// Without keep-alive nothing is written until the tool returns
+			.keepAliveInterval(null)
+			.sessionSweepInterval(null)
+			.build();
+
+		mcpServlet.setDelegate(mcpServerTransportProvider);
+
+		// Returns once the test completes toolResult
+		Sinks.One<McpSchema.CallToolResult> toolResult = Sinks.one();
+		prepareAsyncServerBuilder().capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
 			.tools(McpServerFeatures.AsyncToolSpecification.builder()
-				.tool(McpSchema.Tool.builder("echo", EMPTY_JSON_SCHEMA).description("returns immediately").build())
-				.callHandler((exchange,
-						request) -> Mono.just(McpSchema.CallToolResult.builder()
-							.content(List.of(McpSchema.TextContent.builder("ok").build()))
-							.isError(false)
-							.build()))
+				.tool(McpSchema.Tool.builder("slow", ToolsUtils.EMPTY_JSON_SCHEMA)
+					.description("returns when released")
+					.build())
+				.callHandler((exchange, request) -> toolResult.asMono())
 				.build())
+			.serverInfo("test-server", "1.0.0")
 			.build();
 		var sessionId = initializeSession(httpClient);
 
@@ -247,15 +264,27 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 			.header(HttpHeaders.MCP_SESSION_ID, sessionId)
 			.POST(HttpRequest.BodyPublishers
 				.ofString("{\"jsonrpc\":\"2.0\",\"id\":\"call-1\",\"method\":\"tools/call\","
-						+ "\"params\":{\"name\":\"echo\",\"arguments\":{}}}"))
+						+ "\"params\":{\"name\":\"slow\",\"arguments\":{}}}"))
 			.build();
 
-		var response = httpClient.send(post, HttpResponse.BodyHandlers.ofInputStream());
 		try {
-			assertSseHeaders(response);
+			// Completes once the headers arrive, before any event
+			var response = httpClient.sendAsync(post, HttpResponse.BodyHandlers.ofInputStream())
+				.get(5, TimeUnit.SECONDS);
+			try {
+				assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_OK);
+				assertSseHeaders(response);
+			}
+			finally {
+				response.body().close();
+			}
 		}
 		finally {
-			response.body().close();
+			// Release the Tomcat thread blocked in doPost until the tool returns
+			toolResult.tryEmitValue(McpSchema.CallToolResult.builder()
+				.content(List.of(McpSchema.TextContent.builder("done").build()))
+				.isError(false)
+				.build());
 		}
 	}
 
@@ -563,10 +592,6 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 			var sessionId = initializeSession(httpClient);
 			var clientStream = openListeningStream(httpClient, sessionId, null);
 			awaitClientStreamEstablished();
-			// "prep" the client so we can close the stream by sending data: the
-			// subscription
-			// in the clientStream is only present when the client has received data
-			awaitNotification(clientStream.events());
 			virtualTime.advanceTimeBy(SESSION_SWEEP_INTERVAL.multipliedBy(2));
 			assertThat(postNotification(httpClient, sessionId)).as("Session should be active when a stream is open")
 				.isEqualTo(HttpServletResponse.SC_ACCEPTED);
@@ -621,17 +646,22 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		try {
 			withTransportProvider(null, SESSION_SWEEP_INTERVAL);
 			var toolEmissionInterval = Duration.ofMillis(10);
+			var toolCalled = new AtomicBoolean();
 			prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 				.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
 				.tools(McpServerFeatures.AsyncToolSpecification.builder()
 					.tool(McpSchema.Tool.builder("hangs", EMPTY_JSON_SCHEMA).description("never returns").build())
-					.callHandler((exchange, request) -> Flux
-						.interval(toolEmissionInterval, toolEmissionInterval, Schedulers.newSingle("test-tool"))
-						.flatMap(tick -> exchange.loggingNotification(McpSchema.LoggingMessageNotification.builder()
-							.level(McpSchema.LoggingLevel.INFO)
-							.data("x".repeat(64 * 1024))
-							.build()))
-						.then(Mono.<McpSchema.CallToolResult>never()))
+					.callHandler((exchange, request) -> {
+						toolCalled.set(true);
+						// Keep writing: a disconnect is only noticed on write
+						return Flux
+							.interval(toolEmissionInterval, toolEmissionInterval, Schedulers.newSingle("test-tool"))
+							.flatMap(tick -> exchange.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+								.level(McpSchema.LoggingLevel.INFO)
+								.data("x".repeat(64 * 1024))
+								.build()))
+							.then(Mono.<McpSchema.CallToolResult>never());
+					})
 					.build())
 				.build();
 			var sessionId = initializeSession(httpClient);
@@ -640,18 +670,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 			// stream for as long as the call is in flight
 			var responseStream = postToolCall(httpClient, sessionId, "hangs");
 
-			await().atMost(Duration.ofSeconds(5))
-				.pollDelay(Duration.ZERO)
-				.pollInterval(Duration.ofMillis(10))
-				.untilAsserted(() -> {
-					// We do this in a loop for the wire-side of the connection - data has
-					// to be buffered then flushed
-
-					// Advance time so the tool emits some data
-					virtualTime.advanceTimeBy(toolEmissionInterval);
-					// Verify the data is received
-					assertThat(responseStream.events()).anyMatch(line -> line.contains("notifications/message"));
-				});
+			await().atMost(Duration.ofSeconds(5)).pollInterval(Duration.ofMillis(20)).untilTrue(toolCalled);
 			virtualTime.advanceTimeBy(SESSION_SWEEP_INTERVAL.multipliedBy(2));
 			assertThat(postNotification(httpClient, sessionId)).as("Session with POST stream is active")
 				.isEqualTo(HttpServletResponse.SC_ACCEPTED);
@@ -781,8 +800,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 			AtomicReference<InputStream> streamRef) {
 
 		void closeStream() {
-			// Close listening stream. We retry a few times in case the stream was not
-			// established on the first try
+			// streamRef is set asynchronously, once the headers arrive
 			await().pollDelay(Duration.ZERO).atMost(Duration.ofSeconds(1)).until(() -> {
 				var stream = streamRef.get();
 				if (stream != null) {

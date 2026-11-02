@@ -300,13 +300,13 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			return;
 		}
 
-		HttpServletResponseUtils.prepareSseResponse(response);
-
 		String sessionId = UUID.randomUUID().toString();
 		AsyncContext asyncContext = request.startAsync();
 		asyncContext.setTimeout(0);
 
+		response.setCharacterEncoding(UTF_8);
 		PrintWriter writer = response.getWriter();
+		HttpServletResponseUtils.prepareSseResponse(response);
 
 		// Create a new session transport
 		HttpServletMcpSessionTransport sessionTransport = new HttpServletMcpSessionTransport(sessionId, asyncContext,
