@@ -116,6 +116,16 @@ public class ModernConformanceServlet {
 			}
 			""";
 
+	private static final String X_MCP_HEADER_INPUT = """
+			{
+			  "type": "object",
+			  "properties": {
+			    "region": { "type": "string", "description": "mirrored into Mcp-Param-Region", "x-mcp-header": "Region" },
+			    "level": { "type": "integer", "description": "non-mirrored argument" }
+			  }
+			}
+			""";
+
 	private static final Pattern TEMPLATE_URI = Pattern.compile("test://template/(.+)/data");
 
 	private static final McpJsonMapper JSON = McpJsonDefaults.getMapper();
@@ -322,6 +332,15 @@ public class ModernConformanceServlet {
 			add(Tool.builder("json_schema_2020_12_tool", JSON, JSON_SCHEMA_2020_12_INPUT)
 				.description("Tool with JSON Schema 2020-12 features (SEP-1613, SEP-2106)")
 				.build(), respond((ctx, req) -> text("ok")));
+
+			// SEP-2243 custom headers: the scenario exercises the first tool with an
+			// x-mcp-header annotation, so this must stay the only annotated tool.
+			add(Tool.builder("test_x_mcp_header", JSON, X_MCP_HEADER_INPUT)
+				.description("Tests SEP-2243 Mcp-Param-* server-side validation")
+				.build(), respond((ctx, req) -> {
+					Object region = req.arguments() != null ? req.arguments().get("region") : null;
+					return text("region=" + (region != null ? region : "<none>"));
+				}));
 
 			// SEP-2575 diagnostic tools
 			add("test_missing_capability", "Test tool requiring sampling", SAMPLING,
