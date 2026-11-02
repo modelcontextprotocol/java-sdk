@@ -120,10 +120,9 @@ git checkout -b feature/your-feature-name
 
 ## Submitting Changes
 
-Please don't submit pull requests:
+**Before submitting a PR, please first open an issue and wait until it is assigned to you.**
 
-- With GitHub accounts managed by autonomous AI bots
-- For already assigned issues (as the assignee is or plans to work on it)
+Please don't submit issues or pull requests with GitHub accounts managed by autonomous AI bots.
 
 When submitting changes:
 
