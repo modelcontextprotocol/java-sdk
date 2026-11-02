@@ -24,6 +24,11 @@ The MCP Server is a foundational component in the Model Context Protocol (MCP) a
     Spring-specific transport implementations (`mcp-spring-webflux`, `mcp-spring-webmvc`) are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and are no longer shipped by this SDK.
     See the [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) documentation for Spring-based server setup.
 
+!!! note "2026-07-28 specification"
+    This page covers the classic server, which implements the 2025-11-25 specification and earlier revisions.
+    A stateless server for the 2026-07-28 revision is available as a preview; see
+    [MCP Server (2026-07-28)](server-modern.md).
+
 The server supports both synchronous and asynchronous APIs, allowing for flexible integration in different application contexts.
 
 === "Sync API"
