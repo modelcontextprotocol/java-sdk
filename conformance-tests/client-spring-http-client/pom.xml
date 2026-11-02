@@ -22,7 +22,7 @@
 
 	<properties>
 		<java.version>17</java.version>
-		<spring-boot.version>4.1.1</spring-boot.version>
+		<spring-boot.version>4.1.2</spring-boot.version>
 		<spring-ai.version>2.0.2</spring-ai.version>
 		<maven.deploy.skip>true</maven.deploy.skip>
 	</properties>
