@@ -425,14 +425,27 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
+		PrintWriter writer;
+		AsyncContext asyncContext;
 		try {
-			HttpServletResponseUtils.prepareSseResponse(response);
-
-			AsyncContext asyncContext = request.startAsync();
+			response.setCharacterEncoding(UTF_8);
+			writer = response.getWriter();
+			asyncContext = request.startAsync();
 			asyncContext.setTimeout(0);
+		}
+		catch (Exception e) {
+			// Nothing has been written yet, so an error status can still be sent
+			logger.error("Failed to start the GET stream for session {}: {}", sessionId, e.getMessage());
+			response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+			return;
+		}
 
-			HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
-					sessionId, asyncContext, response.getWriter());
+		HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
+				sessionId, asyncContext, writer);
+		try {
+			// Send headers as soon as the stream is open: even if the server doesn't send
+			// data, the client will receive the headers
+			HttpServletResponseUtils.prepareSseResponse(response);
 
 			// Replay the messages the client missed while its stream was broken
 			String lastEventId = request.getHeader(HttpHeaders.LAST_EVENT_ID);
@@ -450,9 +463,14 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 			registerAsyncLifecycle(asyncContext, sessionId, listeningStream::releaseTransport);
 		}
+		catch (IOException e) {
+			// Only flushing the headers throws IOException
+			logger.debug("Failed to send the GET stream headers for session {}: {}", sessionId, e.getMessage());
+			sessionTransport.close();
+		}
 		catch (Exception e) {
 			logger.error("Failed to handle GET request for session {}: {}", sessionId, e.getMessage());
-			response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+			sessionTransport.close();
 		}
 	}
 
@@ -598,26 +616,47 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
 				// For streaming responses, we need to return SSE
-				HttpServletResponseUtils.prepareSseResponse(response);
-
-				AsyncContext asyncContext = request.startAsync();
-				asyncContext.setTimeout(0);
+				PrintWriter writer;
+				AsyncContext asyncContext;
+				try {
+					response.setCharacterEncoding(UTF_8);
+					writer = response.getWriter();
+					asyncContext = request.startAsync();
+					asyncContext.setTimeout(0);
+				}
+				catch (Exception e) {
+					// Nothing has been written yet, so an error status can still be sent
+					logger.error("Failed to start the request stream for session {}: {}", sessionId, e.getMessage());
+					response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+					return;
+				}
 
 				HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
-						sessionId, asyncContext, response.getWriter());
-
-				// The listener is given the stream rather than its transport, so that the
-				// end of the connection detaches the stream from the session instead of
-				// only dropping the socket: a stream outliving its connection keeps the
-				// session looking busy and spares it from the sweeper
-				McpStreamableServerSession.McpStreamableServerSessionStream responseStream = session
-					.responseStream(sessionTransport);
-				registerAsyncLifecycle(asyncContext, sessionId, responseStream::releaseTransport);
-
+						sessionId, asyncContext, writer);
 				try {
+					// Send headers as soon as the stream is open: even if the server
+					// doesn't send
+					// data, the client will receive the headers
+					HttpServletResponseUtils.prepareSseResponse(response);
+
+					// The listener is given the stream rather than its transport, so that
+					// the end of the connection detaches the stream from the session
+					// instead of only dropping the socket: a stream outliving its
+					// connection keeps the session looking busy and spares it from the
+					// sweeper
+					McpStreamableServerSession.McpStreamableServerSessionStream responseStream = session
+						.responseStream(sessionTransport);
+					registerAsyncLifecycle(asyncContext, sessionId, responseStream::releaseTransport);
+
 					responseStream.handle(jsonrpcRequest)
 						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 						.block();
+				}
+				catch (IOException e) {
+					// Only flushing the headers throws IOException
+					logger.debug("Failed to send the request stream headers for session {}: {}", sessionId,
+							e.getMessage());
+					sessionTransport.close();
 				}
 				catch (Exception e) {
 					logger.error("Failed to handle request stream: {}", e.getMessage());
