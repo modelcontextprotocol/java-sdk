@@ -225,6 +225,13 @@ public class McpAsyncServerExchange {
 	 * @return A Mono that emits the list of roots result containing
 	 */
 	public Mono<McpSchema.ListRootsResult> listRoots(String cursor) {
+		if (this.clientCapabilities == null) {
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
+		}
+		if (this.clientCapabilities.roots() == null) {
+			return Mono.error(new IllegalStateException("Client must be configured with roots capabilities"));
+		}
 		return this.session.sendRequest(McpSchema.METHOD_ROOTS_LIST, new McpSchema.PaginatedRequest(cursor),
 				LIST_ROOTS_RESULT_TYPE_REF);
 	}
