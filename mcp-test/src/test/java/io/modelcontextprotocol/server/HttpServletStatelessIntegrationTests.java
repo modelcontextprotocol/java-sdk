@@ -50,8 +50,8 @@ import net.javacrumbs.jsonunit.core.Option;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -80,9 +80,9 @@ class HttpServletStatelessIntegrationTests {
 
 	private static final int MAX_REQUEST_SIZE = 2048;
 
-	private static Tomcat tomcat;
+	private Tomcat tomcat;
 
-	private static HttpServletStatelessServerTransport mcpStatelessServerTransport;
+	private HttpServletStatelessServerTransport mcpStatelessServerTransport;
 
 	private final McpClient.SyncSpec clientBuilder = McpClient
 		.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
@@ -91,8 +91,8 @@ class HttpServletStatelessIntegrationTests {
 		.initializationTimeout(Duration.ofHours(10))
 		.requestTimeout(Duration.ofHours(10));
 
-	@BeforeAll
-	public static void beforeAll() {
+	@BeforeEach
+	public void before() {
 		mcpStatelessServerTransport = HttpServletStatelessServerTransport.builder()
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
 			.maxRequestSize(MAX_REQUEST_SIZE)
@@ -108,8 +108,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@AfterAll
-	public static void afterAll() {
+	@AfterEach
+	public void after() {
 		if (mcpStatelessServerTransport != null) {
 			mcpStatelessServerTransport.closeGracefully().block();
 		}
