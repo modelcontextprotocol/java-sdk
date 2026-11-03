@@ -247,7 +247,8 @@ public interface McpServer {
 			validateAsyncToolSchemas(jsonSchemaValidator, this.tools);
 
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs,
+					listCacheOptions);
 		}
 
 	}
@@ -276,7 +277,8 @@ public interface McpServer {
 			validateAsyncToolSchemas(jsonSchemaValidator, this.tools);
 
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs,
+					listCacheOptions);
 		}
 
 	}
@@ -301,6 +303,8 @@ public interface McpServer {
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
 		boolean validateToolInputs = true;
+
+		McpListCacheOptions listCacheOptions = McpListCacheOptions.NONE;
 
 		final List<McpAsyncListFilter<McpSchema.Tool>> toolFilters = new ArrayList<>();
 
@@ -440,6 +444,26 @@ public interface McpServer {
 		 */
 		public AsyncSpecification<S> validateToolInputs(boolean validate) {
 			this.validateToolInputs = validate;
+			return this;
+		}
+
+		/**
+		 * The caching hint attached to {@code tools/list}, {@code prompts/list},
+		 * {@code resources/list} and {@code resources/templates/list} responses
+		 * (SEP-2549). Listings are not cached by default.
+		 * <p>
+		 * Keep the scope {@code private} whenever a listing varies per caller, which any
+		 * registered list filter makes true: with {@code public} a shared cache may serve
+		 * one principal's filtered listing to another.
+		 * @param ttl how long a client may reuse a listing before re-fetching it. MUST
+		 * NOT be null or negative.
+		 * @param cacheScope whether a shared cache may serve the listing to another
+		 * principal. MUST NOT be null.
+		 * @return This builder instance for method chaining
+		 * @see McpListCacheOptions
+		 */
+		public AsyncSpecification<S> listCache(Duration ttl, McpSchema.CacheScope cacheScope) {
+			this.listCacheOptions = McpListCacheOptions.of(ttl, cacheScope);
 			return this;
 		}
 
@@ -881,7 +905,7 @@ public interface McpServer {
 
 			var asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
-					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs, listCacheOptions);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -915,7 +939,7 @@ public interface McpServer {
 
 			var asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					this.uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs, listCacheOptions);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -939,6 +963,8 @@ public interface McpServer {
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
 		boolean validateToolInputs = true;
+
+		McpListCacheOptions listCacheOptions = McpListCacheOptions.NONE;
 
 		final List<McpSyncListFilter<McpSchema.Tool>> toolFilters = new ArrayList<>();
 
@@ -1082,6 +1108,26 @@ public interface McpServer {
 		 */
 		public SyncSpecification<S> validateToolInputs(boolean validate) {
 			this.validateToolInputs = validate;
+			return this;
+		}
+
+		/**
+		 * The caching hint attached to {@code tools/list}, {@code prompts/list},
+		 * {@code resources/list} and {@code resources/templates/list} responses
+		 * (SEP-2549). Listings are not cached by default.
+		 * <p>
+		 * Keep the scope {@code private} whenever a listing varies per caller, which any
+		 * registered list filter makes true: with {@code public} a shared cache may serve
+		 * one principal's filtered listing to another.
+		 * @param ttl how long a client may reuse a listing before re-fetching it. MUST
+		 * NOT be null or negative.
+		 * @param cacheScope whether a shared cache may serve the listing to another
+		 * principal. MUST NOT be null.
+		 * @return This builder instance for method chaining
+		 * @see McpListCacheOptions
+		 */
+		public SyncSpecification<S> listCache(Duration ttl, McpSchema.CacheScope cacheScope) {
+			this.listCacheOptions = McpListCacheOptions.of(ttl, cacheScope);
 			return this;
 		}
 
@@ -1522,6 +1568,8 @@ public interface McpServer {
 
 		boolean validateToolInputs = true;
 
+		McpListCacheOptions listCacheOptions = McpListCacheOptions.NONE;
+
 		final List<McpAsyncListFilter<McpSchema.Tool>> toolFilters = new ArrayList<>();
 
 		/**
@@ -1661,6 +1709,26 @@ public interface McpServer {
 		 */
 		public StatelessAsyncSpecification validateToolInputs(boolean validate) {
 			this.validateToolInputs = validate;
+			return this;
+		}
+
+		/**
+		 * The caching hint attached to {@code tools/list}, {@code prompts/list},
+		 * {@code resources/list} and {@code resources/templates/list} responses
+		 * (SEP-2549). Listings are not cached by default.
+		 * <p>
+		 * Keep the scope {@code private} whenever a listing varies per caller, which any
+		 * registered list filter makes true: with {@code public} a shared cache may serve
+		 * one principal's filtered listing to another.
+		 * @param ttl how long a client may reuse a listing before re-fetching it. MUST
+		 * NOT be null or negative.
+		 * @param cacheScope whether a shared cache may serve the listing to another
+		 * principal. MUST NOT be null.
+		 * @return This builder instance for method chaining
+		 * @see McpListCacheOptions
+		 */
+		public StatelessAsyncSpecification listCache(Duration ttl, McpSchema.CacheScope cacheScope) {
+			this.listCacheOptions = McpListCacheOptions.of(ttl, cacheScope);
 			return this;
 		}
 
@@ -2032,7 +2100,8 @@ public interface McpServer {
 			validateStatelessAsyncToolSchemas(jsonSchemaValidator, this.tools);
 
 			return new McpStatelessAsyncServer(transport, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs,
+					listCacheOptions);
 		}
 
 	}
@@ -2058,6 +2127,8 @@ public interface McpServer {
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
 		boolean validateToolInputs = true;
+
+		McpListCacheOptions listCacheOptions = McpListCacheOptions.NONE;
 
 		final List<McpSyncListFilter<McpSchema.Tool>> toolFilters = new ArrayList<>();
 
@@ -2198,6 +2269,26 @@ public interface McpServer {
 		 */
 		public StatelessSyncSpecification validateToolInputs(boolean validate) {
 			this.validateToolInputs = validate;
+			return this;
+		}
+
+		/**
+		 * The caching hint attached to {@code tools/list}, {@code prompts/list},
+		 * {@code resources/list} and {@code resources/templates/list} responses
+		 * (SEP-2549). Listings are not cached by default.
+		 * <p>
+		 * Keep the scope {@code private} whenever a listing varies per caller, which any
+		 * registered list filter makes true: with {@code public} a shared cache may serve
+		 * one principal's filtered listing to another.
+		 * @param ttl how long a client may reuse a listing before re-fetching it. MUST
+		 * NOT be null or negative.
+		 * @param cacheScope whether a shared cache may serve the listing to another
+		 * principal. MUST NOT be null.
+		 * @return This builder instance for method chaining
+		 * @see McpListCacheOptions
+		 */
+		public StatelessSyncSpecification listCache(Duration ttl, McpSchema.CacheScope cacheScope) {
+			this.listCacheOptions = McpListCacheOptions.of(ttl, cacheScope);
 			return this;
 		}
 
@@ -2589,7 +2680,7 @@ public interface McpServer {
 
 			var asyncServer = new McpStatelessAsyncServer(transport,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
-					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs, listCacheOptions);
 			return new McpStatelessSyncServer(asyncServer, this.immediateExecution);
 		}
 
