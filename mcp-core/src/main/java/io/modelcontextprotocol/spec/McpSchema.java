@@ -4840,7 +4840,7 @@ public final class McpSchema {
 		}
 
 		@Override
-		@JsonProperty("mode")
+		@JsonIgnore
 		public String mode() {
 			return MODE;
 		}
@@ -4966,7 +4966,7 @@ public final class McpSchema {
 		}
 
 		@Override
-		@JsonProperty("mode")
+		@JsonIgnore
 		public String mode() {
 			return MODE;
 		}
