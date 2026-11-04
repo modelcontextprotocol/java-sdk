@@ -5,6 +5,8 @@
 package io.modelcontextprotocol.spec;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -65,6 +67,33 @@ class McpClientSessionTests {
 			assertThat(request.params()).isEqualTo(testParam);
 			assertThat(response).isEqualTo(responseData);
 		}).verifyComplete();
+
+		session.close();
+	}
+
+	@Test
+	void testResubscribedRequestUsesNewRequestId() {
+		List<Object> sentRequestIds = new ArrayList<>();
+		var transport = new MockMcpClientTransport((t, message) -> {
+			if (message instanceof McpSchema.JSONRPCRequest request) {
+				sentRequestIds.add(request.id());
+				// Fail the first attempt, answer the retry
+				McpSchema.JSONRPCResponse response = sentRequestIds.size() == 1
+						? McpSchema.JSONRPCResponse.error(request.id(),
+								new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+										"Temporary failure"))
+						: McpSchema.JSONRPCResponse.result(request.id(), "test response");
+				t.simulateIncomingMessage(response);
+			}
+		});
+		var session = new McpClientSession(TIMEOUT, transport, Map.of(), Map.of(), Function.identity());
+
+		StepVerifier.create(session.sendRequest(TEST_METHOD, "test", responseType).retry(1))
+			.expectNext("test response")
+			.verifyComplete();
+
+		// JSON-RPC request ids must not be reused within a session
+		assertThat(sentRequestIds).hasSize(2).doesNotHaveDuplicates();
 
 		session.close();
 	}
