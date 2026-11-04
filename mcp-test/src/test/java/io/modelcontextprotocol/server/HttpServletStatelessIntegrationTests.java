@@ -934,7 +934,7 @@ class HttpServletStatelessIntegrationTests {
 		var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
 
 		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
-		assertThatJson(response.body()).inPath("message")
+		assertThatJson(response.body()).inPath("error.message")
 			.isEqualTo("Unsupported Media Type: Content-Type must be application/json");
 		assertThat(toolCalled).isFalse();
 	}
@@ -956,7 +956,9 @@ class HttpServletStatelessIntegrationTests {
 		var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
 
 		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_BAD_REQUEST);
-		assertThatJson(response.body()).inPath("message").isEqualTo("Invalid message format");
+		assertThatJson(response.body()).isEqualTo("""
+				{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid message format"}}
+				""");
 	}
 
 	private double evaluateExpression(String expression) {

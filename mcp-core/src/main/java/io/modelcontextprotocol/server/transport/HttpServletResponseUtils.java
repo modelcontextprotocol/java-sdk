@@ -5,7 +5,10 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
@@ -18,6 +21,20 @@ final class HttpServletResponseUtils {
 	private static final String TEXT_EVENT_STREAM = "text/event-stream";
 
 	private HttpServletResponseUtils() {
+	}
+
+	/**
+	 * Writes a protocol response rather than serializing an exception as a Java bean.
+	 */
+	static void writeJsonResponse(HttpServletResponse response, int httpCode, McpJsonMapper jsonMapper,
+			McpSchema.JSONRPCResponse message) throws IOException {
+		String json = jsonMapper.writeValueAsString(message);
+		response.setContentType("application/json");
+		response.setCharacterEncoding("UTF-8");
+		response.setStatus(httpCode);
+		PrintWriter writer = response.getWriter();
+		writer.write(json);
+		writer.flush();
 	}
 
 	/**

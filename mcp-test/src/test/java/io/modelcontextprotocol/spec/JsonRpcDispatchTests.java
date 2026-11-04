@@ -5,7 +5,10 @@
 package io.modelcontextprotocol.spec;
 
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.util.Map;
@@ -13,6 +16,8 @@ import java.util.Map;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Verifies that {@link McpSchema#deserializeJsonRpcMessage} dispatches to the correct
@@ -95,6 +100,37 @@ class JsonRpcDispatchTests {
 		@SuppressWarnings("unchecked")
 		Map<String, Object> args = (Map<String, Object>) call.arguments();
 		assertThat(((Number) args.get("x")).intValue()).isEqualTo(42);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "", ",\"futureField\":true" })
+	void errorWithoutIdRoundTrips(String extraField) throws IOException {
+		String json = """
+				{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request"}%s}
+				""".formatted(extraField);
+		var response = (McpSchema.JSONRPCResponse) McpSchema.deserializeJsonRpcMessage(mapper, json);
+		assertThat(response.id()).isNull();
+		assertThatJson(mapper.writeValueAsString(response)).isEqualTo("""
+				{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request"}}
+				""");
+	}
+
+	@Test
+	void resultStillRequiresId() {
+		assertThatIllegalArgumentException().isThrownBy(() -> McpSchema.JSONRPCResponse.result(null, Map.of()));
+		assertThatThrownBy(() -> McpSchema.deserializeJsonRpcMessage(mapper, """
+				{"jsonrpc":"2.0","result":{}}
+				""")).isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void errorStillRequiresValidIdTypeAndExclusivePayload() {
+		var error = new McpSchema.JSONRPCResponse.JSONRPCError(-32600, "Invalid request");
+		assertThatIllegalArgumentException().isThrownBy(() -> McpSchema.JSONRPCResponse.error(true, error));
+		assertThatIllegalArgumentException().isThrownBy(() -> McpSchema.JSONRPCResponse.error(1.5, error));
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> new McpSchema.JSONRPCResponse("2.0", null, Map.of(), error));
+		assertThatIllegalArgumentException().isThrownBy(() -> McpSchema.JSONRPCResponse.error(null, null));
 	}
 
 }
