@@ -146,6 +146,15 @@ ServerParameters params = ServerParameters.builder("npx")
 McpTransport transport = new StdioClientTransport(params, McpJsonDefaults.getMapper());
 ```
 
+On `closeGracefully()`, the transport asks the server process to terminate and waits up to `processTerminationTimeout` (10 seconds by default) for it to exit before destroying it forcibly:
+
+```java
+ServerParameters params = ServerParameters.builder("npx")
+    .args("-y", "@modelcontextprotocol/server-everything", "dir")
+    .processTerminationTimeout(Duration.ofSeconds(5))
+    .build();
+```
+
 ### Streamable HTTP
 
 === "Streamable HttpClient"
