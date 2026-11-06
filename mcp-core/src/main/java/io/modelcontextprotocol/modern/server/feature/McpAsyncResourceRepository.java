@@ -35,10 +35,28 @@ public interface McpAsyncResourceRepository {
 	Mono<McpAsyncResource> find(McpRequestContext ctx, String uri);
 
 	/**
+	 * The resource template whose {@code uriTemplate} is exactly this string, or empty if
+	 * there is none. Only consulted when {@link #supportsCompletion()} is {@code true}.
+	 */
+	default Mono<McpAsyncResourceTemplate> findTemplate(McpRequestContext ctx, String uriTemplate) {
+		return Mono.empty();
+	}
+
+	/**
 	 * Whether {@code resources/updated} is reported for individual resources, advertised
 	 * as {@code resources.subscribe} when {@code subscriptions/listen} is registered.
 	 */
 	default boolean supportsSubscribe() {
+		return false;
+	}
+
+	/**
+	 * Whether template variables are completed through
+	 * {@link McpAsyncResourceTemplate#completionHandler()} of the template
+	 * {@link #findTemplate} returns, which serves {@code ref/resource} in
+	 * {@code completion/complete} and advertises {@code completions}.
+	 */
+	default boolean supportsCompletion() {
 		return false;
 	}
 

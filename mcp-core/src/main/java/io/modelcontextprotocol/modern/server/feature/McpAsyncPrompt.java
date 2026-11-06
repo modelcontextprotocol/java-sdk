@@ -33,18 +33,22 @@ public final class McpAsyncPrompt {
 
 	private final Handler handler;
 
-	private McpAsyncPrompt(Prompt definition, ClientCapabilities requiredCapabilities, Handler handler) {
+	private final McpAsyncCompletionHandler completionHandler;
+
+	private McpAsyncPrompt(Prompt definition, ClientCapabilities requiredCapabilities, Handler handler,
+			McpAsyncCompletionHandler completionHandler) {
 		Assert.notNull(definition, "definition must not be null");
 		Assert.notNull(requiredCapabilities, "requiredCapabilities must not be null");
 		Assert.notNull(handler, "handler must not be null");
 		this.definition = definition;
 		this.requiredCapabilities = requiredCapabilities;
 		this.handler = handler;
+		this.completionHandler = completionHandler;
 	}
 
 	/** A prompt that requires no client capabilities. */
 	public static McpAsyncPrompt of(Prompt definition, Handler handler) {
-		return new McpAsyncPrompt(definition, ClientCapabilities.NONE, handler);
+		return new McpAsyncPrompt(definition, ClientCapabilities.NONE, handler, null);
 	}
 
 	/**
@@ -53,7 +57,17 @@ public final class McpAsyncPrompt {
 	 * handler.
 	 */
 	public static McpAsyncPrompt of(Prompt definition, ClientCapabilities requiredCapabilities, Handler handler) {
-		return new McpAsyncPrompt(definition, requiredCapabilities, handler);
+		return new McpAsyncPrompt(definition, requiredCapabilities, handler, null);
+	}
+
+	/**
+	 * This prompt with its arguments completed by {@code completionHandler}, when its
+	 * repository {@link McpAsyncPromptRepository#supportsCompletion() supports
+	 * completion}.
+	 */
+	public McpAsyncPrompt withCompletionHandler(McpAsyncCompletionHandler completionHandler) {
+		Assert.notNull(completionHandler, "completionHandler must not be null");
+		return new McpAsyncPrompt(this.definition, this.requiredCapabilities, this.handler, completionHandler);
 	}
 
 	public Prompt definition() {
@@ -66,6 +80,13 @@ public final class McpAsyncPrompt {
 
 	public Handler handler() {
 		return this.handler;
+	}
+
+	/**
+	 * The handler completing this prompt's arguments, or {@code null} if there is none.
+	 */
+	public McpAsyncCompletionHandler completionHandler() {
+		return this.completionHandler;
 	}
 
 	/** Answers a {@code prompts/get} for this prompt. */

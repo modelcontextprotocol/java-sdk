@@ -230,10 +230,10 @@ provides one feature per primitive, each backed by a **repository** you implemen
 | `ToolsFeature` | `tools/list`, `tools/call` | `McpSyncToolRepository` | `McpAsyncToolRepository` |
 | `ResourcesFeature` | `resources/list`, `resources/templates/list`, `resources/read` | `McpSyncResourceRepository` | `McpAsyncResourceRepository` |
 | `PromptsFeature` | `prompts/list`, `prompts/get` | `McpSyncPromptRepository` | `McpAsyncPromptRepository` |
-| `CompletionsFeature` | `completion/complete` | `McpSyncCompletionRepository` | `McpAsyncCompletionRepository` |
 
 Create a feature with `ofSync(repository)` or `ofAsync(repository)`. Register only the features you need; the
-server advertises a capability only when its feature is registered.
+server advertises a capability only when its feature is registered. `completion/complete` has no feature of its
+own: the prompts and resources features answer it for their own references, see [Completions](#completions).
 
 Every repository method receives the [`McpRequestContext`](#request-context), so a repository can return a
 different catalog per tenant or user. Two rules apply to `list`:
@@ -327,7 +327,9 @@ class FileResources implements McpSyncResourceRepository {
 }
 ```
 
-`listTemplates` and `supportsSubscribe` have defaults: no templates, and no subscriptions. Returning `true`
+`listTemplates`, `findTemplate`, `supportsSubscribe` and `supportsCompletion` have defaults: no templates, no
+subscriptions and no completion. `findTemplate` is only needed to [complete](#completions) template variables.
+Returning `true`
 from `supportsSubscribe` advertises `resources.subscribe` only when the server also has a change publisher
 registered with `subscriptions(...)`, because resource updates are only delivered over `subscriptions/listen`.
 
@@ -352,12 +354,42 @@ McpSyncPrompt review = McpSyncPrompt.of(
 
 ### Completions
 
-A completion repository is a single function from a `CompleteRequest` to a `CompleteResult`:
+Completion suggests values for a prompt argument or a resource template variable. The completion handler
+belongs to the prompt or template it completes:
 
 ```java
-CompletionsFeature completions = CompletionsFeature.ofSync((ctx, request) ->
-        CompleteResult.of(new CompleteResult.Completion(List.of("python", "java", "javascript"))));
+McpSyncPrompt review = McpSyncPrompt.of(definition, handler)
+    .withCompletionHandler((ctx, request) -> CompleteResult.of(new CompleteResult.Completion(
+            languages.stream().filter(l -> l.startsWith(request.argument().value())).toList())));
+
+McpSyncResourceTemplate logs = McpSyncResourceTemplate.of(ResourceTemplate.builder("file:///logs/{date}", "Daily log").build())
+    .withCompletionHandler((ctx, request) -> CompleteResult.of(new CompleteResult.Completion(logDates())));
 ```
+
+A prompt repository returns such a prompt from `find`. A resource repository returns such a template from
+`findTemplate(ctx, uriTemplate)`, which is looked up by the exact `uriTemplate` string the client sends in a
+`ref/resource` reference. Either repository opts in by returning `true` from `supportsCompletion()`:
+
+```java
+class Prompts implements McpSyncPromptRepository {
+    // list, find ...
+
+    @Override
+    public boolean supportsCompletion() {
+        return true;
+    }
+}
+```
+
+The server then serves `completion/complete` and advertises `completions`, sending `ref/prompt` requests to the
+prompts feature and `ref/resource` requests to the resources feature. A [custom feature](#custom-features)
+completes its own reference types the same way, by returning them from `McpFeature.completionRefTypes()` and
+answering `McpFeature.complete(ctx, request)`. Two features completing the same reference type fail the build.
+
+A reference type no feature completes, an unknown prompt or template, or an argument the prompt or template does not declare, is answered with an
+invalid-params error. A prompt or template without a completion handler completes to no values. Arguments already
+filled in by the user arrive in `request.context()`. At most 100 values are sent; the rest are cut and
+`hasMore` is set.
 
 ### Sync and Async
 

@@ -37,6 +37,10 @@ final class SyncAdapters {
 		return ctx.isBlocking() ? mono : mono.subscribeOn(Schedulers.boundedElastic());
 	}
 
+	static McpAsyncCompletionHandler completion(McpSyncCompletionHandler handler) {
+		return (ctx, request) -> call(ctx, () -> handler.complete(ctx, request));
+	}
+
 	private static <O> McpAsyncResponse<O> toAsync(McpRequestContext ctx, McpSyncResponse<O> response) {
 		if (response instanceof McpSyncResponse.Result<O> result) {
 			return McpAsyncResponse.result(result.result());

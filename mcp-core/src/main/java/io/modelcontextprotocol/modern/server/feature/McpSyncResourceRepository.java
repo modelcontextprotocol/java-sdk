@@ -24,8 +24,18 @@ public interface McpSyncResourceRepository {
 	/** See {@link McpAsyncResourceRepository#find}. */
 	McpSyncResource find(McpRequestContext ctx, String uri);
 
+	/** See {@link McpAsyncResourceRepository#findTemplate}. */
+	default McpSyncResourceTemplate findTemplate(McpRequestContext ctx, String uriTemplate) {
+		return null;
+	}
+
 	/** See {@link McpAsyncResourceRepository#supportsSubscribe()}. */
 	default boolean supportsSubscribe() {
+		return false;
+	}
+
+	/** See {@link McpAsyncResourceRepository#supportsCompletion()}. */
+	default boolean supportsCompletion() {
 		return false;
 	}
 

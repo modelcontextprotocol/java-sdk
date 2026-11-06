@@ -9,11 +9,12 @@ import io.modelcontextprotocol.modern.McpSchema.CompleteResult;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 
 /**
- * The blocking counterpart of {@link McpAsyncCompletionRepository}.
+ * The blocking counterpart of {@link McpAsyncCompletionHandler}.
  *
  * @author Dariusz Jędrzejczyk
  */
-public interface McpSyncCompletionRepository {
+@FunctionalInterface
+public interface McpSyncCompletionHandler {
 
 	CompleteResult complete(McpRequestContext ctx, CompleteRequest request);
 

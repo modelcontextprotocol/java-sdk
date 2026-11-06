@@ -13,11 +13,15 @@ import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.modern.McpException;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
+import io.modelcontextprotocol.modern.McpSchema.CompleteRequest;
+import io.modelcontextprotocol.modern.McpSchema.CompleteResult;
+import io.modelcontextprotocol.modern.McpSchema.CompleteResult.Completion;
 import io.modelcontextprotocol.modern.McpSchema.GetPromptOutcome;
 import io.modelcontextprotocol.modern.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.modern.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.modern.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.modern.McpSchema.PromptArgument;
+import io.modelcontextprotocol.modern.McpSchema.PromptReference;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.modern.server.McpFeature;
@@ -115,6 +119,28 @@ public final class PromptsFeature implements McpFeature {
 	}
 
 	@Override
+	public Set<String> completionRefTypes() {
+		return this.repository.supportsCompletion() ? Set.of(PromptReference.TYPE) : Set.of();
+	}
+
+	@Override
+	public Mono<CompleteResult> complete(McpRequestContext ctx, CompleteRequest request) {
+		String name = ((PromptReference) request.ref()).name();
+		String argument = request.argument().name();
+		return this.repository.find(ctx, name)
+			.switchIfEmpty(Mono.error(() -> McpException.invalidParams("Unknown prompt: " + name)))
+			.flatMap(prompt -> {
+				List<PromptArgument> declared = prompt.definition().arguments();
+				if (declared == null || declared.stream().noneMatch(a -> a.name().equals(argument))) {
+					return Mono
+						.error(McpException.invalidParams("Unknown argument: " + argument + " in prompt: " + name));
+				}
+				return prompt.completionHandler() != null ? prompt.completionHandler().complete(ctx, request)
+						: Mono.just(CompleteResult.of(new Completion(List.of())));
+			});
+	}
+
+	@Override
 	public Set<String> inputRequiredMethods() {
 		return Set.of(McpSchema.METHOD_PROMPTS_GET);
 	}
@@ -138,12 +164,19 @@ public final class PromptsFeature implements McpFeature {
 			public Mono<McpAsyncPrompt> find(McpRequestContext ctx, String name) {
 				return SyncAdapters.call(ctx, () -> repository.find(ctx, name)).map(PromptsFeature::adapt);
 			}
+
+			@Override
+			public boolean supportsCompletion() {
+				return repository.supportsCompletion();
+			}
 		};
 	}
 
 	private static McpAsyncPrompt adapt(McpSyncPrompt prompt) {
-		return McpAsyncPrompt.of(prompt.definition(), prompt.requiredCapabilities(),
+		McpAsyncPrompt adapted = McpAsyncPrompt.of(prompt.definition(), prompt.requiredCapabilities(),
 				(ctx, request) -> SyncAdapters.respond(ctx, () -> prompt.handler().get(ctx, request)));
+		return prompt.completionHandler() != null
+				? adapted.withCompletionHandler(SyncAdapters.completion(prompt.completionHandler())) : adapted;
 	}
 
 }

@@ -18,4 +18,9 @@ public interface McpSyncPromptRepository {
 	/** The prompt with this name, or {@code null} if there is none. */
 	McpSyncPrompt find(McpRequestContext ctx, String name);
 
+	/** See {@link McpAsyncPromptRepository#supportsCompletion()}. */
+	default boolean supportsCompletion() {
+		return false;
+	}
+
 }
