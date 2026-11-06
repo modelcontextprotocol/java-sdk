@@ -24,4 +24,13 @@ public interface McpAsyncPromptRepository {
 	/** The prompt with this name, or empty if there is none. */
 	Mono<McpAsyncPrompt> find(McpRequestContext ctx, String name);
 
+	/**
+	 * Whether prompt arguments are completed through
+	 * {@link McpAsyncPrompt#completionHandler()}, which serves {@code ref/prompt} in
+	 * {@code completion/complete} and advertises {@code completions}.
+	 */
+	default boolean supportsCompletion() {
+		return false;
+	}
+
 }

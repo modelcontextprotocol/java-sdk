@@ -25,18 +25,22 @@ public final class McpSyncPrompt {
 
 	private final Handler handler;
 
-	private McpSyncPrompt(Prompt definition, ClientCapabilities requiredCapabilities, Handler handler) {
+	private final McpSyncCompletionHandler completionHandler;
+
+	private McpSyncPrompt(Prompt definition, ClientCapabilities requiredCapabilities, Handler handler,
+			McpSyncCompletionHandler completionHandler) {
 		Assert.notNull(definition, "definition must not be null");
 		Assert.notNull(requiredCapabilities, "requiredCapabilities must not be null");
 		Assert.notNull(handler, "handler must not be null");
 		this.definition = definition;
 		this.requiredCapabilities = requiredCapabilities;
 		this.handler = handler;
+		this.completionHandler = completionHandler;
 	}
 
 	/** A prompt that requires no client capabilities. */
 	public static McpSyncPrompt of(Prompt definition, Handler handler) {
-		return new McpSyncPrompt(definition, ClientCapabilities.NONE, handler);
+		return new McpSyncPrompt(definition, ClientCapabilities.NONE, handler, null);
 	}
 
 	/**
@@ -45,7 +49,13 @@ public final class McpSyncPrompt {
 	 * handler.
 	 */
 	public static McpSyncPrompt of(Prompt definition, ClientCapabilities requiredCapabilities, Handler handler) {
-		return new McpSyncPrompt(definition, requiredCapabilities, handler);
+		return new McpSyncPrompt(definition, requiredCapabilities, handler, null);
+	}
+
+	/** See {@link McpAsyncPrompt#withCompletionHandler}. */
+	public McpSyncPrompt withCompletionHandler(McpSyncCompletionHandler completionHandler) {
+		Assert.notNull(completionHandler, "completionHandler must not be null");
+		return new McpSyncPrompt(this.definition, this.requiredCapabilities, this.handler, completionHandler);
 	}
 
 	public Prompt definition() {
@@ -58,6 +68,13 @@ public final class McpSyncPrompt {
 
 	public Handler handler() {
 		return this.handler;
+	}
+
+	/**
+	 * The handler completing this prompt's arguments, or {@code null} if there is none.
+	 */
+	public McpSyncCompletionHandler completionHandler() {
+		return this.completionHandler;
 	}
 
 	/** See {@link McpAsyncPrompt.Handler}. */
