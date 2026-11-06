@@ -46,6 +46,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 
 import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -312,7 +313,11 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 			var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
 			assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
-			assertThat(response.body()).contains("Unsupported Media Type: Content-Type must be application/json");
+			assertThat(response.headers().firstValue("Content-Type").orElseThrow()).startsWith("application/json");
+			assertThatJson(response.body()).isEqualTo("""
+					{"jsonrpc":"2.0","error":{"code":-32600,
+					"message":"Unsupported Media Type: Content-Type must be application/json"}}
+					""");
 			assertThat(toolCalled).isFalse();
 		}
 	}
