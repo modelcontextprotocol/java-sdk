@@ -9,6 +9,7 @@ import java.io.PrintWriter;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -22,6 +23,7 @@ import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
@@ -61,6 +63,7 @@ import reactor.core.scheduler.Schedulers;
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  * @author Daniel Garnier-Moiroux
+ * @author Taewoong Kim
  * @see McpStreamableServerTransportProvider
  * @see HttpServlet
  */
@@ -408,8 +411,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		if (!badRequestErrors.isEmpty()) {
 			String combinedMessage = String.join("; ", badRequestErrors);
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-					McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND).message(combinedMessage).build());
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, null,
+					new JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND, combinedMessage));
 			return;
 		}
 
@@ -519,20 +522,22 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		if (!HttpServletRequestUtils.isJsonContentType(request.getContentType())) {
-			this.responseError(response, HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE,
-					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
-						.message("Unsupported Media Type: Content-Type must be application/json")
-						.build());
+			this.responseError(response, HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE, null,
+					new JSONRPCError(McpSchema.ErrorCodes.INVALID_REQUEST,
+							"Unsupported Media Type: Content-Type must be application/json"));
 			return;
 		}
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
-		McpSchema.JSONRPCMessage message = null;
+		Object requestId = null;
 		try {
 			String body = HttpServletRequestUtils.readBody(request, this.requestMaxSize);
 
-			message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
+			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
+			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
+				requestId = jsonrpcRequest.id();
+			}
 
 			// Handle initialization request
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest
@@ -540,7 +545,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				if (!badRequestErrors.isEmpty()) {
 					String combinedMessage = String.join("; ", badRequestErrors);
 					this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, jsonrpcRequest.id(),
-							McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND).message(combinedMessage).build());
+							new JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND, combinedMessage));
 					return;
 				}
 
@@ -555,25 +560,18 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				try {
 					McpSchema.InitializeResult initResult = init.initResult().block();
 
-					response.setContentType(APPLICATION_JSON);
-					response.setCharacterEncoding(UTF_8);
+					McpSchema.JSONRPCResponse initializeResponse = McpSchema.JSONRPCResponse.result(jsonrpcRequest.id(),
+							initResult);
 					response.setHeader(HttpHeaders.MCP_SESSION_ID, init.session().getId());
-					response.setStatus(HttpServletResponse.SC_OK);
-
-					String jsonResponse = jsonMapper
-						.writeValueAsString(McpSchema.JSONRPCResponse.result(jsonrpcRequest.id(), initResult));
-
-					PrintWriter writer = response.getWriter();
-					writer.write(jsonResponse);
-					writer.flush();
+					HttpServletResponseUtils.writeJsonResponse(response, HttpServletResponse.SC_OK, this.jsonMapper,
+							initializeResponse);
 					return;
 				}
 				catch (Exception e) {
 					logger.error("Failed to initialize session: {}", e.getMessage());
 					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, jsonrpcRequest.id(),
-							McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-								.message("Failed to initialize session: " + e.getMessage())
-								.build());
+							new JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+									"Failed to initialize session: " + e.getMessage()));
 					return;
 				}
 			}
@@ -586,18 +584,16 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 			if (!badRequestErrors.isEmpty()) {
 				String combinedMessage = String.join("; ", badRequestErrors);
-				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, requestId(message),
-						McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND).message(combinedMessage).build());
+				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, requestId,
+						new JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND, combinedMessage));
 				return;
 			}
 
 			McpStreamableServerSession session = this.sessions.get(sessionId);
 
 			if (session == null) {
-				this.responseError(response, HttpServletResponse.SC_NOT_FOUND, requestId(message),
-						McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-							.message("Session not found: " + sessionId)
-							.build());
+				this.responseError(response, HttpServletResponse.SC_NOT_FOUND, requestId,
+						new JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR, "Session not found: " + sessionId));
 				return;
 			}
 
@@ -667,8 +663,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 			}
 			else {
-				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, requestId(message),
-						McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST).message("Unknown message type").build());
+				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, requestId,
+						new JSONRPCError(McpSchema.ErrorCodes.INVALID_REQUEST, "Unknown message type"));
 			}
 		}
 		catch (MaxSizeExceededException e) {
@@ -676,18 +672,14 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 		catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, requestId(message),
-					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
-						.message("Invalid message format: " + e.getMessage())
-						.build());
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, requestId, new JSONRPCError(
+					McpSchema.ErrorCodes.INVALID_REQUEST, "Invalid message format: " + e.getMessage()));
 		}
 		catch (Exception e) {
 			logger.error("Error handling message: {}", e.getMessage());
 			try {
-				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, requestId(message),
-						McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-							.message("Error processing message: " + e.getMessage())
-							.build());
+				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, requestId, new JSONRPCError(
+						McpSchema.ErrorCodes.INTERNAL_ERROR, "Error processing message: " + e.getMessage()));
 			}
 			catch (IOException ex) {
 				logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());
@@ -734,10 +726,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		if (request.getHeader(HttpHeaders.MCP_SESSION_ID) == null) {
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-					McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
-						.message("Session ID required in mcp-session-id header")
-						.build());
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, null, new JSONRPCError(
+					McpSchema.ErrorCodes.METHOD_NOT_FOUND, "Session ID required in mcp-session-id header"));
 			return;
 		}
 
@@ -757,8 +747,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		catch (Exception e) {
 			logger.error("Failed to delete session {}: {}", sessionId, e.getMessage());
 			try {
-				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-						McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(e.getMessage()).build());
+				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, null,
+						new JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+								Objects.requireNonNullElse(e.getMessage(), "Internal error")));
 			}
 			catch (IOException ex) {
 				logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());
@@ -768,16 +759,13 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	}
 
 	public void responseError(HttpServletResponse response, int httpCode, McpError mcpError) throws IOException {
-		this.responseError(response, httpCode, null, mcpError);
+		this.responseError(response, httpCode, null, mcpError.getJsonRpcError());
 	}
 
-	private void responseError(HttpServletResponse response, int httpCode, Object requestId, McpError mcpError)
+	private void responseError(HttpServletResponse response, int httpCode, Object requestId, JSONRPCError error)
 			throws IOException {
-		HttpServletJsonRpcErrorWriter.writeError(this.jsonMapper, response, httpCode, requestId, mcpError);
-	}
-
-	private static Object requestId(McpSchema.JSONRPCMessage message) {
-		return (message instanceof McpSchema.JSONRPCRequest request) ? request.id() : null;
+		McpSchema.JSONRPCResponse errorResponse = McpSchema.JSONRPCResponse.error(requestId, error);
+		HttpServletResponseUtils.writeJsonResponse(response, httpCode, this.jsonMapper, errorResponse);
 	}
 
 	/**

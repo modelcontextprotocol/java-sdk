@@ -5,7 +5,6 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -17,8 +16,8 @@ import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.util.Assert;
 import jakarta.servlet.ServletException;
@@ -33,6 +32,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Taewoong Kim
  */
 @WebServlet(asyncSupported = true)
 public class HttpServletStatelessServerTransport extends HttpServlet implements McpStatelessServerTransport {
@@ -169,51 +169,44 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		}
 
 		if (!HttpServletRequestUtils.isJsonContentType(request.getContentType())) {
-			this.responseError(response, HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE,
-					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
-						.message("Unsupported Media Type: Content-Type must be application/json")
-						.build());
+			this.responseError(response, HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE, null,
+					new JSONRPCError(McpSchema.ErrorCodes.INVALID_REQUEST,
+							"Unsupported Media Type: Content-Type must be application/json"));
 			return;
 		}
 
 		String accept = request.getHeader(ACCEPT);
 		if (accept == null || !(accept.contains(APPLICATION_JSON) && accept.contains(TEXT_EVENT_STREAM))) {
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-					McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
-						.message("Both application/json and text/event-stream required in Accept header")
-						.build());
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, null,
+					new JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
+							"Both application/json and text/event-stream required in Accept header"));
 			return;
 		}
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
+		Object requestId = null;
 		try {
 			String body = HttpServletRequestUtils.readBody(request, this.requestMaxSize);
 
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
+				requestId = jsonrpcRequest.id();
 				try {
 					McpSchema.JSONRPCResponse jsonrpcResponse = this.mcpHandler
 						.handleRequest(transportContext, jsonrpcRequest)
 						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 						.block();
 
-					response.setContentType(APPLICATION_JSON);
-					response.setCharacterEncoding(UTF_8);
-					response.setStatus(HttpServletResponse.SC_OK);
-
-					String jsonResponseText = jsonMapper.writeValueAsString(jsonrpcResponse);
-					PrintWriter writer = response.getWriter();
-					writer.write(jsonResponseText);
-					writer.flush();
+					HttpServletResponseUtils.writeJsonResponse(response, HttpServletResponse.SC_OK, this.jsonMapper,
+							jsonrpcResponse);
 				}
 				catch (Exception e) {
 					logger.error("Failed to handle request: {}", e.getMessage());
 					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, jsonrpcRequest.id(),
-							McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-								.message("Failed to handle request: " + e.getMessage())
-								.build());
+							new JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+									"Failed to handle request: " + e.getMessage()));
 				}
 			}
 			else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
@@ -225,17 +218,13 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 				}
 				catch (Exception e) {
 					logger.error("Failed to handle notification: {}", e.getMessage());
-					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-							McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-								.message("Failed to handle notification: " + e.getMessage())
-								.build());
+					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, null, new JSONRPCError(
+							McpSchema.ErrorCodes.INTERNAL_ERROR, "Failed to handle notification: " + e.getMessage()));
 				}
 			}
 			else {
-				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-						McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
-							.message("The server accepts either requests or notifications")
-							.build());
+				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, null, new JSONRPCError(
+						McpSchema.ErrorCodes.INVALID_REQUEST, "The server accepts either requests or notifications"));
 			}
 		}
 		catch (MaxSizeExceededException e) {
@@ -243,15 +232,13 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		}
 		catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST).message("Invalid message format").build());
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, requestId,
+					new JSONRPCError(McpSchema.ErrorCodes.INVALID_REQUEST, "Invalid message format"));
 		}
 		catch (Exception e) {
 			logger.error("Unexpected error handling message: {}", e.getMessage());
-			this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-					McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-						.message("Unexpected error: " + e.getMessage())
-						.build());
+			this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, requestId,
+					new JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR, "Unexpected error: " + e.getMessage()));
 		}
 	}
 
@@ -259,16 +246,14 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	 * Sends an error response to the client.
 	 * @param response The HTTP servlet response
 	 * @param httpCode The HTTP status code
-	 * @param mcpError The MCP error to send
+	 * @param requestId The request identifier, or null when unavailable
+	 * @param error The JSON-RPC error to send
 	 * @throws IOException If an I/O error occurs
 	 */
-	private void responseError(HttpServletResponse response, int httpCode, McpError mcpError) throws IOException {
-		this.responseError(response, httpCode, null, mcpError);
-	}
-
-	private void responseError(HttpServletResponse response, int httpCode, Object requestId, McpError mcpError)
+	private void responseError(HttpServletResponse response, int httpCode, Object requestId, JSONRPCError error)
 			throws IOException {
-		HttpServletJsonRpcErrorWriter.writeError(this.jsonMapper, response, httpCode, requestId, mcpError);
+		McpSchema.JSONRPCResponse errorResponse = McpSchema.JSONRPCResponse.error(requestId, error);
+		HttpServletResponseUtils.writeJsonResponse(response, httpCode, this.jsonMapper, errorResponse);
 	}
 
 	/**

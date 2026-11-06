@@ -934,29 +934,37 @@ class HttpServletStatelessIntegrationTests {
 		var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
 
 		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
-		assertThatJson(response.body()).inPath("error.message")
-			.isEqualTo("Unsupported Media Type: Content-Type must be application/json");
+		assertThat(response.headers().firstValue("Content-Type").orElseThrow()).startsWith("application/json");
+		assertThatJson(response.body()).isEqualTo("""
+				{"jsonrpc":"2.0","error":{"code":-32600,
+				"message":"Unsupported Media Type: Content-Type must be application/json"}}
+				""");
 		assertThat(toolCalled).isFalse();
 	}
 
-	@Test
-	void rejectsMalformedMessageAsInvalidRequest() throws Exception {
+	@ParameterizedTest
+	@ValueSource(strings = { """
+			{"jsonrpc":{"a":1},"id":1,"method":"tools/list"}
+			""", """
+			{"jsonrpc":"2.0","id":1,"method":"tools/list"
+			""" })
+	void rejectsMalformedMessageAsInvalidRequest(String body) throws Exception {
 		McpServer.sync(mcpStatelessServerTransport).build();
 
-		// Valid JSON, but "jsonrpc" is an object instead of a string, so it cannot be
-		// converted into a JSONRPCRequest
 		var request = HttpRequest.newBuilder()
 			.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
 			.header("Content-Type", APPLICATION_JSON)
 			.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
-			.POST(HttpRequest.BodyPublishers.ofString("""
-					{"jsonrpc":{"a":1},"id":1,"method":"tools/list"}"""))
+			.POST(HttpRequest.BodyPublishers.ofString(body))
 			.build();
 
 		var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
 
 		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_BAD_REQUEST);
-		assertThatJson(response.body()).inPath("error.message").isEqualTo("Invalid message format");
+		assertThat(response.headers().firstValue("Content-Type").orElseThrow()).startsWith("application/json");
+		assertThatJson(response.body()).isEqualTo("""
+				{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid message format"}}
+				""");
 	}
 
 	private double evaluateExpression(String expression) {
