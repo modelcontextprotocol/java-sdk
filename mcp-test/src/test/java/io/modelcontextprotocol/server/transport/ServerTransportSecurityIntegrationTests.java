@@ -209,7 +209,7 @@ class ServerTransportSecurityIntegrationTests {
 		public Sse() {
 			transport = HttpServletSseServerTransportProvider.builder()
 				.messageEndpoint("/mcp/message")
-				.securityValidator(DefaultServerTransportSecurityValidator.builder()
+				.httpHeaderValidator(DefaultServerTransportSecurityValidator.builder()
 					.allowedOrigin("http://localhost:*")
 					.allowedHost("localhost:*")
 					.build())
@@ -223,7 +223,7 @@ class ServerTransportSecurityIntegrationTests {
 		@Override
 		public McpSyncClient createMcpClient(String baseUrl, TestRequestCustomizer requestCustomizer) {
 			var transport = HttpClientSseClientTransport.builder(baseUrl)
-				.httpRequestCustomizer(requestCustomizer)
+				.addHttpRequestCustomizer(requestCustomizer)
 				.jsonMapper(McpJsonDefaults.getMapper())
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();
@@ -242,7 +242,7 @@ class ServerTransportSecurityIntegrationTests {
 
 		public StreamableHttp() {
 			transport = HttpServletStreamableServerTransportProvider.builder()
-				.securityValidator(DefaultServerTransportSecurityValidator.builder()
+				.httpHeaderValidator(DefaultServerTransportSecurityValidator.builder()
 					.allowedOrigin("http://localhost:*")
 					.allowedHost("localhost:*")
 					.build())
@@ -256,7 +256,7 @@ class ServerTransportSecurityIntegrationTests {
 		@Override
 		public McpSyncClient createMcpClient(String baseUrl, TestRequestCustomizer requestCustomizer) {
 			var transport = HttpClientStreamableHttpTransport.builder(baseUrl)
-				.httpRequestCustomizer(requestCustomizer)
+				.addHttpRequestCustomizer(requestCustomizer)
 				.jsonMapper(McpJsonDefaults.getMapper())
 				.openConnectionOnStartup(true)
 				.build();
@@ -276,7 +276,7 @@ class ServerTransportSecurityIntegrationTests {
 
 		public Stateless() {
 			transport = HttpServletStatelessServerTransport.builder()
-				.securityValidator(DefaultServerTransportSecurityValidator.builder()
+				.httpHeaderValidator(DefaultServerTransportSecurityValidator.builder()
 					.allowedOrigin("http://localhost:*")
 					.allowedHost("localhost:*")
 					.build())
@@ -290,7 +290,7 @@ class ServerTransportSecurityIntegrationTests {
 		@Override
 		public McpSyncClient createMcpClient(String baseUrl, TestRequestCustomizer requestCustomizer) {
 			var transport = HttpClientStreamableHttpTransport.builder(baseUrl)
-				.httpRequestCustomizer(requestCustomizer)
+				.addHttpRequestCustomizer(requestCustomizer)
 				.jsonMapper(McpJsonDefaults.getMapper())
 				.openConnectionOnStartup(true)
 				.build();

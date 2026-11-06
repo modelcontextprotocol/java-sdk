@@ -25,6 +25,8 @@ The earlier **1.x and 0.x release lines receive security patches only** — no f
 
 The next major version, **3.x**, will implement the [2026-07-28 MCP specification revision](https://modelcontextprotocol.io/specification/2026-07-28), including `server/discover` and the SEP-2575 stateless lifecycle. The first 3.0.0 milestone releases are planned for **September 2026**, tracked via a dedicated spec revision project board.
 
+A preview of the 2026-07-28 server ships in **2.2.0** in the `io.modelcontextprotocol.modern` packages, alongside the 2.x server: stateless `McpServer` with Servlet and STDIO transports, `server/discover`, multi round-trip requests and `subscriptions/listen`. Its API may change until 3.0. A modern client and tasks are not yet implemented. See [MCP Server (2026-07-28)](docs/server-modern.md).
+
 ### SDK Tiering
 
 The Java SDK is an official [Tier 2 SDK](https://modelcontextprotocol.io/community/sdk-tiers) committed to full protocol support: new spec revisions are implemented within the Tier 2 six-month window, with conformance continuously verified against the [MCP conformance suite](https://github.com/modelcontextprotocol/conformance) in CI. Once caught up on the most recent specification revision, we aim for Tier 1: fully supporting new specification features on the day of their release.

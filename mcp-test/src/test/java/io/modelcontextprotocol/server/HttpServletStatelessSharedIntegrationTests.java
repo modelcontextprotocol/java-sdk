@@ -40,9 +40,9 @@ class HttpServletStatelessSharedIntegrationTests extends AbstractStatelessIntegr
 	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (request) -> McpTransportContext
 		.create(Map.of("important", "value"));
 
-	private HttpServletStatelessServerTransport mcpServerTransport;
-
 	private Tomcat tomcat;
+
+	private HttpServletStatelessServerTransport mcpServerTransport;
 
 	static Stream<Arguments> clientsForTesting() {
 		return Stream.of(Arguments.of("httpclient"));

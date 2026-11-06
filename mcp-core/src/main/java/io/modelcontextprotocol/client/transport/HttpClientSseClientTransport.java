@@ -8,15 +8,15 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
+import io.modelcontextprotocol.client.transport.customizer.DelegatingMcpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -204,7 +204,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
-		private McpAsyncHttpClientRequestCustomizer httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.NOOP;
+		private final List<McpAsyncHttpClientRequestCustomizer> httpRequestCustomizers = new ArrayList<>();
 
 		private Duration connectTimeout = Duration.ofSeconds(10);
 
@@ -287,10 +287,10 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 		/**
 		 * Sets the customizer for {@link HttpRequest.Builder}, to modify requests before
-		 * executing them.
+		 * executing them. The customizer is internally converted to
+		 * {@link McpAsyncHttpClientRequestCustomizer}.
 		 * <p>
-		 * This overrides the customizer from
-		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)}.
+		 * This replaces all customizers previously registered on this builder.
 		 * <p>
 		 * Do NOT use a blocking {@link McpSyncHttpClientRequestCustomizer} in a
 		 * non-blocking context. Use
@@ -298,25 +298,81 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 * instead.
 		 * @param syncHttpRequestCustomizer the request customizer
 		 * @return this builder
+		 * @deprecated Use {@link #addHttpRequestCustomizer} instead.
 		 */
+		@Deprecated
 		public Builder httpRequestCustomizer(McpSyncHttpClientRequestCustomizer syncHttpRequestCustomizer) {
-			this.httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.fromSync(syncHttpRequestCustomizer);
-			return this;
+			Assert.notNull(syncHttpRequestCustomizer, "syncHttpRequestCustomizer must not be null");
+			this.httpRequestCustomizers.clear();
+			return addHttpRequestCustomizer(syncHttpRequestCustomizer);
 		}
 
 		/**
 		 * Sets the customizer for {@link HttpRequest.Builder}, to modify requests before
 		 * executing them.
 		 * <p>
-		 * This overrides the customizer from
-		 * {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)}.
+		 * This replaces all customizers previously registered on this builder.
+		 * <p>
+		 * Do NOT use a blocking implementation in a non-blocking context.
+		 * @param asyncHttpRequestCustomizer the request customizer
+		 * @return this builder
+		 * @deprecated Use {@link #addAsyncHttpRequestCustomizer} instead.
+		 */
+		@Deprecated
+		public Builder asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer asyncHttpRequestCustomizer) {
+			Assert.notNull(asyncHttpRequestCustomizer, "asyncHttpRequestCustomizer must not be null");
+			this.httpRequestCustomizers.clear();
+			return addAsyncHttpRequestCustomizer(asyncHttpRequestCustomizer);
+		}
+
+		/**
+		 * Adds a customizer for {@link HttpRequest.Builder}, to modify requests before
+		 * executing them. Customizers are applied in the order they are added, after
+		 * those already registered on this builder. The customizer is internally
+		 * converted to {@link McpAsyncHttpClientRequestCustomizer}.
+		 * <p>
+		 * Do NOT use a blocking {@link McpSyncHttpClientRequestCustomizer} in a
+		 * non-blocking context. Use
+		 * {@link #addAsyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)}
+		 * instead.
+		 * @param syncHttpRequestCustomizer the request customizer
+		 * @return this builder
+		 */
+		public Builder addHttpRequestCustomizer(McpSyncHttpClientRequestCustomizer syncHttpRequestCustomizer) {
+			Assert.notNull(syncHttpRequestCustomizer, "syncHttpRequestCustomizer must not be null");
+			this.httpRequestCustomizers.add(McpAsyncHttpClientRequestCustomizer.fromSync(syncHttpRequestCustomizer));
+			return this;
+		}
+
+		/**
+		 * Adds a customizer for {@link HttpRequest.Builder}, to modify requests before
+		 * executing them. Customizers are applied in the order they are added, after
+		 * those already registered on this builder.
 		 * <p>
 		 * Do NOT use a blocking implementation in a non-blocking context.
 		 * @param asyncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer asyncHttpRequestCustomizer) {
-			this.httpRequestCustomizer = asyncHttpRequestCustomizer;
+		public Builder addAsyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer asyncHttpRequestCustomizer) {
+			Assert.notNull(asyncHttpRequestCustomizer, "asyncHttpRequestCustomizer must not be null");
+			this.httpRequestCustomizers.add(asyncHttpRequestCustomizer);
+			return this;
+		}
+
+		/**
+		 * Provides access to the mutable list of request customizers registered on this
+		 * builder, so they can be inspected, reordered, added or removed. Customizers are
+		 * applied in list order. Synchronous customizers registered through
+		 * {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)} or
+		 * {@link #addHttpRequestCustomizer(McpSyncHttpClientRequestCustomizer)} appear in
+		 * the list wrapped as {@link McpAsyncHttpClientRequestCustomizer}.
+		 * @param customizersConsumer a consumer of the list of customizers
+		 * @return this builder
+		 */
+		public Builder asyncHttpRequestCustomizers(
+				Consumer<List<McpAsyncHttpClientRequestCustomizer>> customizersConsumer) {
+			Assert.notNull(customizersConsumer, "customizersConsumer must not be null");
+			customizersConsumer.accept(this.httpRequestCustomizers);
 			return this;
 		}
 
@@ -370,8 +426,17 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		public HttpClientSseClientTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientSseClientTransport(httpClient, requestBuilder, baseUri, sseEndpoint,
-					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, httpRequestCustomizer,
+					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, httpRequestCustomizer(),
 					messageEndpointValidator, maxResponseSize);
+		}
+
+		private McpAsyncHttpClientRequestCustomizer httpRequestCustomizer() {
+			Assert.noNullElements(this.httpRequestCustomizers, "httpRequestCustomizers must not contain null elements");
+			return switch (this.httpRequestCustomizers.size()) {
+				case 0 -> McpAsyncHttpClientRequestCustomizer.NOOP;
+				case 1 -> this.httpRequestCustomizers.get(0);
+				default -> new DelegatingMcpAsyncHttpClientRequestCustomizer(List.copyOf(this.httpRequestCustomizers));
+			};
 		}
 
 	}
@@ -390,70 +455,93 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
-			Disposable connection = Flux.<ResponseEvent>create(
-					sseSink -> this.httpClient
-						.sendAsync(requestBuilder.build(),
-								responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink,
-										this.maxResponseSize))
-						.exceptionallyCompose(e -> {
-							sseSink.error(e);
-							return CompletableFuture.failedFuture(e);
-						}))
-				.map(responseEvent -> (ResponseSubscribers.SseResponseEvent) responseEvent)
-				.flatMap(responseEvent -> {
+			Disposable connection = ResponseBodyHandlers.sendAsync(this.httpClient, requestBuilder.build())
+				.flatMapMany(response -> {
 					if (isClosing) {
-						return Mono.empty();
+						// The body is handed over as a publisher and the connection is
+						// only released once it is subscribed to. It is an SSE stream
+						// that may never end, so it is cancelled rather than drained.
+						return ResponseBodyHandlers.cancel(response.body());
 					}
 
-					int statusCode = responseEvent.responseInfo().statusCode();
+					int statusCode = response.statusCode();
 
 					if (statusCode >= 200 && statusCode < 300) {
-						try {
-							if (ENDPOINT_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
-								String messageEndpointUri = responseEvent.sseEvent().data();
-								try {
-									messageEndpointValidator.validate(uri, messageEndpointUri);
-								}
-								catch (InvalidSseMessageEndpointException e) {
-									sink.error(e);
-									this.messageEndpointSink.tryEmitError(e);
-									return Flux.error(e);
-								}
-								if (this.messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
-									sink.success();
-									return Flux.empty(); // No further processing needed
-								}
-								else {
-									sink.error(new RuntimeException("Failed to handle SSE endpoint event"));
-								}
+						Flux<String> lines = ResponseBodyHandlers.decodeLines(response.body(), this.maxResponseSize);
+						return ResponseBodyHandlers.decodeSseResponse(lines, this.maxResponseSize);
+					}
+					else {
+						return ResponseBodyHandlers.readThenError(response.body(), this.maxResponseSize,
+								"Failed to connect to SSE stream: " + statusCode);
+					}
+				})
+				// Every successfully processed event yields exactly one element, empty
+				// when it carries no message, so that the first one can mark the
+				// connection as established.
+				.<Optional<JSONRPCMessage>>handle((sseEvent, events) -> {
+					try {
+						if (ENDPOINT_EVENT_TYPE.equals(sseEvent.event())) {
+							String messageEndpointUri = sseEvent.data();
+							try {
+								messageEndpointValidator.validate(uri, messageEndpointUri);
 							}
-							else if (MESSAGE_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
-								JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper,
-										responseEvent.sseEvent().data());
-								sink.success();
-								return Flux.just(message);
+							catch (InvalidSseMessageEndpointException e) {
+								this.messageEndpointSink.tryEmitError(e);
+								events.error(e);
+								return;
+							}
+							if (this.messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
+								events.next(Optional.empty());
 							}
 							else {
-								logger.debug("Received unrecognized SSE event type: {}", responseEvent.sseEvent());
-								sink.success();
+								events.error(new McpTransportException("Failed to handle SSE endpoint event"));
 							}
 						}
-						catch (IOException e) {
-							sink.error(new McpTransportException("Error processing SSE event", e));
+						else if (MESSAGE_EVENT_TYPE.equals(sseEvent.event())) {
+							String data = sseEvent.data();
+							if (data == null || data.isBlank()) {
+								logger.debug("Skipping SSE event with empty data (stream primer)");
+								events.next(Optional.empty());
+							}
+							else {
+								events.next(Optional.of(McpSchema.deserializeJsonRpcMessage(jsonMapper, data)));
+							}
+						}
+						else {
+							logger.debug("Received unrecognized SSE event type: {}", sseEvent);
+							events.next(Optional.empty());
 						}
 					}
-					return Flux.<McpSchema.JSONRPCMessage>error(
-							new RuntimeException("Failed to send message: " + responseEvent));
-
+					catch (IOException e) {
+						events.error(new McpTransportException("Error processing SSE event", e));
+					}
 				})
-				.flatMap(jsonRpcMessage -> handler.apply(Mono.just(jsonRpcMessage)))
+				// connect() is resolved by the first signal only: any later failure is
+				// merely logged below, as connect() has already completed by then.
+				.switchOnFirst((first, events) -> {
+					if (first.hasValue()) {
+						sink.success();
+					}
+					else if (first.isOnError()) {
+						sink.error(first.getThrowable());
+					}
+					else if (first.isOnComplete()) {
+						sink.error(new McpTransportException("SSE stream closed before any event was received"));
+					}
+					return events;
+				})
+				.<JSONRPCMessage>handle((message, messages) -> message.ifPresent(messages::next))
+				.flatMap(message -> handler.apply(Mono.just(message)))
 				.onErrorComplete(t -> {
 					if (!isClosing) {
 						logger.warn("SSE stream observed an error", t);
-						sink.error(t);
 					}
 					return true;
 				})
+				// A closeGracefully() before the first signal cancels the stream:
+				// complete
+				// connect() instead of leaving it pending. A no-op once it has resolved.
+				.doOnCancel(sink::success)
 				.doFinally(s -> {
 					Disposable ref = this.sseSubscription.getAndSet(null);
 					if (ref != null && !ref.isDisposed()) {
@@ -486,17 +574,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			}
 
 			return this.serializeMessage(message)
-				.flatMap(body -> sendHttpPost(messageEndpointUri, body).handle((response, sink) -> {
-					if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
-							&& response.statusCode() != 206) {
-						sink.error(new RuntimeException("Sending message failed with a non-OK HTTP code: "
-								+ response.statusCode() + " - " + response.body()));
-					}
-					else {
-						sink.next(response);
-						sink.complete();
-					}
-				}))
+				.flatMap(body -> sendHttpPost(messageEndpointUri, body))
 				.doOnError(error -> {
 					if (!isClosing) {
 						logger.error("Error sending message: {}", error.getMessage());
@@ -517,7 +595,16 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		});
 	}
 
-	private Mono<HttpResponse<String>> sendHttpPost(final String endpoint, final String body) {
+	/**
+	 * POSTs {@code body} to {@code endpoint} and consumes the response, failing if the
+	 * server did not accept the message.
+	 *
+	 * <p>
+	 * The response body is streamed rather than aggregated: it is only read as text when
+	 * a non-OK status makes it part of the failure message, and discarded otherwise.
+	 * Either way it has to be consumed, or the connection is never released.
+	 */
+	private Mono<Void> sendHttpPost(final String endpoint, final String body) {
 		final URI requestUri = Utils.resolveUri(baseUri, endpoint);
 		return Mono.deferContextual(ctx -> {
 			var builder = this.requestBuilder.copy()
@@ -529,8 +616,15 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body, transportContext));
 		}).flatMap(customizedBuilder -> {
 			var request = customizedBuilder.build();
-			return Mono.fromFuture(
-					httpClient.sendAsync(request, ResponseSubscribers.boundedStringBodyHandler(this.maxResponseSize)));
+			return ResponseBodyHandlers.sendAsync(this.httpClient, request).flatMap(response -> {
+				int statusCode = response.statusCode();
+				if (statusCode == 200 || statusCode == 201 || statusCode == 202 || statusCode == 206) {
+					return ResponseBodyHandlers.drain(response.body(), this.maxResponseSize).then();
+				}
+				return ResponseBodyHandlers.decodeAggregateResponse(response.body(), this.maxResponseSize)
+					.flatMap(text -> Mono.error(new McpTransportException(
+							"Sending message failed with a non-OK HTTP code: " + statusCode + " - " + text)));
+			});
 		});
 	}
 

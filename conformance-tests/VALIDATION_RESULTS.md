@@ -1,11 +1,14 @@
 # MCP Java SDK Conformance Test Validation Results
 
-Last validated: **2026-08-17** against conformance suite
-**`@modelcontextprotocol/conformance@0.2.0-alpha.11`** (SDK at `main`, 2.0.1-SNAPSHOT), targetting
-version 2025-11-25 (`--spec-version 2025-11-25`).
+Last validated: **2026-10-02** against conformance suite
+**`@modelcontextprotocol/conformance@0.2.0-alpha.12`** (2.1.0-SNAPSHOT), targeting version 2025-11-25
+(`--spec-version 2025-11-25`) for the legacy server and clients, and the 2026-07-28 requirement set
+(`--requirements 2026-07-28`) for the modern server. Auth results below were last validated with
+`0.2.0-alpha.11`.
 
 ## Summary
 
+**Modern Server Tests (2026-07-28 requirements):** 37/37 required scenarios passed (`server-servlet-modern`)
 **Server Tests (active suite):** 73/73 checks passed (31 scenarios, 100%)
 **Server Tests (SEP-1613 `json-schema-2020-12`):** 5/5 checks passed (SEP-2106 checks skipped — post-2025-11-25 spec additions)
 **Client Tests:** 3/4 scenarios passed; `sse-retry` fails (tracked in `conformance-baseline.yml`)
@@ -13,6 +16,33 @@ version 2025-11-25 (`--spec-version 2025-11-25`).
 
 Baseline check passed on every run: all failures are expected per
 [`conformance-baseline.yml`](conformance-baseline.yml).
+
+## Modern Server Test Results (2026-07-28)
+
+The `server-servlet-modern` module serves the stateless 2026-07-28 revision with
+`io.modelcontextprotocol.modern.server.McpServer` over `HttpServletMcpTransport`.
+
+### Required — Passing (37/37 scenarios)
+
+- **Stateless lifecycle (SEP-2575):** `_meta` validation, `server/discover`, version negotiation,
+  `MCP-Protocol-Version`/`Mcp-Method` header mismatch, `-32021` capability enforcement, removed
+  methods answered `404`/`-32601`, `subscriptions/listen` acknowledgement and filtering
+- **Tools, Resources, Prompts, Completion:** all content types, progress, resource templates,
+  SEP-2164 not-found errors
+- **Caching (SEP-2549):** `ttlMs`/`cacheScope` on list results and `resources/read`
+- **InputRequiredResult / MRTR (SEP-2322):** all 14 scenarios, including multi-round, tampered
+  `requestState` and capability checks
+- **Security:** DNS rebinding protection, SSE streams
+
+### Not scored for 2026-07-28
+
+These run but don't count: the frozen requirement set marks extensions and anything that was pending
+in the anchor release (`0.2.0-alpha.10`) as `not_scored`. Pending scenarios are still spec requirements.
+
+- **Passing:** `json-schema-2020-12` (8/8 checks, including the SEP-2106 `allOf`/`anyOf`,
+  `if`/`then`/`else` and `$anchor` checks), `http-header-validation` (14/14),
+  `http-custom-header-server-validation` (10/10, SEP-2243 custom headers, against the `test_x_mcp_header` tool)
+- **Failing — tasks extension (`tasks-*`, SEP-2663):** not implemented
 
 ## Server Test Results
 
@@ -69,6 +99,16 @@ of the 0.2.0-alpha auth suite.
 
 ## Running Tests
 
+### Modern Server (2026-07-28)
+```bash
+./mvnw clean install -DskipTests
+./mvnw exec:java -pl conformance-tests/server-servlet-modern
+
+# In another terminal
+npx @modelcontextprotocol/conformance@0.2.0-alpha.12 server \
+  --url http://localhost:8081/mcp --requirements 2026-07-28
+```
+
 ### Server (active suite)
 ```bash
 # Build and start server
@@ -77,21 +117,21 @@ mvn exec:java -pl conformance-tests/server-servlet \
   -Dexec.mainClass="io.modelcontextprotocol.conformance.server.ConformanceServlet"
 
 # Run tests (in another terminal, from the repo root)
-npx @modelcontextprotocol/conformance@0.2.0-alpha.11 server \
-  --url http://localhost:8080/mcp --suite active \
+npx @modelcontextprotocol/conformance@0.2.0-alpha.12 server \
+  --url http://localhost:8080/mcp --suite active --spec-version 2025-11-25 \
   --expected-failures ./conformance-tests/conformance-baseline.yml
 ```
 
 ### Server (SEP-1613 scenario)
 ```bash
-npx @modelcontextprotocol/conformance@0.2.0-alpha.11 server \
-  --url http://localhost:8080/mcp --scenario json-schema-2020-12
+npx @modelcontextprotocol/conformance@0.2.0-alpha.12 server \
+  --url http://localhost:8080/mcp --scenario json-schema-2020-12 --spec-version 2025-11-25
 ```
 
 ### Client
 ```bash
 for scenario in initialize tools_call elicitation-sep1034-client-defaults sse-retry; do
-  npx @modelcontextprotocol/conformance@0.2.0-alpha.11 client \
+  npx @modelcontextprotocol/conformance@0.2.0-alpha.12 client --spec-version 2025-11-25 \
     --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-*.jar" \
     --scenario $scenario \
     --expected-failures ./conformance-tests/conformance-baseline.yml

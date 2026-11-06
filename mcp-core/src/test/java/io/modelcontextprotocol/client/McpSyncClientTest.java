@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -87,6 +88,25 @@ class McpSyncClientTest {
 				.build();
 
 			assertThat(client.getClientCapabilities().elicitation()).isNull();
+		}
+
+	}
+
+	@Nested
+	class Roots {
+
+		@Test
+		void addAndRemoveRootWithUnsetListChanged() {
+			McpClientTransport transport = mock(McpClientTransport.class);
+			when(transport.protocolVersions()).thenReturn(List.of("2024-11-05"));
+			var client = McpClient.sync(transport)
+				.capabilities(McpSchema.ClientCapabilities.builder().roots(null).build())
+				.jsonSchemaValidator(mock(JsonSchemaValidator.class))
+				.build();
+
+			assertThatCode(() -> client.addRoot(new McpSchema.Root("file:///added", "added")))
+				.doesNotThrowAnyException();
+			assertThatCode(() -> client.removeRoot("file:///added")).doesNotThrowAnyException();
 		}
 
 	}

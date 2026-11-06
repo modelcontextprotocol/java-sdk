@@ -115,13 +115,13 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 	private final McpAsyncClient asyncStreamableClient = McpClient
 		.async(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-			.asyncHttpRequestCustomizer(asyncClientRequestCustomizer)
+			.addAsyncHttpRequestCustomizer(asyncClientRequestCustomizer)
 			.build())
 		.build();
 
 	private final McpAsyncClient asyncSseClient = McpClient
 		.async(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
-			.asyncHttpRequestCustomizer(asyncClientRequestCustomizer)
+			.addAsyncHttpRequestCustomizer(asyncClientRequestCustomizer)
 			.build())
 		.build();
 

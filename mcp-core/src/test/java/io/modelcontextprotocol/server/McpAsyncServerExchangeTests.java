@@ -86,6 +86,27 @@ class McpAsyncServerExchangeTests {
 	}
 
 	@Test
+	void testListRootsCanBeResubscribed() {
+
+		List<McpSchema.Root> roots = Arrays
+			.asList(McpSchema.Root.builder("file:///home/user/project1").name("Project 1").build());
+		McpSchema.ListRootsResult singlePageResult = McpSchema.ListRootsResult.builder(roots).build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(McpSchema.PaginatedRequest.class),
+				any(TypeRef.class)))
+			.thenReturn(Mono.just(singlePageResult));
+
+		Mono<McpSchema.ListRootsResult> listRoots = exchange.listRoots();
+
+		// The same Mono must be safe to subscribe more than once: the accumulator used to
+		// aggregate the pages has to be created per subscription, not once when
+		// listRoots()
+		// is called.
+		StepVerifier.create(listRoots).assertNext(result -> assertThat(result.roots()).hasSize(1)).verifyComplete();
+		StepVerifier.create(listRoots).assertNext(result -> assertThat(result.roots()).hasSize(1)).verifyComplete();
+	}
+
+	@Test
 	void testListRootsWithMultiplePages() {
 
 		List<McpSchema.Root> page1Roots = Arrays.asList(

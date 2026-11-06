@@ -213,7 +213,7 @@ Schemas that explicitly declare a different dialect via `$schema` are accepted w
 
 The deprecated `Builder.customizeRequest(Consumer<HttpRequest.Builder>)` method on `HttpClientSseClientTransport` and `HttpClientStreamableHttpTransport` has been removed.
 
-**Action:** Use `requestBuilder(HttpRequest.Builder)` for static request setup, or `httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)` for per-request customization.
+**Action:** Use `requestBuilder(HttpRequest.Builder)` for static request setup, or `addHttpRequestCustomizer(McpSyncHttpClientRequestCustomizer)` for per-request customization.
 
 ### `protocolVersions()` default now advertises all known versions
 

@@ -12,6 +12,9 @@ import jakarta.servlet.ReadListener;
 import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -98,6 +101,22 @@ class HttpServletRequestUtilsTests {
 		String body = HttpServletRequestUtils.readBody(request, 1024);
 
 		assertThat(body).isEqualTo("café");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "application/json", "application/json; charset=utf-8", "application/json;charset=UTF-8",
+			"Application/JSON", " application/json ; charset=utf-8" })
+	void acceptsJsonContentType(String contentType) {
+		assertThat(HttpServletRequestUtils.isJsonContentType(contentType)).isTrue();
+	}
+
+	@ParameterizedTest
+	@NullAndEmptySource
+	@ValueSource(strings = { "text/plain", "text/plain;charset=UTF-8", "text/plain; a=application/json",
+			"application/x-www-form-urlencoded", "multipart/form-data", "application/json-seq", "application/jsonp",
+			"application/json, text/plain", "text/event-stream" })
+	void rejectsNonJsonContentType(String contentType) {
+		assertThat(HttpServletRequestUtils.isJsonContentType(contentType)).isFalse();
 	}
 
 	private static HttpServletRequest requestWithBody(String body, String characterEncoding) throws IOException {

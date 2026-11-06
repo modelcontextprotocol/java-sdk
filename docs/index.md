@@ -33,10 +33,11 @@ enables standardized integration between AI models and tools.
         - WebMVC SSE server transport for servlet-based HTTP streaming
         - WebMVC Streamable HTTP server transport
         - WebMVC Stateless server transport
+- Preview of a stateless server for the [2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28) specification revision, with `server/discover`, multi round-trip requests and `subscriptions/listen` (see [MCP Server (2026-07-28)](server-modern.md))
 - Supports Synchronous and Asynchronous programming paradigms
 - Pluggable JSON serialization (Jackson 2.x and Jackson 3.x)
 - Pluggable authorization hooks for server security
-- DNS rebinding protection with Host/Origin header validation
+- DNS rebinding protection with Host/Origin header validation (opt-in, see [HTTP Transport Security](server.md#http-transport-security))
 
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides default STDIO, SSE, and Streamable HTTP client and server transport implementations without requiring external web frameworks.

@@ -226,6 +226,7 @@ class HttpServletJsonRpcErrorTests {
 	private static HttpServletRequest request(String uri, String body, String acceptHeader) throws Exception {
 		HttpServletRequest request = mock(HttpServletRequest.class);
 		when(request.getRequestURI()).thenReturn(uri);
+		when(request.getContentType()).thenReturn("application/json");
 		when(request.getInputStream()).thenReturn(servletInputStream(body.getBytes(StandardCharsets.UTF_8)));
 		if (acceptHeader == null) {
 			when(request.getHeaderNames()).thenReturn(Collections.emptyEnumeration());

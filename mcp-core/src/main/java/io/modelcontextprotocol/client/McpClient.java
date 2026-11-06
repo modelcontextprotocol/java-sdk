@@ -494,9 +494,10 @@ public interface McpClient {
 		 * calling any client operation. This allows to extract thread-locals and hand
 		 * them over to the underlying transport.
 		 * <p>
-		 * There is no direct equivalent in {@link AsyncSpec}. To achieve the same result,
-		 * append {@code contextWrite(McpTransportContext.KEY, context)} to any
-		 * {@link McpAsyncClient} call.
+		 * The supplier is invoked at subscription time, on the calling thread, and the
+		 * resulting context is visible to the transport for every leg of the operation,
+		 * including connections opened on other threads, such as the SSE stream started
+		 * during initialization.
 		 * @param contextProvider A supplier to create a context
 		 * @return This builder for method chaining
 		 */
@@ -580,6 +581,21 @@ public interface McpClient {
 	 * <li>Change notification handlers for tools, resources, and prompts
 	 * <li>Custom message sampling logic
 	 * </ul>
+	 *
+	 * <p>
+	 * Unlike {@link SyncSpec}, this specification has no
+	 * {@code transportContextProvider}. This is deliberate: in a reactive pipeline the
+	 * caller owns the Reactor context, and whatever the transport needs, such as an
+	 * {@link McpTransportContext}, can be written into it directly. Write it once where
+	 * the reactive chain starts, rather than at every call site, and every
+	 * {@link McpAsyncClient} call downstream inherits it, including the connections
+	 * opened during initialization: <pre>{@code
+	 * chain.filter(exchange)
+	 *     .contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context));
+	 * }</pre> To bridge thread-locals into the chain, use Reactor's context propagation
+	 * support.
+	 *
+	 * @see SyncSpec#transportContextProvider(Supplier)
 	 */
 	class AsyncSpec {
 

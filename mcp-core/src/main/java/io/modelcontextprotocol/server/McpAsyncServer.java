@@ -118,6 +118,8 @@ public class McpAsyncServer {
 
 	private final ConcurrentHashMap<String, Set<String>> resourceSubscriptions = new ConcurrentHashMap<>();
 
+	private final McpAsyncListFilter<McpSchema.Tool> toolFilter;
+
 	private List<String> protocolVersions;
 
 	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
@@ -146,6 +148,7 @@ public class McpAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
+		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -177,6 +180,7 @@ public class McpAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
+		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -367,7 +371,7 @@ public class McpAsyncServer {
 			this.tools.add(wrappedToolSpecification);
 			logger.debug("Added tool handler: {}", wrappedToolSpecification.tool().name());
 
-			if (this.serverCapabilities.tools().listChanged()) {
+			if (Boolean.TRUE.equals(this.serverCapabilities.tools().listChanged())) {
 				return notifyToolsListChanged();
 			}
 			return Mono.empty();
@@ -515,7 +519,7 @@ public class McpAsyncServer {
 		return Mono.defer(() -> {
 			if (this.tools.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName))) {
 				logger.debug("Removed tool handler: {}", toolName);
-				if (this.serverCapabilities.tools().listChanged()) {
+				if (Boolean.TRUE.equals(this.serverCapabilities.tools().listChanged())) {
 					return notifyToolsListChanged();
 				}
 			}
@@ -537,10 +541,30 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (exchange, params) -> {
-			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
-
-			return Mono.just(McpSchema.ListToolsResult.builder(tools).build());
+			// TODO: Implement pagination. Cursors must be computed over the filtered
+			// view, otherwise page offsets leak the number of hidden tools.
+			return Flux.fromIterable(this.tools)
+				.map(McpServerFeatures.AsyncToolSpecification::tool)
+				.filterWhen(tool -> this.toolFilter.isVisible(exchange.transportContext(), tool)
+					.onErrorResume(error -> opaqueListFilterError(tool, error)))
+				.collectList()
+				.map(tools -> McpSchema.ListToolsResult.builder(tools).build());
 		};
+	}
+
+	/**
+	 * Report a list filter failure to the client as an opaque {@code -32603} error, so
+	 * that filter internals such as identity provider hostnames or the reason a principal
+	 * was rejected never leave the server. The actual cause is logged instead. An
+	 * {@link McpError} is deliberate on the filter's part and passes through untouched.
+	 */
+	private static Mono<Boolean> opaqueListFilterError(Tool tool, Throwable error) {
+		if (error instanceof McpError mcpError && mcpError.getJsonRpcError() != null) {
+			logger.debug("Tool list filter failed for tool '{}' with an explicit MCP error", tool.name(), error);
+			return Mono.error(mcpError);
+		}
+		logger.error("Tool list filter failed for tool '{}', failing the tools/list request", tool.name(), error);
+		return Mono.error(McpError.builder(ErrorCodes.INTERNAL_ERROR).message("Internal error").build());
 	}
 
 	private McpRequestHandler<CallToolResult> toolsCallRequestHandler() {
@@ -598,7 +622,7 @@ public class McpAsyncServer {
 			else {
 				logger.debug("Added resource handler: {}", resourceSpecification.resource().uri());
 			}
-			if (this.serverCapabilities.resources().listChanged()) {
+			if (Boolean.TRUE.equals(this.serverCapabilities.resources().listChanged())) {
 				return notifyResourcesListChanged();
 			}
 			return Mono.empty();
@@ -631,7 +655,7 @@ public class McpAsyncServer {
 			McpServerFeatures.AsyncResourceSpecification removed = this.resources.remove(resourceUri);
 			if (removed != null) {
 				logger.debug("Removed resource handler: {}", resourceUri);
-				if (this.serverCapabilities.resources().listChanged()) {
+				if (Boolean.TRUE.equals(this.serverCapabilities.resources().listChanged())) {
 					return notifyResourcesListChanged();
 				}
 				return Mono.empty();
@@ -667,7 +691,7 @@ public class McpAsyncServer {
 				logger.debug("Added resource template handler: {}",
 						resourceTemplateSpecification.resourceTemplate().uriTemplate());
 			}
-			if (this.serverCapabilities.resources().listChanged()) {
+			if (Boolean.TRUE.equals(this.serverCapabilities.resources().listChanged())) {
 				return notifyResourcesListChanged();
 			}
 			return Mono.empty();
@@ -699,6 +723,10 @@ public class McpAsyncServer {
 			McpServerFeatures.AsyncResourceTemplateSpecification removed = this.resourceTemplates.remove(uriTemplate);
 			if (removed != null) {
 				logger.debug("Removed resource template: {}", uriTemplate);
+				if (Boolean.TRUE.equals(this.serverCapabilities.resources().listChanged())) {
+					return notifyResourcesListChanged();
+				}
+				return Mono.empty();
 			}
 			else {
 				logger.warn("Failed to remove a resource template with URI '{}' (not found)", uriTemplate);
@@ -867,7 +895,7 @@ public class McpAsyncServer {
 			else {
 				logger.debug("Added prompt handler: {}", promptSpecification.prompt().name());
 			}
-			if (this.serverCapabilities.prompts().listChanged()) {
+			if (Boolean.TRUE.equals(this.serverCapabilities.prompts().listChanged())) {
 				return this.notifyPromptsListChanged();
 			}
 
@@ -901,7 +929,7 @@ public class McpAsyncServer {
 
 			if (removed != null) {
 				logger.debug("Removed prompt handler: {}", promptName);
-				if (this.serverCapabilities.prompts().listChanged()) {
+				if (Boolean.TRUE.equals(this.serverCapabilities.prompts().listChanged())) {
 					return this.notifyPromptsListChanged();
 				}
 				return Mono.empty();

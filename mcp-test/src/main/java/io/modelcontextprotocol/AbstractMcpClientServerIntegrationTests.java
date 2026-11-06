@@ -72,8 +72,6 @@ import static org.mockito.Mockito.mock;
 
 public abstract class AbstractMcpClientServerIntegrationTests {
 
-	protected static final int MAX_REQUEST_SIZE = 2048;
-
 	protected ConcurrentHashMap<String, McpClient.SyncSpec> clientBuilders = new ConcurrentHashMap<>();
 
 	abstract protected void prepareClients(int port, String mcpEndpoint);
@@ -81,6 +79,13 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	abstract protected McpServer.AsyncSpecification<?> prepareAsyncServerBuilder();
 
 	abstract protected McpServer.SyncSpecification<?> prepareSyncServerBuilder();
+
+	// There is, for Streamable HTTP, a race condition between establishing the SSE stream
+	// and the server sending notifications. This breaks some `roots/list` tests (and
+	// could in theory break sampling and elicitation tests). This utility method allows
+	// delaying the test until the stream is opened.
+	protected void awaitClientStreamEstablished() {
+	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@MethodSource("clientsForTesting")
@@ -1059,6 +1064,73 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		}
 	}
 
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testToolErrorDoesNotSendCauseChain(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
+			.callHandler((exchange,
+					request) -> Mono.error(new IllegalStateException("Tool failed",
+							new IllegalArgumentException("connect to db.internal:5432 failed"))))
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample client", "0.0.0").build())
+			.build()) {
+
+			assertThatThrownBy(
+					() -> mcpClient.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build()))
+				.isInstanceOf(McpError.class)
+				.extracting("jsonRpcError")
+				.asInstanceOf(type(McpSchema.JSONRPCResponse.JSONRPCError.class))
+				.satisfies(error -> {
+					assertThat(error.code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+					assertThat(error.message()).isEqualTo("Tool failed");
+					assertThat(error.data()).isNull();
+				});
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testToolErrorWithoutMessage(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
+			.callHandler((exchange, request) -> Mono.error(new IllegalStateException()))
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample client", "0.0.0").build())
+			.build()) {
+
+			assertThatThrownBy(
+					() -> mcpClient.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build()))
+				.isInstanceOf(McpError.class)
+				.extracting("jsonRpcError")
+				.asInstanceOf(type(McpSchema.JSONRPCResponse.JSONRPCError.class))
+				.satisfies(error -> {
+					assertThat(error.code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+					assertThat(error.message()).isEqualTo("Internal error");
+				});
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
+	}
+
 	// ---------------------------------------
 	// Roots Tests
 	// ---------------------------------------
@@ -1082,6 +1154,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
+			awaitClientStreamEstablished();
 
 			assertThat(rootsRef.get()).isNull();
 
@@ -1168,7 +1241,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
-
+			awaitClientStreamEstablished();
 			mcpClient.rootsListChangedNotification();
 
 			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
@@ -1201,7 +1274,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.build()) {
 
 			assertThat(mcpClient.initialize()).isNotNull();
-
+			awaitClientStreamEstablished();
 			mcpClient.rootsListChangedNotification();
 
 			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
@@ -1234,7 +1307,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
-
+			awaitClientStreamEstablished();
 			mcpClient.rootsListChangedNotification();
 
 			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
@@ -1343,7 +1416,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		var clientBuilder = clientBuilders.get(clientType);
 
 		var transportContextIsNull = new AtomicBoolean(false);
-		var transportContextIsEmpty = new AtomicBoolean(false);
+		var importantValue = new AtomicReference<Object>();
 		var responseBodyIsNullOrBlank = new AtomicBoolean(false);
 
 		var expectedCallResponse = McpSchema.CallToolResult.builder()
@@ -1355,7 +1428,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 				McpTransportContext transportContext = exchange.transportContext();
 				transportContextIsNull.set(transportContext == null);
-				transportContextIsEmpty.set(transportContext.equals(McpTransportContext.EMPTY));
+				importantValue.set(transportContext.get("important"));
 				String ctxValue = (String) transportContext.get("important");
 
 				try {
@@ -1387,7 +1460,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build());
 
 			assertThat(transportContextIsNull.get()).isFalse();
-			assertThat(transportContextIsEmpty.get()).isFalse();
+			assertThat(importantValue.get()).isEqualTo("value");
 			assertThat(responseBodyIsNullOrBlank.get()).isFalse();
 			assertThat(response).isNotNull().isEqualTo(expectedCallResponse);
 		}
@@ -2349,51 +2422,6 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			mcpServer.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(resourceUri));
 
 			assertThat(notificationCount.get()).as("no notification should be received after unsubscribing").isZero();
-		}
-		finally {
-			mcpServer.closeGracefully();
-		}
-	}
-
-	// Bounded read
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("clientsForTesting")
-	void testRejectsWhenContentLengthHeaderExceedsLimit(String clientType) throws Exception {
-		var clientBuilder = clientBuilders.get(clientType);
-
-		String inputSchema = """
-					{
-						"type": "object",
-						"properties": {
-							"message": { "type": "string" }
-						},
-						"required": ["message"]
-					}
-				""";
-
-		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
-			.tool(Tool.builder("tool1", McpJsonDefaults.getMapper(), inputSchema)
-				.description("tool1 description")
-				.build())
-			.callHandler((exchange, request) -> CallToolResult.builder()
-				.addContent(TextContent.builder(request.arguments().get("message").toString()).build())
-				.build())
-			.build();
-
-		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(false).build())
-			.tools(tool1)
-			.build();
-
-		try (var mcpClient = clientBuilder.build()) {
-			String oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1);
-
-			mcpClient.initialize();
-			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
-
-			assertThatThrownBy(() -> mcpClient.callTool(
-					McpSchema.CallToolRequest.builder("tool1").arguments(Map.of("message", oversizedBody)).build()))
-				.isInstanceOf(RuntimeException.class)
-				.hasMessageContaining("413");
 		}
 		finally {
 			mcpServer.closeGracefully();

@@ -38,6 +38,7 @@ public class McpServerFeatures {
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
 	 * @param instructions The server instructions text
+	 * @param toolFilters The per-request filters deciding which tools are listed
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
@@ -45,7 +46,7 @@ public class McpServerFeatures {
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
-			String instructions) {
+			String instructions, List<McpAsyncListFilter<McpSchema.Tool>> toolFilters) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -58,6 +59,7 @@ public class McpServerFeatures {
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
+		 * @param toolFilters The per-request filters deciding which tools are listed
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
@@ -65,7 +67,7 @@ public class McpServerFeatures {
 				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
-				String instructions) {
+				String instructions, List<McpAsyncListFilter<McpSchema.Tool>> toolFilters) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -91,6 +93,7 @@ public class McpServerFeatures {
 			this.completions = (completions != null) ? completions : Map.of();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : List.of();
 			this.instructions = instructions;
+			this.toolFilters = (toolFilters != null) ? toolFilters : List.of();
 		}
 
 		/**
@@ -138,7 +141,11 @@ public class McpServerFeatures {
 			}
 
 			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
-					prompts, completions, rootChangeConsumers, syncSpec.instructions());
+					prompts, completions, rootChangeConsumers, syncSpec.instructions(),
+					syncSpec.toolFilters()
+						.stream()
+						.map(filter -> McpAsyncListFilter.fromSync(filter, immediateExecution))
+						.toList());
 		}
 	}
 
@@ -161,7 +168,8 @@ public class McpServerFeatures {
 			Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
-			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions) {
+			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions,
+			List<McpSyncListFilter<McpSchema.Tool>> toolFilters) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -174,6 +182,7 @@ public class McpServerFeatures {
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
+		 * @param toolFilters The per-request filters deciding which tools are listed
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.SyncToolSpecification> tools,
@@ -181,8 +190,8 @@ public class McpServerFeatures {
 				Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
-				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers,
-				String instructions) {
+				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions,
+				List<McpSyncListFilter<McpSchema.Tool>> toolFilters) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -208,6 +217,7 @@ public class McpServerFeatures {
 			this.completions = (completions != null) ? completions : new HashMap<>();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : new ArrayList<>();
 			this.instructions = instructions;
+			this.toolFilters = (toolFilters != null) ? toolFilters : List.of();
 		}
 
 	}
