@@ -142,6 +142,37 @@ class McpAsyncServerExchangeTests {
 	}
 
 	@Test
+	void testListRootsStopsPagingOnEmptyNextCursor() {
+
+		List<McpSchema.Root> page1Roots = List
+			.of(McpSchema.Root.builder("file:///home/user/project1").name("Project 1").build());
+		List<McpSchema.Root> page2Roots = List
+			.of(McpSchema.Root.builder("file:///home/user/project2").name("Project 2").build());
+
+		McpSchema.ListRootsResult page1Result = McpSchema.ListRootsResult.builder(page1Roots)
+			.nextCursor("cursor1")
+			.build();
+		// A client that reports an empty next cursor ends pagination.
+		McpSchema.ListRootsResult page2Result = McpSchema.ListRootsResult.builder(page2Roots).nextCursor("").build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest()),
+				any(TypeRef.class)))
+			.thenReturn(Mono.just(page1Result));
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest("cursor1")),
+				any(TypeRef.class)))
+			.thenReturn(Mono.just(page2Result));
+
+		StepVerifier.create(exchange.listRoots()).assertNext(result -> {
+			assertThat(result.roots()).hasSize(2);
+			assertThat(result.roots().get(0).uri()).isEqualTo("file:///home/user/project1");
+			assertThat(result.roots().get(1).uri()).isEqualTo("file:///home/user/project2");
+		}).verifyComplete();
+
+		verify(mockSession, times(2)).sendRequest(eq(McpSchema.METHOD_ROOTS_LIST),
+				any(McpSchema.PaginatedRequest.class), any(TypeRef.class));
+	}
+
+	@Test
 	void testListRootsWithEmptyResult() {
 
 		McpSchema.ListRootsResult emptyResult = McpSchema.ListRootsResult.builder(new ArrayList<>()).build();
