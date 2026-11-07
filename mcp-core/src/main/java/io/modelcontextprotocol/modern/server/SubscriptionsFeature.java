@@ -71,15 +71,18 @@ final class SubscriptionsFeature implements McpFeature {
 
 	@Override
 	public Mono<McpAsyncResponse<Result>> handle(McpRequestContext ctx, Object params) {
+		// The JSON creator fills a missing filter in, so check the raw params.
+		if (!(params instanceof Map<?, ?> map) || map.get("notifications") == null) {
+			return Mono.error(McpException.invalidParams("params.notifications is required"));
+		}
 		SubscriptionsListenRequest request;
 		try {
-			request = params == null ? null : this.jsonMapper.convertValue(params, SubscriptionsListenRequest.class);
+			request = this.jsonMapper.convertValue(params, SubscriptionsListenRequest.class);
 		}
 		catch (RuntimeException ex) {
 			return Mono.error(McpException.invalidParams("Malformed SubscriptionsListenRequest"));
 		}
-		SubscriptionFilter requested = request == null || request.notifications() == null ? SubscriptionFilter.EMPTY
-				: request.notifications();
+		SubscriptionFilter requested = request.notifications();
 		return Mono.just(McpAsyncResponse.streaming(notifier -> listen(ctx, intersect(requested), notifier)));
 	}
 
