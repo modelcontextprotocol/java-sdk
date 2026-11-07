@@ -66,6 +66,8 @@ class McpClientFeatures {
 	 * @param applyElicitationDefaults whether the client should fill in missing fields of
 	 * an accepted {@code ElicitResult.content} with the {@code default} values declared
 	 * in the {@code requestedSchema}.
+	 * @param validateCallToolResultContent whether to validate required tool result
+	 * content before deserialization.
 	 */
 	record Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 			Map<String, McpSchema.Root> roots, List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
@@ -78,7 +80,8 @@ class McpClientFeatures {
 			Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
 			Function<McpSchema.ElicitFormRequest, Mono<McpSchema.ElicitResult>> formElicitationHandler,
 			Function<McpSchema.ElicitUrlRequest, Mono<McpSchema.ElicitResult>> urlElicitationHandler,
-			boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults) {
+			boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults,
+			boolean validateCallToolResultContent) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -95,6 +98,8 @@ class McpClientFeatures {
 		 * @param applyElicitationDefaults whether the client should fill in missing
 		 * fields of an accepted {@code ElicitResult.content} with the {@code default}
 		 * values declared in the {@code requestedSchema}.
+		 * @param validateCallToolResultContent whether to validate required tool result
+		 * content before deserialization.
 		 */
 		public Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 				Map<String, McpSchema.Root> roots,
@@ -108,7 +113,8 @@ class McpClientFeatures {
 				Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
 				Function<McpSchema.ElicitFormRequest, Mono<McpSchema.ElicitResult>> formElicitationHandler,
 				Function<McpSchema.ElicitUrlRequest, Mono<McpSchema.ElicitResult>> urlElicitationHandler,
-				boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults) {
+				boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults,
+				boolean validateCallToolResultContent) {
 
 			Assert.notNull(clientInfo, "Client info must not be null");
 			this.clientInfo = clientInfo;
@@ -132,6 +138,7 @@ class McpClientFeatures {
 			this.urlElicitationHandler = urlElicitationHandler;
 			this.enableCallToolSchemaCaching = enableCallToolSchemaCaching;
 			this.applyElicitationDefaults = applyElicitationDefaults;
+			this.validateCallToolResultContent = validateCallToolResultContent;
 		}
 
 		/**
@@ -148,7 +155,7 @@ class McpClientFeatures {
 				Function<McpSchema.ElicitFormRequest, Mono<McpSchema.ElicitResult>> elicitationHandler) {
 			this(clientInfo, clientCapabilities, roots, toolsChangeConsumers, resourcesChangeConsumers,
 					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, List.of(), List.of(),
-					samplingHandler, elicitationHandler, null, false, false);
+					samplingHandler, elicitationHandler, null, false, false, false);
 		}
 
 		/**
@@ -223,7 +230,7 @@ class McpClientFeatures {
 					toolsChangeConsumers, resourcesChangeConsumers, resourcesUpdateConsumers, promptsChangeConsumers,
 					loggingConsumers, progressConsumers, elicitationCompleteConsumers, samplingHandler,
 					formElicitationHandler, urlElicitationHandler, syncSpec.enableCallToolSchemaCaching,
-					syncSpec.applyElicitationDefaults);
+					syncSpec.applyElicitationDefaults, syncSpec.validateCallToolResultContent);
 		}
 
 	}
@@ -246,6 +253,8 @@ class McpClientFeatures {
 	 * @param applyElicitationDefaults whether the client should fill in missing fields of
 	 * an accepted {@code ElicitResult.content} with the {@code default} values declared
 	 * in the {@code requestedSchema}.
+	 * @param validateCallToolResultContent whether to validate required tool result
+	 * content before deserialization.
 	 */
 	public record Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 			Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
@@ -258,7 +267,8 @@ class McpClientFeatures {
 			Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
 			Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> formElicitationHandler,
 			Function<McpSchema.ElicitUrlRequest, McpSchema.ElicitResult> urlElicitationHandler,
-			boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults) {
+			boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults,
+			boolean validateCallToolResultContent) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -277,6 +287,8 @@ class McpClientFeatures {
 		 * @param applyElicitationDefaults whether the client should fill in missing
 		 * fields of an accepted {@code ElicitResult.content} with the {@code default}
 		 * values declared in the {@code requestedSchema}.
+		 * @param validateCallToolResultContent whether to validate required tool result
+		 * content before deserialization.
 		 */
 		public Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 				Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
@@ -289,7 +301,8 @@ class McpClientFeatures {
 				Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
 				Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> formElicitationHandler,
 				Function<McpSchema.ElicitUrlRequest, McpSchema.ElicitResult> urlElicitationHandler,
-				boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults) {
+				boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults,
+				boolean validateCallToolResultContent) {
 
 			Assert.notNull(clientInfo, "Client info must not be null");
 			this.clientInfo = clientInfo;
@@ -313,6 +326,7 @@ class McpClientFeatures {
 			this.urlElicitationHandler = urlElicitationHandler;
 			this.enableCallToolSchemaCaching = enableCallToolSchemaCaching;
 			this.applyElicitationDefaults = applyElicitationDefaults;
+			this.validateCallToolResultContent = validateCallToolResultContent;
 		}
 
 		/**
@@ -329,7 +343,7 @@ class McpClientFeatures {
 				Function<McpSchema.ElicitUrlRequest, McpSchema.ElicitResult> urlElicitationHandler) {
 			this(clientInfo, clientCapabilities, roots, toolsChangeConsumers, resourcesChangeConsumers,
 					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, List.of(), List.of(),
-					samplingHandler, formElicitationHandler, urlElicitationHandler, false, false);
+					samplingHandler, formElicitationHandler, urlElicitationHandler, false, false, false);
 		}
 	}
 

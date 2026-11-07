@@ -202,6 +202,8 @@ public interface McpClient {
 
 		private boolean applyElicitationDefaults = false; // Default to false
 
+		private boolean validateCallToolResultContent;
+
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
 			this.transport = transport;
@@ -546,6 +548,20 @@ public interface McpClient {
 		}
 
 		/**
+		 * Validate that a tools/call result contains a non-null content array before
+		 * deserialization can substitute an empty list. Disabled by default for wire
+		 * compatibility. An explicit empty array remains valid. This check is independent
+		 * of tool output schema validation and also applies to results with isError=true.
+		 * @param validateCallToolResultContent true to reject missing, null or non-array
+		 * content with an IllegalArgumentException
+		 * @return This builder instance for method chaining
+		 */
+		public SyncSpec validateCallToolResultContent(boolean validateCallToolResultContent) {
+			this.validateCallToolResultContent = validateCallToolResultContent;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
 		 * @return a new instance of {@link McpSyncClient}.
@@ -555,7 +571,8 @@ public interface McpClient {
 					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 					this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
 					this.elicitationCompleteConsumers, this.samplingHandler, this.formElicitationHandler,
-					this.urlElicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults);
+					this.urlElicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults,
+					this.validateCallToolResultContent);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
@@ -636,6 +653,8 @@ public interface McpClient {
 		private boolean enableCallToolSchemaCaching = false; // Default to false
 
 		private boolean applyElicitationDefaults = false; // Default to false
+
+		private boolean validateCallToolResultContent;
 
 		private AsyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -967,6 +986,20 @@ public interface McpClient {
 		}
 
 		/**
+		 * Validate that a tools/call result contains a non-null content array before
+		 * deserialization can substitute an empty list. Disabled by default for wire
+		 * compatibility. An explicit empty array remains valid. This check is independent
+		 * of tool output schema validation and also applies to results with isError=true.
+		 * @param validateCallToolResultContent true to reject missing, null or non-array
+		 * content with an IllegalArgumentException
+		 * @return This builder instance for method chaining
+		 */
+		public AsyncSpec validateCallToolResultContent(boolean validateCallToolResultContent) {
+			this.validateCallToolResultContent = validateCallToolResultContent;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpAsyncClient} with the provided configurations
 		 * or sensible defaults.
 		 * @return a new instance of {@link McpAsyncClient}.
@@ -980,8 +1013,8 @@ public interface McpClient {
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
 							this.elicitationCompleteConsumers, this.samplingHandler, this.formElicitationHandler,
-							this.urlElicitationHandler, this.enableCallToolSchemaCaching,
-							this.applyElicitationDefaults));
+							this.urlElicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults,
+							this.validateCallToolResultContent));
 		}
 
 	}
