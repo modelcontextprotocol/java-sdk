@@ -1,0 +1,104 @@
+From 9fd3a16c0306d5afbe35ff6d32cb2a84c34482ab Mon Sep 17 00:00:00 2001
+From: Rohit Kushwaha <subhamkushwahagd@gmail.com>
+Date: Thu, 20 Aug 2026 19:35:32 +0000
+Subject: [PATCH] Reject listRoots when client lacks roots capability, without
+ sending a request
+
+McpAsyncServerExchange#createMessage and #createElicitation both
+fail fast with an IllegalStateException when the client hasn't
+declared the relevant capability, avoiding an unnecessary round
+trip to the client. #listRoots(String) did not follow the same
+pattern and would send a roots/list request even when the client
+never advertised roots support.
+
+This aligns #listRoots(String) with the existing fail-fast
+convention: it now checks clientCapabilities for null (client not
+yet initialized) and for a missing roots capability before sending
+McpSchema.METHOD_ROOTS_LIST.
+
+Fixes #1067
+---
+ .../server/McpAsyncServerExchange.java        |  7 +++
+ .../server/McpAsyncServerExchangeTests.java   | 48 +++++++++++++++++++
+ 2 files changed, 55 insertions(+)
+
+diff --git a/mcp-core/src/main/java/io/modelcontextprotocol/server/McpAsyncServerExchange.java b/mcp-core/src/main/java/io/modelcontextprotocol/server/McpAsyncServerExchange.java
+index e27d612..d977ac9 100644
+--- a/mcp-core/src/main/java/io/modelcontextprotocol/server/McpAsyncServerExchange.java
++++ b/mcp-core/src/main/java/io/modelcontextprotocol/server/McpAsyncServerExchange.java
+@@ -225,6 +225,13 @@ public class McpAsyncServerExchange {
+ 	 * @return A Mono that emits the list of roots result containing
+ 	 */
+ 	public Mono<McpSchema.ListRootsResult> listRoots(String cursor) {
++		if (this.clientCapabilities == null) {
++			return Mono
++				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
++		}
++		if (this.clientCapabilities.roots() == null) {
++			return Mono.error(new IllegalStateException("Client must be configured with roots capabilities"));
++		}
+ 		return this.session.sendRequest(McpSchema.METHOD_ROOTS_LIST, new McpSchema.PaginatedRequest(cursor),
+ 				LIST_ROOTS_RESULT_TYPE_REF);
+ 	}
+diff --git a/mcp-core/src/test/java/io/modelcontextprotocol/server/McpAsyncServerExchangeTests.java b/mcp-core/src/test/java/io/modelcontextprotocol/server/McpAsyncServerExchangeTests.java
+index f4f76b1..b556a8a 100644
+--- a/mcp-core/src/test/java/io/modelcontextprotocol/server/McpAsyncServerExchangeTests.java
++++ b/mcp-core/src/test/java/io/modelcontextprotocol/server/McpAsyncServerExchangeTests.java
+@@ -157,6 +157,54 @@ class McpAsyncServerExchangeTests {
+ 		}).verifyComplete();
+ 	}
+ 
++	@Test
++	void testListRootsWithNullCapabilities() {
++
++		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange("testSessionId",
++				mockSession, null, clientInfo, McpTransportContext.EMPTY);
++
++		StepVerifier.create(exchangeWithNullCapabilities.listRoots()).verifyErrorSatisfies(error -> {
++			assertThat(error).isInstanceOf(IllegalStateException.class)
++				.hasMessage("Client must be initialized. Call the initialize method first!");
++		});
++
++		// Verify that sendRequest was never called due to null capabilities
++		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(), any(TypeRef.class));
++	}
++
++	@Test
++	void testListRootsWithoutRootsCapabilities() {
++
++		McpSchema.ClientCapabilities capabilitiesWithoutRoots = McpSchema.ClientCapabilities.builder()
++			.sampling()
++			.build();
++
++		McpAsyncServerExchange exchangeWithoutRoots = new McpAsyncServerExchange("testSessionId", mockSession,
++				capabilitiesWithoutRoots, clientInfo, McpTransportContext.EMPTY);
++
++		StepVerifier.create(exchangeWithoutRoots.listRoots()).verifyErrorSatisfies(error -> {
++			assertThat(error).isInstanceOf(IllegalStateException.class)
++				.hasMessage("Client must be configured with roots capabilities");
++		});
++
++		// Verify that sendRequest was never called due to missing roots capabilities
++		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(), any(TypeRef.class));
++	}
++
++	@Test
++	void testListRootsWithSpecificCursorAndNullCapabilities() {
++
++		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange("testSessionId",
++				mockSession, null, clientInfo, McpTransportContext.EMPTY);
++
++		StepVerifier.create(exchangeWithNullCapabilities.listRoots("someCursor")).verifyErrorSatisfies(error -> {
++			assertThat(error).isInstanceOf(IllegalStateException.class)
++				.hasMessage("Client must be initialized. Call the initialize method first!");
++		});
++
++		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(), any(TypeRef.class));
++	}
++
+ 	@Test
+ 	void testListRootsWithError() {
+ 
+-- 
+2.43.0
+
