@@ -60,6 +60,34 @@ class McpAsyncServerExchangeTests {
 	}
 
 	@Test
+	void testListRootsWithNullCapabilities() {
+		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange("testSessionId", mockSession,
+				null, clientInfo, McpTransportContext.EMPTY);
+
+		StepVerifier.create(exchangeWithNullCapabilities.listRoots()).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Client must be initialized. Call the initialize method first!");
+		});
+
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(McpSchema.PaginatedRequest.class),
+				any(TypeRef.class));
+	}
+
+	@Test
+	void testListRootsWithoutRootsCapability() {
+		McpSchema.ClientCapabilities capabilitiesWithoutRoots = McpSchema.ClientCapabilities.builder().build();
+		McpAsyncServerExchange exchangeWithoutRoots = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithoutRoots, clientInfo, McpTransportContext.EMPTY);
+
+		StepVerifier.create(exchangeWithoutRoots.listRoots("someCursor")).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(IllegalStateException.class).hasMessage("Roots not supported");
+		});
+
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(McpSchema.PaginatedRequest.class),
+				any(TypeRef.class));
+	}
+
+	@Test
 	void testListRootsWithSinglePage() {
 
 		List<McpSchema.Root> roots = Arrays.asList(
