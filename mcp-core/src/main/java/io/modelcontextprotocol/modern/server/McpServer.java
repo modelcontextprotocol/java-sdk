@@ -457,8 +457,21 @@ public final class McpServer implements McpRequestManager {
 			List<McpFeature> allFeatures = new ArrayList<>(this.features);
 
 			ServerCapabilities.Builder capabilitiesBuilder = ServerCapabilities.builder();
+			Map<String, McpFeature> byRefType = new HashMap<>();
 			for (McpFeature feature : allFeatures) {
 				feature.capabilities(capabilitiesBuilder);
+				for (String refType : feature.completionRefTypes()) {
+					McpFeature existing = byRefType.putIfAbsent(refType, feature);
+					if (existing != null) {
+						throw new IllegalStateException("Ref type '" + refType + "' is completed by both "
+								+ existing.getClass().getName() + " and " + feature.getClass().getName());
+					}
+				}
+			}
+			if (!byRefType.isEmpty()) {
+				CompletionsFeature completionsFeature = new CompletionsFeature(mapper, Map.copyOf(byRefType));
+				completionsFeature.capabilities(capabilitiesBuilder);
+				allFeatures.add(completionsFeature);
 			}
 
 			// Subscriptions and discover are wired up last: which change types

@@ -4,19 +4,26 @@
 
 package io.modelcontextprotocol.modern.server.feature;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.modern.McpException;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
+import io.modelcontextprotocol.modern.McpSchema.CompleteRequest;
+import io.modelcontextprotocol.modern.McpSchema.CompleteResult;
+import io.modelcontextprotocol.modern.McpSchema.CompleteResult.Completion;
 import io.modelcontextprotocol.modern.McpSchema.ListResourceTemplatesResult;
 import io.modelcontextprotocol.modern.McpSchema.ListResourcesResult;
 import io.modelcontextprotocol.modern.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.modern.McpSchema.ReadResourceOutcome;
 import io.modelcontextprotocol.modern.McpSchema.ReadResourceRequest;
+import io.modelcontextprotocol.modern.McpSchema.ResourceReference;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.modern.server.McpFeature;
@@ -32,6 +39,10 @@ import reactor.core.publisher.Mono;
  * @author Dariusz Jędrzejczyk
  */
 public final class ResourcesFeature implements McpFeature {
+
+	private static final Pattern TEMPLATE_EXPRESSION = Pattern.compile("\\{([^}]*)\\}");
+
+	private static final String TEMPLATE_OPERATORS = "+#./;?&";
 
 	private final McpAsyncResourceRepository repository;
 
@@ -112,6 +123,46 @@ public final class ResourcesFeature implements McpFeature {
 	}
 
 	@Override
+	public Set<String> completionRefTypes() {
+		return this.repository.supportsCompletion() ? Set.of(ResourceReference.TYPE) : Set.of();
+	}
+
+	@Override
+	public Mono<CompleteResult> complete(McpRequestContext ctx, CompleteRequest request) {
+		String uriTemplate = ((ResourceReference) request.ref()).uri();
+		String argument = request.argument().name();
+		return this.repository.findTemplate(ctx, uriTemplate)
+			.switchIfEmpty(Mono.error(() -> McpException.invalidParams("Unknown resource template: " + uriTemplate,
+					Map.of("uri", uriTemplate))))
+			.flatMap(template -> {
+				if (!declaresVariable(template.definition().uriTemplate(), argument)) {
+					return Mono.error(McpException
+						.invalidParams("Unknown argument: " + argument + " in resource template: " + uriTemplate));
+				}
+				return template.completionHandler() != null ? template.completionHandler().complete(ctx, request)
+						: Mono.just(CompleteResult.of(new Completion(List.of())));
+			});
+	}
+
+	private static boolean declaresVariable(String uriTemplate, String name) {
+		Matcher matcher = TEMPLATE_EXPRESSION.matcher(uriTemplate);
+		while (matcher.find()) {
+			// An RFC 6570 expression: an optional operator, then comma-separated
+			// variables, each with an optional prefix (":3") or explode ("*") modifier.
+			String expression = matcher.group(1);
+			if (!expression.isEmpty() && TEMPLATE_OPERATORS.indexOf(expression.charAt(0)) >= 0) {
+				expression = expression.substring(1);
+			}
+			for (String variable : expression.split(",")) {
+				if (variable.replaceFirst("(\\*|:\\d+)$", "").equals(name)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	@Override
 	public Set<String> inputRequiredMethods() {
 		return Set.of(McpSchema.METHOD_RESOURCES_READ);
 	}
@@ -150,8 +201,19 @@ public final class ResourcesFeature implements McpFeature {
 			}
 
 			@Override
+			public Mono<McpAsyncResourceTemplate> findTemplate(McpRequestContext ctx, String uriTemplate) {
+				return SyncAdapters.call(ctx, () -> repository.findTemplate(ctx, uriTemplate))
+					.map(ResourcesFeature::adapt);
+			}
+
+			@Override
 			public boolean supportsSubscribe() {
 				return repository.supportsSubscribe();
+			}
+
+			@Override
+			public boolean supportsCompletion() {
+				return repository.supportsCompletion();
 			}
 		};
 	}
@@ -159,6 +221,12 @@ public final class ResourcesFeature implements McpFeature {
 	private static McpAsyncResource adapt(McpSyncResource resource) {
 		return McpAsyncResource.of(resource.requiredCapabilities(),
 				(ctx, request) -> SyncAdapters.respond(ctx, () -> resource.handler().read(ctx, request)));
+	}
+
+	private static McpAsyncResourceTemplate adapt(McpSyncResourceTemplate template) {
+		McpAsyncResourceTemplate adapted = McpAsyncResourceTemplate.of(template.definition());
+		return template.completionHandler() != null
+				? adapted.withCompletionHandler(SyncAdapters.completion(template.completionHandler())) : adapted;
 	}
 
 }

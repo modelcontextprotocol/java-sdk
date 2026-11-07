@@ -10,12 +10,18 @@ import io.modelcontextprotocol.modern.server.McpRequestContext;
 import reactor.core.publisher.Mono;
 
 /**
- * Answers {@code completion/complete}. Completion never streams and never returns MRTR.
+ * Answers {@code completion/complete} for the arguments of one prompt or resource
+ * template. Completion never streams and never returns MRTR.
  *
  * @author Dariusz Jędrzejczyk
  */
-public interface McpAsyncCompletionRepository {
+@FunctionalInterface
+public interface McpAsyncCompletionHandler {
 
+	/**
+	 * The request's ref names this handler's prompt or resource template, and its
+	 * argument is one that prompt or template declares.
+	 */
 	Mono<CompleteResult> complete(McpRequestContext ctx, CompleteRequest request);
 
 }

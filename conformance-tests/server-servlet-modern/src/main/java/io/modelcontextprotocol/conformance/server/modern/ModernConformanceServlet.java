@@ -17,6 +17,7 @@ import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
 import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
 import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
+import io.modelcontextprotocol.modern.McpSchema.CompleteRequest;
 import io.modelcontextprotocol.modern.McpSchema.CompleteResult;
 import io.modelcontextprotocol.modern.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.modern.McpSchema.ElicitFormRequest;
@@ -44,13 +45,13 @@ import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.McpSyncNotifier;
 import io.modelcontextprotocol.modern.server.McpSyncResponse;
-import io.modelcontextprotocol.modern.server.feature.CompletionsFeature;
 import io.modelcontextprotocol.modern.server.feature.McpChangeBroadcaster;
 import io.modelcontextprotocol.modern.server.feature.McpChangeFeed;
 import io.modelcontextprotocol.modern.server.feature.McpSyncPrompt;
 import io.modelcontextprotocol.modern.server.feature.McpSyncPromptRepository;
 import io.modelcontextprotocol.modern.server.feature.McpSyncResource;
 import io.modelcontextprotocol.modern.server.feature.McpSyncResourceRepository;
+import io.modelcontextprotocol.modern.server.feature.McpSyncResourceTemplate;
 import io.modelcontextprotocol.modern.server.feature.McpSyncTool;
 import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.PromptsFeature;
@@ -135,14 +136,11 @@ public class ModernConformanceServlet {
 		logger.info("Starting MCP Conformance Tests - Modern Servlet Server");
 
 		McpChangeFeed changes = new McpChangeFeed();
-
 		McpServer mcpServer = McpServer.builder()
 			.serverInfo(Implementation.builder("mcp-modern-conformance-server", "1.0.0").build())
 			.feature(ToolsFeature.ofSync(new ConformanceTools(changes)))
 			.feature(ResourcesFeature.ofSync(new ConformanceResources()))
 			.feature(PromptsFeature.ofSync(new ConformancePrompts()))
-			.feature(CompletionsFeature
-				.ofSync((ctx, request) -> CompleteResult.of(new CompleteResult.Completion(List.of()))))
 			.subscriptions(changes)
 			.build();
 
@@ -199,6 +197,12 @@ public class ModernConformanceServlet {
 
 	private static CallToolResult text(String text) {
 		return CallToolResult.builder().addContent(TextContent.builder(text).build()).build();
+	}
+
+	private static CompleteResult completeFrom(List<String> candidates, CompleteRequest request) {
+		String prefix = request.argument().value();
+		return CompleteResult
+			.of(new CompleteResult.Completion(candidates.stream().filter(value -> value.startsWith(prefix)).toList()));
 	}
 
 	private static ElicitFormRequest elicitString(String message, String field) {
@@ -542,13 +546,21 @@ public class ModernConformanceServlet {
 			return ResourcesPage.of(RESOURCES);
 		}
 
+		private static final McpSyncResourceTemplate TEMPLATE = McpSyncResourceTemplate
+			.of(ResourceTemplate.builder("test://template/{id}/data", "Template Resource")
+				.description("A resource template for testing parameter substitution")
+				.mimeType("application/json")
+				.build())
+			.withCompletionHandler((ctx, request) -> completeFrom(List.of("1", "2", "3"), request));
+
 		@Override
 		public ResourceTemplatesPage listTemplates(McpRequestContext ctx, String cursor) {
-			return ResourceTemplatesPage
-				.of(List.of(ResourceTemplate.builder("test://template/{id}/data", "Template Resource")
-					.description("A resource template for testing parameter substitution")
-					.mimeType("application/json")
-					.build()));
+			return ResourceTemplatesPage.of(List.of(TEMPLATE.definition()));
+		}
+
+		@Override
+		public McpSyncResourceTemplate findTemplate(McpRequestContext ctx, String uriTemplate) {
+			return TEMPLATE.definition().uriTemplate().equals(uriTemplate) ? TEMPLATE : null;
 		}
 
 		@Override
@@ -570,6 +582,11 @@ public class ModernConformanceServlet {
 
 		@Override
 		public boolean supportsSubscribe() {
+			return true;
+		}
+
+		@Override
+		public boolean supportsCompletion() {
 			return true;
 		}
 
@@ -614,6 +631,8 @@ public class ModernConformanceServlet {
 							args.get("arg2"));
 					return messages(PromptMessage.builder(Role.USER, TextContent.builder(text).build()).build());
 				}));
+			this.prompts.computeIfPresent("test_prompt_with_arguments", (name, prompt) -> prompt
+				.withCompletionHandler((ctx, request) -> completeFrom(List.of("alpha", "beta", "gamma"), request)));
 			add(Prompt.builder("test_prompt_with_embedded_resource")
 				.description("A prompt with embedded resource for testing")
 				.arguments(List.of(PromptArgument.builder("resourceUri")
@@ -676,6 +695,11 @@ public class ModernConformanceServlet {
 		@Override
 		public McpSyncPrompt find(McpRequestContext ctx, String name) {
 			return this.prompts.get(name);
+		}
+
+		@Override
+		public boolean supportsCompletion() {
+			return true;
 		}
 
 	}

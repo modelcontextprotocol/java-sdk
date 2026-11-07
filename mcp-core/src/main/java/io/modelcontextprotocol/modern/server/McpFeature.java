@@ -7,15 +7,18 @@ package io.modelcontextprotocol.modern.server;
 import java.util.Set;
 
 import io.modelcontextprotocol.modern.McpException;
+import io.modelcontextprotocol.modern.McpSchema.CompleteRequest;
+import io.modelcontextprotocol.modern.McpSchema.CompleteResult;
 import io.modelcontextprotocol.modern.McpSchema.InputRequired;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
 import reactor.core.publisher.Mono;
 
 /**
- * A composable unit of server behaviour: the methods it serves, and the capabilities it
- * contributes to {@code server/discover}. Core primitives (tools, resources, prompts,
- * completions) are features; so is anything an extension adds.
+ * A composable unit of server behaviour: the methods it serves, the capabilities it
+ * contributes to {@code server/discover}, and the references it completes for
+ * {@code completion/complete}. Core primitives (tools, resources, prompts) are features;
+ * so is anything an extension adds.
  *
  * @author Dariusz Jędrzejczyk
  */
@@ -44,6 +47,24 @@ public interface McpFeature {
 	 */
 	default Set<String> inputRequiredMethods() {
 		return Set.of();
+	}
+
+	/**
+	 * The {@code completion/complete} reference types, such as {@code ref/prompt}, this
+	 * feature answers through {@link #complete}. No two features may answer the same one;
+	 * the server serves {@code completion/complete} and advertises {@code completions}
+	 * when any feature answers one. Default: none.
+	 */
+	default Set<String> completionRefTypes() {
+		return Set.of();
+	}
+
+	/**
+	 * Answer a {@code completion/complete} whose ref type is one of
+	 * {@link #completionRefTypes()}, with the same error rules as {@link #handle}.
+	 */
+	default Mono<CompleteResult> complete(McpRequestContext ctx, CompleteRequest request) {
+		return Mono.error(new UnsupportedOperationException(getClass().getName() + " does not complete"));
 	}
 
 }
