@@ -228,12 +228,11 @@ public class McpServerFeatures {
 	 * represents a specific capability.
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
-	 * @param call Deprecated. Use the {@link AsyncToolSpecification#callHandler} instead.
 	 * @param callHandler The function that implements the tool's logic, receiving a
 	 * {@link McpAsyncServerExchange} and a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.CallToolRequest} and returning
 	 * results. The function's first argument is an {@link McpAsyncServerExchange} upon
-	 * which the server can interact with the connected client. The second arguments is a
+	 * which the server can interact with the connected client. The second argument is a
 	 * map of tool arguments.
 	 */
 	public record AsyncToolSpecification(McpSchema.Tool tool,
