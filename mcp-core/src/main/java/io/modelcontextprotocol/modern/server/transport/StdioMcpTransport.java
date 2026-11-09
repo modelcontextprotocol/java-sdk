@@ -24,6 +24,7 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.modern.McpSchema;
+import io.modelcontextprotocol.modern.server.McpNameHeader;
 import io.modelcontextprotocol.modern.server.McpParamHeaders;
 import io.modelcontextprotocol.modern.server.McpRequestManager;
 import io.modelcontextprotocol.modern.server.McpTransportResponse;
@@ -51,10 +52,10 @@ public class StdioMcpTransport {
 
 	private static final int DEFAULT_INPUT_MAX_SIZE = 16 * 1024 * 1024;
 
-	// Stdio has no headers, so Mcp-Param-* headers are never mirrored and the tools
-	// feature skips their validation.
+	// Stdio has no headers, so mirrored header validation is skipped.
 	private static final McpTransportContext TRANSPORT_CONTEXT = McpTransportContext
-		.create(Map.of(McpParamHeaders.TRANSPORT_CONTEXT_KEY, McpParamHeaders.NOT_MIRRORED));
+		.create(Map.of(McpParamHeaders.TRANSPORT_CONTEXT_KEY, McpParamHeaders.NOT_MIRRORED,
+				McpNameHeader.TRANSPORT_CONTEXT_KEY, McpNameHeader.NOT_MIRRORED));
 
 	private final McpRequestManager requestManager;
 

@@ -43,6 +43,7 @@ import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
+import io.modelcontextprotocol.modern.server.McpNameHeader;
 import io.modelcontextprotocol.modern.server.McpParamHeaders;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpRequestManager;
@@ -534,7 +535,7 @@ class StdioMcpTransportTests {
 	}
 
 	@Test
-	void requestsAndNotificationsStateThatParamHeadersAreNotMirrored() throws Exception {
+	void requestsAndNotificationsStateThatHeadersAreNotMirrored() throws Exception {
 		AtomicReference<McpTransportContext> requestContext = new AtomicReference<>();
 		AtomicReference<McpTransportContext> notificationContext = new AtomicReference<>();
 		start(new McpRequestManager() {
@@ -567,6 +568,9 @@ class StdioMcpTransportTests {
 			.isSameAs(McpParamHeaders.NOT_MIRRORED);
 		assertThat(notificationContext.get().get(McpParamHeaders.TRANSPORT_CONTEXT_KEY))
 			.isSameAs(McpParamHeaders.NOT_MIRRORED);
+		assertThat(requestContext.get().get(McpNameHeader.TRANSPORT_CONTEXT_KEY)).isSameAs(McpNameHeader.NOT_MIRRORED);
+		assertThat(notificationContext.get().get(McpNameHeader.TRANSPORT_CONTEXT_KEY))
+			.isSameAs(McpNameHeader.NOT_MIRRORED);
 	}
 
 	@Test

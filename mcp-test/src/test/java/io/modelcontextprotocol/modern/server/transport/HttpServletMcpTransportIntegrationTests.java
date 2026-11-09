@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
@@ -38,6 +39,7 @@ import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
+import io.modelcontextprotocol.modern.server.McpNameHeader;
 import io.modelcontextprotocol.modern.server.McpParamHeaders;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncToolRepository;
@@ -94,6 +96,8 @@ class HttpServletMcpTransportIntegrationTests {
 
 	private static final CountDownLatch LISTEN_CANCELLED = new CountDownLatch(1);
 
+	private static final AtomicReference<McpNameHeader> LIST_NAME_HEADER = new AtomicReference<>();
+
 	private static CallToolResult text(String text) {
 		return CallToolResult.builder().addContent(TextContent.builder(text).build()).build();
 	}
@@ -103,6 +107,7 @@ class HttpServletMcpTransportIntegrationTests {
 		McpAsyncToolRepository repo = new McpAsyncToolRepository() {
 			@Override
 			public Mono<ToolsPage> list(McpRequestContext ctx, String cursor) {
+				LIST_NAME_HEADER.set((McpNameHeader) ctx.transportContext().get(McpNameHeader.TRANSPORT_CONTEXT_KEY));
 				return Mono.just(ToolsPage.of(List.of(ECHO_TOOL)));
 			}
 
@@ -152,7 +157,8 @@ class HttpServletMcpTransportIntegrationTests {
 			.errorStatus(QUOTA_EXCEEDED, 429)
 			.contextExtractor(request -> request.getHeader(FORGE_NOT_MIRRORED) != null
 					? McpTransportContext
-						.create(Map.of(McpParamHeaders.TRANSPORT_CONTEXT_KEY, McpParamHeaders.NOT_MIRRORED))
+						.create(Map.of(McpParamHeaders.TRANSPORT_CONTEXT_KEY, McpParamHeaders.NOT_MIRRORED,
+								McpNameHeader.TRANSPORT_CONTEXT_KEY, McpNameHeader.NOT_MIRRORED))
 					: McpTransportContext.EMPTY)
 			.httpHeaderValidator(DefaultServerTransportSecurityValidator.builder()
 				.allowedOrigin("http://localhost:*")
@@ -415,6 +421,74 @@ class HttpServletMcpTransportIntegrationTests {
 	}
 
 	@Test
+	void nameHeaderIsForwardedForAnUnnamedMethod() throws Exception {
+		LIST_NAME_HEADER.set(null);
+		HttpRequest request = post("tools/list", Map.of("_meta", meta())).header("mcp-name", "task-123").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(LIST_NAME_HEADER.get().value()).isEqualTo("task-123");
+		assertThat(LIST_NAME_HEADER.get().toString()).doesNotContain("task-123");
+	}
+
+	@Test
+	void missingNameHeaderIsForwardedAsAbsent() throws Exception {
+		LIST_NAME_HEADER.set(null);
+		HttpRequest request = post("tools/list", Map.of("_meta", meta())).build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(LIST_NAME_HEADER.get()).isSameAs(McpNameHeader.ABSENT);
+	}
+
+	@Test
+	void malformedNameHeaderIsForwardedWithoutAValue() throws Exception {
+		LIST_NAME_HEADER.set(null);
+		HttpRequest request = post("tools/list", Map.of("_meta", meta())).header("Mcp-Name", "=?base64?not*base64?=")
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(LIST_NAME_HEADER.get()).isSameAs(McpNameHeader.MALFORMED);
+	}
+
+	@Test
+	void repeatedNameHeaderIsForwardedAsMalformed() throws Exception {
+		LIST_NAME_HEADER.set(null);
+		byte[] body = JSON_MAPPER
+			.writeValueAsString(
+					Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/list", "params", Map.of("_meta", meta())))
+			.getBytes(StandardCharsets.UTF_8);
+		String headers = "POST " + ENDPOINT + " HTTP/1.0\r\n" + "Host: localhost:" + PORT + "\r\n"
+				+ "Content-Type: application/json\r\n" + "Accept: application/json, text/event-stream\r\n"
+				+ "Mcp-Method: tools/list\r\n" + "MCP-Protocol-Version: " + McpSchema.LATEST_PROTOCOL_VERSION + "\r\n"
+				+ "Mcp-Name: first\r\n" + "mcp-name: second\r\n" + "Content-Length: " + body.length + "\r\n\r\n";
+		String response;
+		try (Socket socket = new Socket("localhost", PORT)) {
+			socket.setSoTimeout(5000);
+			socket.getOutputStream().write(headers.getBytes(StandardCharsets.US_ASCII));
+			socket.getOutputStream().write(body);
+			socket.getOutputStream().flush();
+			response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+		}
+
+		assertThat(response.substring(0, response.indexOf("\r\n"))).contains(" 200 ");
+		assertThat(LIST_NAME_HEADER.get()).isSameAs(McpNameHeader.MALFORMED);
+	}
+
+	@Test
+	void contextExtractorCannotForgeNameHeader() throws Exception {
+		LIST_NAME_HEADER.set(null);
+		HttpRequest request = post("tools/list", Map.of("_meta", meta())).header("Mcp-Name", "task-123")
+			.header(FORGE_NOT_MIRRORED, "true")
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(LIST_NAME_HEADER.get().value()).isEqualTo("task-123");
+	}
+
+	@Test
 	void missingProtocolVersionHeaderIsRejected() throws Exception {
 		HttpRequest request = HttpRequest.newBuilder()
 			.uri(URI.create("http://localhost:" + PORT + ENDPOINT))
@@ -472,6 +546,16 @@ class HttpServletMcpTransportIntegrationTests {
 		params.put("uri", "file:///b.txt");
 		params.put("name", "file:///a.txt");
 		HttpRequest request = post("resources/read", params).header("Mcp-Name", "file:///a.txt").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThat(errorCode(response)).isEqualTo(ErrorCodes.HEADER_MISMATCH);
+	}
+
+	@Test
+	void mcpNameIsStillCheckedAgainstTheNameOfAToolCall() throws Exception {
+		HttpRequest request = post("tools/call", Map.of("_meta", meta(), "name", "echo")).header("Mcp-Name", "other")
+			.build();
 		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
 
 		assertThat(response.statusCode()).isEqualTo(400);

@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import io.modelcontextprotocol.modern.server.McpNameHeader;
 import io.modelcontextprotocol.modern.server.McpParamHeaders;
 import io.modelcontextprotocol.server.transport.HeaderAccessor;
 import reactor.util.annotation.Nullable;
@@ -88,6 +89,31 @@ public final class McpHeaderDecoder {
 			}
 		}
 		return raw;
+	}
+
+	/**
+	 * Collects the {@code Mcp-Name} header, ignoring the header name's case. A repeated
+	 * header or an undecodable value is marked malformed.
+	 * @param headers the request headers
+	 * @return the decoded header, or its absent or malformed state
+	 */
+	public static McpNameHeader nameHeader(HeaderAccessor headers) {
+		List<String> values = new ArrayList<>();
+		boolean found = false;
+		for (String name : headers.getHeaderNames()) {
+			if ("Mcp-Name".equalsIgnoreCase(name)) {
+				found = true;
+				values.addAll(headers.getHeader(name));
+			}
+		}
+		if (!found) {
+			return McpNameHeader.ABSENT;
+		}
+		if (values.size() != 1) {
+			return McpNameHeader.MALFORMED;
+		}
+		String decoded = decodeValue(values.get(0));
+		return decoded == null ? McpNameHeader.MALFORMED : McpNameHeader.of(decoded);
 	}
 
 	/**

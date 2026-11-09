@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import io.modelcontextprotocol.modern.server.McpNameHeader;
 import io.modelcontextprotocol.modern.server.McpParamHeaders;
 import io.modelcontextprotocol.server.transport.HeaderAccessor;
 import org.junit.jupiter.api.Test;
@@ -85,6 +86,89 @@ class McpHeaderDecoderTests {
 	@ValueSource(strings = { "café", "a\nb", "a\rb", "a\u0000b", "a\u007fb", "日本" })
 	void plainValueWithCharactersOutsideVisibleAsciiSpaceAndTabIsMalformed(String raw) {
 		assertThat(McpHeaderDecoder.decodeValue(raw)).isNull();
+	}
+
+	@Test
+	void nameHeaderIsAbsentWhenMissing() {
+		McpNameHeader header = McpHeaderDecoder.nameHeader(headers("Mcp-Method", "tools/call"));
+
+		assertThat(header).isSameAs(McpNameHeader.ABSENT);
+		assertThat(header.isPresent()).isFalse();
+		assertThat(header.value()).isNull();
+	}
+
+	@Test
+	void nameHeaderWithNoValuesIsMalformed() {
+		HeaderAccessor emptyValue = new HeaderAccessor() {
+			@Override
+			public List<String> getHeader(String name) {
+				return List.of();
+			}
+
+			@Override
+			public List<String> getHeaderNames() {
+				return List.of("Mcp-Name");
+			}
+		};
+
+		assertThat(McpHeaderDecoder.nameHeader(emptyValue)).isSameAs(McpNameHeader.MALFORMED);
+	}
+
+	@Test
+	void nameHeaderIsReadIgnoringCase() {
+		McpNameHeader header = McpHeaderDecoder.nameHeader(headers("mCP-NaMe", "private-name"));
+
+		assertThat(header.isPresent()).isTrue();
+		assertThat(header.isMalformed()).isFalse();
+		assertThat(header.value()).isEqualTo("private-name");
+		assertThat(header.toString()).doesNotContain("private-name");
+	}
+
+	@Test
+	void nameHeaderValueIsDecoded() {
+		McpNameHeader header = McpHeaderDecoder.nameHeader(headers("Mcp-Name", "=?base64?SGVsbG8=?="));
+
+		assertThat(header.value()).isEqualTo("Hello");
+	}
+
+	@Test
+	void malformedNameHeaderValueIsMarkedMalformed() {
+		McpNameHeader header = McpHeaderDecoder.nameHeader(headers("Mcp-Name", "=?base64?SGVsbG8?="));
+
+		assertThat(header).isSameAs(McpNameHeader.MALFORMED);
+		assertThat(header.isPresent()).isTrue();
+		assertThat(header.value()).isNull();
+	}
+
+	@Test
+	void nameHeaderWithSeveralValuesIsMarkedMalformed() {
+		McpNameHeader header = McpHeaderDecoder.nameHeader(headers("Mcp-Name", "one", "Mcp-Name", "two"));
+
+		assertThat(header).isSameAs(McpNameHeader.MALFORMED);
+	}
+
+	@Test
+	void nameHeadersDifferingOnlyInCaseAreMarkedMalformed() {
+		Map<String, List<String>> values = Map.of("Mcp-Name", List.of("one"), "mcp-name", List.of("two"));
+		HeaderAccessor caseSensitive = new HeaderAccessor() {
+			@Override
+			public List<String> getHeader(String name) {
+				return values.getOrDefault(name, List.of());
+			}
+
+			@Override
+			public List<String> getHeaderNames() {
+				return List.copyOf(values.keySet());
+			}
+		};
+
+		assertThat(McpHeaderDecoder.nameHeader(caseSensitive)).isSameAs(McpNameHeader.MALFORMED);
+	}
+
+	@Test
+	void notMirroredNameHeaderIsDistinctFromAbsent() {
+		assertThat(McpNameHeader.NOT_MIRRORED).isNotSameAs(McpNameHeader.ABSENT);
+		assertThat(McpNameHeader.NOT_MIRRORED.isPresent()).isFalse();
 	}
 
 	@Test
