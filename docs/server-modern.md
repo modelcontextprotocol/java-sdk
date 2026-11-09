@@ -243,6 +243,50 @@ different catalog per tenant or user. Two rules apply to `list`:
 
 To paginate, return a page with a `nextCursor`, for example `new ToolsPage(tools, nextCursor, null, null)`.
 
+### In-Memory Repositories
+
+For a fixed or runtime-managed catalog, the `io.modelcontextprotocol.modern.server.feature.repository` package
+implements the repositories for you: `InMemorySyncToolRepository`, `InMemorySyncPromptRepository` and
+`InMemorySyncResourceRepository`, and their async counterparts `InMemoryAsyncToolRepository`,
+`InMemoryAsyncPromptRepository` and `InMemoryAsyncResourceRepository`, which hold `McpAsyncTool`s, `McpAsyncPrompt`s
+and `McpAsyncResource`s and never block. They list entries sorted by name (or URI), page
+them when built with `pageSize(...)`, and support adding and removing entries at runtime. When
+built with a `changeBroadcaster(...)`, every add and remove is broadcast as the matching
+[change notification](#change-notifications):
+
+```java
+McpChangeFeed changes = new McpChangeFeed();
+
+InMemorySyncToolRepository tools = InMemorySyncToolRepository.builder()
+    .tool(weather)
+    .changeBroadcaster(changes)
+    .build();
+
+InMemorySyncResourceRepository resources = InMemorySyncResourceRepository.builder()
+    .resource(Resource.builder("file:///config.json", "Configuration").build(), configReader)
+    .template(McpSyncResourceTemplate.of(ResourceTemplate.builder("file:///logs/{date}", "Daily log").build()),
+            logReader)
+    .changeBroadcaster(changes)
+    .supportsSubscribe(true)
+    .build();
+
+McpServer server = McpServer.builder()
+    .serverInfo(serverInfo)
+    .feature(ToolsFeature.ofSync(tools))
+    .feature(ResourcesFeature.ofSync(resources))
+    .subscriptions(changes)
+    .build();
+
+tools.add(forecast);                              // broadcasts ToolsListChanged
+resources.resourceUpdated("file:///config.json"); // broadcasts ResourceUpdated
+```
+
+The resource repository pairs each resource and template with the `McpSyncResource` that reads it. A
+`resources/read` URI is served by the resource registered under exactly that URI, or else by the first
+template, in `uriTemplate` order, that matches it. The prompt and resource repositories serve
+[completions](#completions) from the completion handlers of their prompts and templates when built with
+`supportsCompletion(true)`.
+
 ### Tools
 
 A repository lists tool definitions and finds a tool by name. `find` returns an `McpSyncTool`, which pairs a
