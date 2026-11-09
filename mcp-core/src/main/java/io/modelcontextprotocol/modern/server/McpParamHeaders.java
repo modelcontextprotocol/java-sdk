@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import io.modelcontextprotocol.modern.McpHttp;
 import io.modelcontextprotocol.util.Assert;
 import reactor.util.annotation.Nullable;
 
@@ -42,7 +43,7 @@ public final class McpParamHeaders {
 	/**
 	 * The prefix of every {@code Mcp-Param-{Name}} header name.
 	 */
-	public static final String HEADER_PREFIX = "Mcp-Param-";
+	public static final String HEADER_PREFIX = McpHttp.Headers.MCP_PARAM_PREFIX;
 
 	/**
 	 * Marks a transport that never mirrors arguments into headers, such as stdio, so

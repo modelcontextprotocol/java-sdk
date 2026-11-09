@@ -25,6 +25,9 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse.JSONRPCError;
+import io.modelcontextprotocol.modern.McpHttp;
+import io.modelcontextprotocol.modern.McpHttp.Headers;
+import io.modelcontextprotocol.modern.McpHttp.MediaTypes;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
@@ -84,10 +87,6 @@ public class HttpServletMcpTransport extends HttpServlet {
 	private static final Logger logger = LoggerFactory.getLogger(HttpServletMcpTransport.class);
 
 	private static final String UTF_8 = "UTF-8";
-
-	private static final String APPLICATION_JSON = "application/json";
-
-	private static final String TEXT_EVENT_STREAM = "text/event-stream";
 
 	private static final String KEEP_ALIVE_FRAME = ":\n\n";
 
@@ -356,7 +355,8 @@ public class HttpServletMcpTransport extends HttpServlet {
 
 	private String eventFrame(JSONRPCMessage message) {
 		try {
-			return "event: message\ndata: " + this.jsonMapper.writeValueAsString(message) + "\n\n";
+			return "event: " + McpHttp.MESSAGE_EVENT + "\ndata: " + this.jsonMapper.writeValueAsString(message)
+					+ "\n\n";
 		}
 		catch (IOException ex) {
 			throw new UncheckedIOException(ex);
@@ -364,7 +364,7 @@ public class HttpServletMcpTransport extends HttpServlet {
 	}
 
 	private static PrintWriter startEventStream(HttpServletResponse response) throws IOException {
-		response.setContentType(TEXT_EVENT_STREAM);
+		response.setContentType(MediaTypes.TEXT_EVENT_STREAM);
 		response.setCharacterEncoding(UTF_8);
 		response.setHeader("Cache-Control", "no-cache, no-transform");
 		response.setHeader("X-Accel-Buffering", "no");
@@ -389,7 +389,7 @@ public class HttpServletMcpTransport extends HttpServlet {
 
 	private void writeJson(HttpServletResponse response, int status, JSONRPCResponse jsonRpcResponse)
 			throws IOException {
-		response.setContentType(APPLICATION_JSON);
+		response.setContentType(MediaTypes.APPLICATION_JSON);
 		response.setCharacterEncoding(UTF_8);
 		response.setStatus(status);
 		PrintWriter writer = response.getWriter();
@@ -413,7 +413,7 @@ public class HttpServletMcpTransport extends HttpServlet {
 	 * consistent with the body
 	 */
 	private String validateHeaders(HttpServletRequest request, JSONRPCRequest jsonRpcRequest) {
-		List<String> methodHeaders = Collections.list(request.getHeaders("Mcp-Method"));
+		List<String> methodHeaders = Collections.list(request.getHeaders(Headers.MCP_METHOD));
 		if (methodHeaders.isEmpty()) {
 			return "Missing required header: Mcp-Method";
 		}
@@ -429,7 +429,7 @@ public class HttpServletMcpTransport extends HttpServlet {
 		// which answers it with -32602.
 		String bodyVersion = protocolVersionFromMeta(jsonRpcRequest.params());
 		if (bodyVersion != null) {
-			List<String> versionHeaders = Collections.list(request.getHeaders("MCP-Protocol-Version"));
+			List<String> versionHeaders = Collections.list(request.getHeaders(Headers.MCP_PROTOCOL_VERSION));
 			if (versionHeaders.isEmpty()) {
 				return "Missing required header: MCP-Protocol-Version";
 			}
@@ -453,7 +453,7 @@ public class HttpServletMcpTransport extends HttpServlet {
 		if (!(paramsMap.get(nameKey) instanceof String expectedName)) {
 			return null;
 		}
-		List<String> nameHeaders = Collections.list(request.getHeaders("Mcp-Name"));
+		List<String> nameHeaders = Collections.list(request.getHeaders(Headers.MCP_NAME));
 		if (nameHeaders.isEmpty()) {
 			return "Missing required header: Mcp-Name";
 		}

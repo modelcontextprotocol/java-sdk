@@ -12,7 +12,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Function;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -21,6 +20,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,10 +82,10 @@ public final class HmacRequestStateCodec implements RequestStateCodec {
 	}
 
 	@Override
-	public Optional<String> open(McpRequestContext ctx, String sealed) {
+	@Nullable public String open(McpRequestContext ctx, String sealed) {
 		int dot = sealed == null ? -1 : sealed.lastIndexOf('.');
 		if (dot < 0) {
-			return Optional.empty();
+			return null;
 		}
 		String payloadB64 = sealed.substring(0, dot);
 		String macB64 = sealed.substring(dot + 1);
@@ -96,10 +96,10 @@ public final class HmacRequestStateCodec implements RequestStateCodec {
 			actualMac = Base64.getUrlDecoder().decode(macB64);
 		}
 		catch (IllegalArgumentException e) {
-			return Optional.empty();
+			return null;
 		}
 		if (!MessageDigest.isEqual(expectedMac, actualMac)) {
-			return Optional.empty();
+			return null;
 		}
 
 		Payload payload;
@@ -108,23 +108,23 @@ public final class HmacRequestStateCodec implements RequestStateCodec {
 			payload = this.jsonMapper.readValue(payloadJson, Payload.class);
 		}
 		catch (Exception e) {
-			return Optional.empty();
+			return null;
 		}
 
 		if (payload.exp() < this.clock.millis()) {
-			return Optional.empty();
+			return null;
 		}
 		String principal = this.principalExtractor.apply(ctx.transportContext());
 		if (!Objects.equals(principal, payload.p())) {
-			return Optional.empty();
+			return null;
 		}
 		if (!Objects.equals(ctx.method(), payload.m())) {
-			return Optional.empty();
+			return null;
 		}
 		if (!Objects.equals(ctx.primitiveName(), payload.n())) {
-			return Optional.empty();
+			return null;
 		}
-		return Optional.of(payload.s());
+		return payload.s();
 	}
 
 	private byte[] hmac(byte[] data) {

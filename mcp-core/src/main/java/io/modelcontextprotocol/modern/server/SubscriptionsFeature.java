@@ -4,16 +4,16 @@
 
 package io.modelcontextprotocol.modern.server;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.modern.McpException;
 import io.modelcontextprotocol.modern.McpSchema;
-import io.modelcontextprotocol.modern.McpSchema.ListChangedParams;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
-import io.modelcontextprotocol.modern.McpSchema.ResourceUpdatedParams;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.SubscriptionFilter;
@@ -23,21 +23,37 @@ import io.modelcontextprotocol.modern.McpSchema.SubscriptionsListenResult;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
 /**
  * The {@code subscriptions/listen} feature: acknowledges the honoured subset of the
- * requested filter, then forwards matching changes from a {@link McpChangePublisher}.
+ * requested filter, then forwards the changes from a {@link McpChangePublisher} that the
+ * honoured filter covers. The core fields are honoured for the primitives the server has;
+ * other features honour the fields they define through
+ * {@link McpFeature#honouredSubscriptions}.
  *
  * @author Dariusz Jędrzejczyk
  */
 final class SubscriptionsFeature implements McpFeature {
 
+	private static final Logger logger = LoggerFactory.getLogger(SubscriptionsFeature.class);
+
+	private static final TypeRef<LinkedHashMap<String, Object>> PARAMS_TYPE = new TypeRef<>() {
+	};
+
+	private static final Set<String> CORE_FIELDS = Set.of(SubscriptionFilter.TOOLS_LIST_CHANGED,
+			SubscriptionFilter.PROMPTS_LIST_CHANGED, SubscriptionFilter.RESOURCES_LIST_CHANGED,
+			SubscriptionFilter.RESOURCE_SUBSCRIPTIONS);
+
 	private final McpChangePublisher publisher;
 
 	private final McpJsonMapper jsonMapper;
+
+	private final List<McpFeature> features;
 
 	private final boolean hasTools;
 
@@ -49,11 +65,15 @@ final class SubscriptionsFeature implements McpFeature {
 
 	private final Sinks.Empty<Void> shutdown = Sinks.empty();
 
-	SubscriptionsFeature(McpChangePublisher publisher, McpJsonMapper jsonMapper, boolean hasTools, boolean hasPrompts,
-			boolean hasResources, boolean hasResourcesSubscribe) {
+	/**
+	 * @param features the server's other features, asked for the fields they honour
+	 */
+	SubscriptionsFeature(McpChangePublisher publisher, McpJsonMapper jsonMapper, List<McpFeature> features,
+			boolean hasTools, boolean hasPrompts, boolean hasResources, boolean hasResourcesSubscribe) {
 		Assert.notNull(publisher, "publisher must not be null");
 		this.publisher = publisher;
 		this.jsonMapper = jsonMapper;
+		this.features = List.copyOf(features);
 		this.hasTools = hasTools;
 		this.hasPrompts = hasPrompts;
 		this.hasResources = hasResources;
@@ -87,7 +107,14 @@ final class SubscriptionsFeature implements McpFeature {
 			return Mono.error(McpException.invalidParams("Malformed SubscriptionsListenRequest"));
 		}
 		SubscriptionFilter requested = request.notifications();
-		return Mono.just(McpAsyncResponse.streaming(notifier -> listen(ctx, intersect(requested), notifier)));
+		SubscriptionFilter honoured;
+		try {
+			honoured = honoured(ctx, requested);
+		}
+		catch (McpException ex) {
+			return Mono.error(ex);
+		}
+		return Mono.just(McpAsyncResponse.streaming(notifier -> listen(ctx, honoured, notifier)));
 	}
 
 	@Override
@@ -109,59 +136,69 @@ final class SubscriptionsFeature implements McpFeature {
 				new SubscriptionsAcknowledgedParams(honoured, subscriptionMeta));
 
 		Flux<Void> forwardChanges = this.publisher.changes()
-			.filter(change -> matches(change, honoured))
+			.filter(change -> change.isHonouredBy(honoured))
 			.takeUntilOther(this.shutdown.asMono())
-			.concatMap(change -> notifier.notify(methodFor(change), paramsFor(change, subscriptionMeta)));
+			.concatMap(change -> {
+				Map<String, Object> params = params(change, subscriptionMeta);
+				return params == null ? Mono.empty() : notifier.notify(change.method(), params);
+			});
 
 		return ack.thenMany(forwardChanges)
 			.then(Mono.fromSupplier(() -> (Result) SubscriptionsListenResult.forSubscription(ctx.requestId())));
 	}
 
-	private SubscriptionFilter intersect(SubscriptionFilter requested) {
-		Boolean tools = (this.hasTools && requested.wantsToolsListChanged()) ? Boolean.TRUE : null;
-		Boolean prompts = (this.hasPrompts && requested.wantsPromptsListChanged()) ? Boolean.TRUE : null;
-		Boolean resources = (this.hasResources && requested.wantsResourcesListChanged()) ? Boolean.TRUE : null;
-		List<String> resourceSubs = this.hasResourcesSubscribe ? requested.resourceSubscriptionsOrEmpty() : List.of();
-		return new SubscriptionFilter(tools, prompts, resources, resourceSubs.isEmpty() ? null : resourceSubs);
+	/**
+	 * The core fields the server honours, then the fields each feature honours, of those
+	 * the client requested.
+	 */
+	private SubscriptionFilter honoured(McpRequestContext ctx, SubscriptionFilter requested) {
+		Map<String, Object> honoured = new LinkedHashMap<>();
+		if (this.hasTools && requested.wantsToolsListChanged()) {
+			honoured.put(SubscriptionFilter.TOOLS_LIST_CHANGED, true);
+		}
+		if (this.hasPrompts && requested.wantsPromptsListChanged()) {
+			honoured.put(SubscriptionFilter.PROMPTS_LIST_CHANGED, true);
+		}
+		if (this.hasResources && requested.wantsResourcesListChanged()) {
+			honoured.put(SubscriptionFilter.RESOURCES_LIST_CHANGED, true);
+		}
+		List<String> resourceSubscriptions = this.hasResourcesSubscribe ? requested.resourceSubscriptionsOrEmpty()
+				: List.of();
+		if (!resourceSubscriptions.isEmpty()) {
+			honoured.put(SubscriptionFilter.RESOURCE_SUBSCRIPTIONS, resourceSubscriptions);
+		}
+		for (McpFeature feature : this.features) {
+			feature.honouredSubscriptions(ctx, requested).fields().forEach((field, value) -> {
+				// A feature honours only what was asked for, and the core fields are the
+				// server's.
+				if (!CORE_FIELDS.contains(field) && requested.get(field) != null) {
+					honoured.putIfAbsent(field, value);
+				}
+			});
+		}
+		return SubscriptionFilter.of(honoured);
 	}
 
-	private static boolean matches(ServerChange change, SubscriptionFilter honoured) {
-		if (change instanceof ServerChange.ToolsListChanged) {
-			return honoured.wantsToolsListChanged();
+	/**
+	 * The params of the notification for {@code change}, with the stream's {@code _meta},
+	 * or {@code null} if they aren't an object.
+	 */
+	private Map<String, Object> params(ServerChange change, Map<String, Object> subscriptionMeta) {
+		LinkedHashMap<String, Object> params;
+		try {
+			params = this.jsonMapper.convertValue(change.params(), PARAMS_TYPE);
 		}
-		if (change instanceof ServerChange.PromptsListChanged) {
-			return honoured.wantsPromptsListChanged();
+		catch (RuntimeException ex) {
+			logger.warn("Not forwarding {}: its params aren't a JSON object", change.method(), ex);
+			return null;
 		}
-		if (change instanceof ServerChange.ResourcesListChanged) {
-			return honoured.wantsResourcesListChanged();
+		Map<String, Object> meta = new LinkedHashMap<>();
+		if (params.get("_meta") instanceof Map<?, ?> own) {
+			own.forEach((key, value) -> meta.put(String.valueOf(key), value));
 		}
-		if (change instanceof ServerChange.ResourceUpdated updated) {
-			return honoured.resourceSubscriptionsOrEmpty().contains(updated.uri());
-		}
-		return false;
-	}
-
-	private static String methodFor(ServerChange change) {
-		if (change instanceof ServerChange.ToolsListChanged) {
-			return McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED;
-		}
-		if (change instanceof ServerChange.PromptsListChanged) {
-			return McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED;
-		}
-		if (change instanceof ServerChange.ResourcesListChanged) {
-			return McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED;
-		}
-		if (change instanceof ServerChange.ResourceUpdated) {
-			return McpSchema.METHOD_NOTIFICATION_RESOURCES_UPDATED;
-		}
-		throw new IllegalStateException("Unrecognized change: " + change);
-	}
-
-	private static Object paramsFor(ServerChange change, Map<String, Object> subscriptionMeta) {
-		if (change instanceof ServerChange.ResourceUpdated updated) {
-			return new ResourceUpdatedParams(updated.uri(), subscriptionMeta);
-		}
-		return new ListChangedParams(subscriptionMeta);
+		meta.putAll(subscriptionMeta);
+		params.put("_meta", meta);
+		return params;
 	}
 
 }

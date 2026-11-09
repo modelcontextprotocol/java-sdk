@@ -7,6 +7,7 @@ package io.modelcontextprotocol.modern.server;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -15,9 +16,12 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse.JSONRPCError;
+import io.modelcontextprotocol.modern.McpException;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
+import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
+import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.SubscriptionFilter;
 import io.modelcontextprotocol.modern.McpSchema.SubscriptionsAcknowledgedParams;
 import io.modelcontextprotocol.modern.McpSchema;
@@ -71,8 +75,8 @@ class SubscriptionsFeatureTests {
 			JSONRPCNotification ack = (JSONRPCNotification) msg;
 			assertThat(ack.method()).isEqualTo(McpSchema.METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED);
 			SubscriptionFilter notifications = ((SubscriptionsAcknowledgedParams) ack.params()).notifications();
-			assertThat(notifications.toolsListChanged()).isTrue();
-			assertThat(notifications.promptsListChanged()).isNull();
+			assertThat(notifications.wantsToolsListChanged()).isTrue();
+			assertThat(notifications.get(SubscriptionFilter.PROMPTS_LIST_CHANGED)).isNull();
 		})
 			.then(() -> feed.broadcast(new ServerChange.ToolsListChanged()))
 			.assertNext(msg -> assertThat(((JSONRPCNotification) msg).method())
@@ -256,7 +260,8 @@ class SubscriptionsFeatureTests {
 
 		assertThat(resourcesCapability(server)).containsEntry("subscribe", true).containsEntry("listChanged", true);
 		StepVerifier.create(listenToResource(server).messages())
-			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg).resourceSubscriptions())
+			.assertNext(msg -> assertThat(
+					acknowledgedNotifications((JSONRPCNotification) msg).resourceSubscriptionsOrEmpty())
 				.containsExactly("test://a"))
 			.then(server::closeGracefully)
 			.expectNextMatches(msg -> msg instanceof JSONRPCResponse)
@@ -269,7 +274,8 @@ class SubscriptionsFeatureTests {
 
 		assertThat(resourcesCapability(server)).containsEntry("subscribe", false).containsEntry("listChanged", true);
 		StepVerifier.create(listenToResource(server).messages())
-			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg).resourceSubscriptions())
+			.assertNext(msg -> assertThat(
+					acknowledgedNotifications((JSONRPCNotification) msg).get(SubscriptionFilter.RESOURCE_SUBSCRIPTIONS))
 				.isNull())
 			.then(server::closeGracefully)
 			.expectNextMatches(msg -> msg instanceof JSONRPCResponse)
@@ -310,6 +316,176 @@ class SubscriptionsFeatureTests {
 	}
 
 	@SuppressWarnings("unchecked")
+	/**
+	 * An extension in the shape of Tasks: it honours the task ids it knows, rejects a
+	 * filter that asks for task ids the client may not receive, and publishes
+	 * {@link TaskChanged}.
+	 */
+	private static final class TasksExtension implements McpFeature {
+
+		private final List<String> known;
+
+		private final boolean reject;
+
+		TasksExtension(List<String> known, boolean reject) {
+			this.known = known;
+			this.reject = reject;
+		}
+
+		@Override
+		public Set<String> methods() {
+			return Set.of();
+		}
+
+		@Override
+		public Mono<? extends McpAsyncResponse<? extends Result>> handle(McpRequestContext ctx, Object params) {
+			return Mono.error(new IllegalStateException("serves no method"));
+		}
+
+		@Override
+		public SubscriptionFilter honouredSubscriptions(McpRequestContext ctx, SubscriptionFilter requested) {
+			if (!(requested.get("taskIds") instanceof List<?> ids)) {
+				return SubscriptionFilter.EMPTY;
+			}
+			if (this.reject) {
+				throw McpException.missingClientCapability(ClientCapabilities.builder()
+					.extensions(Map.of("io.modelcontextprotocol/tasks", Map.of()))
+					.build());
+			}
+			return SubscriptionFilter.EMPTY.with("taskIds", ids.stream().filter(this.known::contains).toList());
+		}
+
+	}
+
+	private record TaskChanged(String taskId) implements ServerChange {
+
+		@Override
+		public String method() {
+			return "notifications/tasks";
+		}
+
+		@Override
+		public Object params() {
+			return Map.of("taskId", this.taskId, "_meta", Map.of("example/trace", "x"));
+		}
+
+		@Override
+		public boolean isHonouredBy(SubscriptionFilter honoured) {
+			return honoured.get("taskIds") instanceof List<?> ids && ids.contains(this.taskId);
+		}
+
+	}
+
+	private static McpTransportResponse listenForTasks(McpServer server, Map<String, Object> filter) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("notifications", filter);
+		return server.handle(McpTransportContext.EMPTY, new JSONRPCRequest("subscriptions/listen", 3, params)).block();
+	}
+
+	private static McpServer tasksServer(McpChangePublisher publisher, McpFeature tasks) {
+		return McpServer.builder()
+			.serverInfo(SERVER_INFO)
+			.feature(ToolsFeature.ofAsync(emptyTools(), McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L,
+					CacheScope.PRIVATE))
+			.feature(tasks)
+			.subscriptions(publisher)
+			.build();
+	}
+
+	@Test
+	void extensionFieldNoFeatureHonoursIsLeftOutOfTheAcknowledgment() {
+		McpServer server = toolsServer(new McpChangeFeed());
+
+		var listen = (McpTransportResponse.Streaming) listenForTasks(server,
+				Map.of("toolsListChanged", true, "taskIds", List.of("t-1")));
+
+		StepVerifier.create(listen.messages())
+			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg))
+				.isEqualTo(SubscriptionFilter.of(Map.of("toolsListChanged", true))))
+			.then(server::closeGracefully)
+			.expectNextMatches(JSONRPCResponse.class::isInstance)
+			.verifyComplete();
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void featureHonoursPartOfItsFieldAndItsChangesAreForwarded() {
+		McpChangeFeed feed = new McpChangeFeed();
+		McpServer server = tasksServer(feed, new TasksExtension(List.of("t-1"), false));
+
+		var listen = (McpTransportResponse.Streaming) listenForTasks(server,
+				Map.of("taskIds", List.of("t-1", "t-2"), "toolsListChanged", true));
+
+		StepVerifier.create(listen.messages())
+			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg))
+				.isEqualTo(SubscriptionFilter.of(Map.of("toolsListChanged", true, "taskIds", List.of("t-1")))))
+			.then(() -> {
+				feed.broadcast(new TaskChanged("t-2"));
+				feed.broadcast(new TaskChanged("t-1"));
+			})
+			.assertNext(msg -> {
+				JSONRPCNotification notification = (JSONRPCNotification) msg;
+				assertThat(notification.method()).isEqualTo("notifications/tasks");
+				Map<String, Object> params = (Map<String, Object>) notification.params();
+				assertThat(params).containsEntry("taskId", "t-1");
+				assertThat((Map<String, Object>) params.get("_meta")).containsEntry("example/trace", "x")
+					.containsEntry(MetaKeys.SUBSCRIPTION_ID, 3);
+			})
+			.then(server::closeGracefully)
+			.expectNextMatches(JSONRPCResponse.class::isInstance)
+			.verifyComplete();
+	}
+
+	@Test
+	void featureRejectingTheFilterAnswersBeforeAnyStreamOpens() {
+		McpServer server = tasksServer(new McpChangeFeed(), new TasksExtension(List.of("t-1"), true));
+
+		McpTransportResponse response = listenForTasks(server, Map.of("taskIds", List.of("t-1")));
+
+		assertThat(response).isInstanceOfSatisfying(McpTransportResponse.Error.class,
+				error -> assertThat(error.response().error().code())
+					.isEqualTo(ErrorCodes.MISSING_REQUIRED_CLIENT_CAPABILITY));
+	}
+
+	@Test
+	void featureHonoursNeitherCoreFieldsNorFieldsNotRequested() {
+		McpFeature overreaching = new McpFeature() {
+
+			@Override
+			public Set<String> methods() {
+				return Set.of();
+			}
+
+			@Override
+			public Mono<? extends McpAsyncResponse<? extends Result>> handle(McpRequestContext ctx, Object params) {
+				return Mono.empty();
+			}
+
+			@Override
+			public SubscriptionFilter honouredSubscriptions(McpRequestContext ctx, SubscriptionFilter requested) {
+				return SubscriptionFilter.of(Map.of("promptsListChanged", true, "unrequested", true));
+			}
+
+		};
+		McpServer server = McpServer.builder()
+			.serverInfo(SERVER_INFO)
+			.feature(ToolsFeature.ofAsync(emptyTools(), McpJsonDefaults.getMapper(), PERMISSIVE_VALIDATOR, 0L,
+					CacheScope.PRIVATE))
+			.feature(overreaching)
+			.subscriptions(new McpChangeFeed())
+			.build();
+
+		var listen = (McpTransportResponse.Streaming) listenForTasks(server, Map.of("promptsListChanged", true));
+
+		StepVerifier.create(listen.messages())
+			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg))
+				.isEqualTo(SubscriptionFilter.EMPTY))
+			.then(server::closeGracefully)
+			.expectNextMatches(JSONRPCResponse.class::isInstance)
+			.verifyComplete();
+	}
+
 	private static Map<String, Object> resourcesCapability(McpServer server) {
 		JSONRPCRequest request = new JSONRPCRequest(McpSchema.METHOD_SERVER_DISCOVER, 1, Map.of("_meta", meta()));
 		Map<String, Object> result = (Map<String, Object>) respond(server, request).block().result();

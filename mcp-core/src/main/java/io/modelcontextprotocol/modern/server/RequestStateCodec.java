@@ -4,7 +4,7 @@
 
 package io.modelcontextprotocol.modern.server;
 
-import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Seals and opens MRTR {@code requestState}. {@code McpServer} opens it on every retry,
@@ -23,8 +23,8 @@ public interface RequestStateCodec {
 	/**
 	 * Opens a previously sealed value, verifying it was produced for this principal,
 	 * method and primitive and has not expired.
-	 * @return the state, or empty if verification fails
+	 * @return the state, or {@code null} if verification fails
 	 */
-	Optional<String> open(McpRequestContext ctx, String sealed);
+	@Nullable String open(McpRequestContext ctx, String sealed);
 
 }

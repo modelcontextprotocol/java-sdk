@@ -25,8 +25,15 @@ import io.modelcontextprotocol.modern.McpSchema.CompleteRequest;
 import io.modelcontextprotocol.modern.McpSchema.CompleteRequest.CompleteArgument;
 import io.modelcontextprotocol.modern.McpSchema.Content;
 import io.modelcontextprotocol.modern.McpSchema.CreateMessageRequest;
+import io.modelcontextprotocol.modern.McpSchema.CreateMessageResult;
 import io.modelcontextprotocol.modern.McpSchema.DiscoverResult;
+import io.modelcontextprotocol.modern.McpSchema.UnknownInputRequest;
+import io.modelcontextprotocol.modern.McpSchema.ListRootsInputRequest;
+import io.modelcontextprotocol.modern.McpSchema.CreateMessageInputRequest;
+import io.modelcontextprotocol.modern.McpSchema.ElicitInputRequest;
 import io.modelcontextprotocol.modern.McpSchema.ElicitFormRequest;
+import io.modelcontextprotocol.modern.McpSchema.ElicitRequest;
+import io.modelcontextprotocol.modern.McpSchema.ElicitResult;
 import io.modelcontextprotocol.modern.McpSchema.ElicitUrlRequest;
 import io.modelcontextprotocol.modern.McpSchema.EmbeddedResource;
 import io.modelcontextprotocol.modern.McpSchema.GetPromptRequest;
@@ -35,6 +42,7 @@ import io.modelcontextprotocol.modern.McpSchema.ImageContent;
 import io.modelcontextprotocol.modern.McpSchema.Implementation;
 import io.modelcontextprotocol.modern.McpSchema.InputRequest;
 import io.modelcontextprotocol.modern.McpSchema.InputRequiredResult;
+import io.modelcontextprotocol.modern.McpSchema.ListRootsResult;
 import io.modelcontextprotocol.modern.McpSchema.ListToolsResult;
 import io.modelcontextprotocol.modern.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.modern.McpSchema.Prompt;
@@ -48,9 +56,12 @@ import io.modelcontextprotocol.modern.McpSchema.ResourceReference;
 import io.modelcontextprotocol.modern.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.modern.McpSchema.ResultType;
 import io.modelcontextprotocol.modern.McpSchema.Role;
+import io.modelcontextprotocol.modern.McpSchema.Root;
 import io.modelcontextprotocol.modern.McpSchema.SamplingMessage;
 import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.SubscriptionFilter;
+import io.modelcontextprotocol.modern.McpSchema.SubscriptionsAcknowledgedParams;
+import io.modelcontextprotocol.modern.McpSchema.SubscriptionsListenRequest;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.TextResourceContents;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
@@ -60,6 +71,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThatException;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
@@ -135,6 +147,53 @@ class McpSchemaSerializationTests {
 	}
 
 	@Test
+	void inputRequestsAreReadAsTheTypeTheirMethodAndModeName() throws Exception {
+		InputRequiredResult result = this.jsonMapper.readValue(
+				"""
+						{"resultType": "input_required", "inputRequests": {
+						  "form": {"method": "elicitation/create", "params": {"message": "Name?", "requestedSchema": {"type": "object"}}},
+						  "url": {"method": "elicitation/create", "params": {"mode": "url", "message": "Log in", "url": "https://example.com"}},
+						  "sample": {"method": "sampling/createMessage", "params": {"messages": [], "maxTokens": 5}},
+						  "roots": {"method": "roots/list"},
+						  "other": {"method": "example/ask", "params": {"question": "?"}}}}
+						""",
+				InputRequiredResult.class);
+
+		Map<String, InputRequest> requests = result.inputRequests();
+		assertThat(requests.get("form")).isInstanceOfSatisfying(ElicitInputRequest.class,
+				elicit -> assertThat(elicit.params()).isInstanceOf(ElicitFormRequest.class));
+		assertThat(requests.get("url")).isInstanceOfSatisfying(ElicitInputRequest.class,
+				elicit -> assertThat(elicit.params()).isInstanceOfSatisfying(ElicitUrlRequest.class,
+						url -> assertThat(url.url()).isEqualTo("https://example.com")));
+		assertThat(requests.get("sample")).isInstanceOfSatisfying(CreateMessageInputRequest.class,
+				sample -> assertThat(sample.params().maxTokens()).isEqualTo(5));
+		assertThat(requests.get("roots")).isInstanceOf(ListRootsInputRequest.class);
+		assertThat(requests.get("other")).isEqualTo(new UnknownInputRequest("example/ask", Map.of("question", "?")));
+	}
+
+	@Test
+	void inputRequestsAreWrittenWithTheirMethodAndParams() throws Exception {
+		InputRequiredResult result = InputRequiredResult.builder()
+			.elicitUrl("login", "Log in", "https://example.com")
+			.listRoots("roots")
+			.build();
+
+		String json = this.jsonMapper.writeValueAsString(result);
+
+		assertThat(json).contains("\"method\":\"elicitation/create\"")
+			.contains("\"mode\":\"url\"")
+			.contains("\"roots\":{\"method\":\"roots/list\"}");
+		assertThat(this.jsonMapper.readValue(json, InputRequiredResult.class)).isEqualTo(result);
+	}
+
+	@Test
+	void elicitationOfAnUnknownModeIsRejected() {
+		assertThatThrownBy(() -> this.jsonMapper.readValue("""
+				{"method": "elicitation/create", "params": {"mode": "voice", "message": "Say it"}}
+				""", InputRequest.class)).isInstanceOf(Exception.class);
+	}
+
+	@Test
 	void discoverResultMatchesSpecExample() throws Exception {
 		DiscoverResult result = DiscoverResult
 			.builder(List.of(McpSchema.LATEST_PROTOCOL_VERSION), ServerCapabilities.builder().tools(false).build())
@@ -158,13 +217,39 @@ class McpSchemaSerializationTests {
 	}
 
 	@Test
-	void subscriptionFilterRoundTrips() throws Exception {
-		SubscriptionFilter filter = new SubscriptionFilter(true, null, true, List.of("file:///a.txt"));
+	void subscriptionFilterRoundTripsWithExtensionFields() throws Exception {
+		SubscriptionFilter filter = SubscriptionFilter.of(Map.of("toolsListChanged", true, "resourceSubscriptions",
+				List.of("file:///a.txt"), "taskIds", List.of("t-1")));
+
 		String json = this.jsonMapper.writeValueAsString(filter);
 		SubscriptionFilter roundTripped = this.jsonMapper.readValue(json, SubscriptionFilter.class);
+
+		assertThat(roundTripped).isEqualTo(filter);
 		assertThat(roundTripped.wantsToolsListChanged()).isTrue();
 		assertThat(roundTripped.wantsPromptsListChanged()).isFalse();
 		assertThat(roundTripped.resourceSubscriptionsOrEmpty()).containsExactly("file:///a.txt");
+		assertThat(roundTripped.get("taskIds")).isEqualTo(List.of("t-1"));
+	}
+
+	@Test
+	void subscriptionFilterWithoutFieldsIsEmptyAndNullFieldsAreAbsent() throws Exception {
+		assertThat(this.jsonMapper.readValue("{}", SubscriptionFilter.class)).isEqualTo(SubscriptionFilter.EMPTY);
+		assertThat(this.jsonMapper.readValue("{\"toolsListChanged\": null}", SubscriptionFilter.class))
+			.isEqualTo(SubscriptionFilter.EMPTY);
+		assertThat(this.jsonMapper.writeValueAsString(SubscriptionFilter.EMPTY)).isEqualTo("{}");
+	}
+
+	@Test
+	void listenRequestAndAcknowledgmentKeepExtensionFields() throws Exception {
+		SubscriptionsListenRequest request = this.jsonMapper.readValue("""
+				{"notifications": {"toolsListChanged": true, "taskIds": ["t-1"]}}
+				""", SubscriptionsListenRequest.class);
+		SubscriptionsAcknowledgedParams acknowledged = new SubscriptionsAcknowledgedParams(request.notifications(),
+				null);
+
+		assertThat(request.notifications().get("taskIds")).isEqualTo(List.of("t-1"));
+		assertThat(this.jsonMapper.writeValueAsString(acknowledged))
+			.isEqualTo("{\"notifications\":{\"toolsListChanged\":true,\"taskIds\":[\"t-1\"]}}");
 	}
 
 	@Test
@@ -264,6 +349,42 @@ class McpSchemaSerializationTests {
 	}
 
 	@Test
+	void elicitResultSerializesItsActionAndOmitsAbsentContent() throws Exception {
+		assertThat(this.jsonMapper.writeValueAsString(ElicitResult.decline())).isEqualTo("{\"action\":\"decline\"}");
+		assertThat(this.jsonMapper.writeValueAsString(ElicitResult.accept(Map.of("name", "Ada"))))
+			.isEqualTo("{\"action\":\"accept\",\"content\":{\"name\":\"Ada\"}}");
+	}
+
+	@Test
+	void createMessageResultOmitsAbsentOptionalFields() throws Exception {
+		CreateMessageResult result = CreateMessageResult
+			.builder(Role.ASSISTANT, TextContent.builder("Paris").build(), "m")
+			.build();
+
+		String json = this.jsonMapper.writeValueAsString(result);
+
+		assertThat(json).doesNotContain("stopReason").doesNotContain("_meta");
+		assertThat(this.jsonMapper.readValue(json, CreateMessageResult.class)).isEqualTo(result);
+	}
+
+	@Test
+	void rootOmitsAbsentName() throws Exception {
+		String json = this.jsonMapper
+			.writeValueAsString(ListRootsResult.of(List.of(Root.builder("file:///w").build())));
+
+		assertThat(json).isEqualTo("{\"roots\":[{\"uri\":\"file:///w\"}]}");
+	}
+
+	@Test
+	void elicitRequestsShareTheirMode() {
+		ElicitRequest form = ElicitFormRequest.builder("m", Map.of()).build();
+		ElicitRequest url = new ElicitUrlRequest("m", "https://example.com", null);
+
+		assertThat(form.mode()).isEqualTo(ElicitFormRequest.MODE);
+		assertThat(url.mode()).isEqualTo(ElicitUrlRequest.MODE);
+	}
+
+	@Test
 	void extensionIdMustBePrefixedMetaKey() {
 		ServerCapabilities caps = ServerCapabilities.builder()
 			.extension("io.modelcontextprotocol/ui", Map.of())
@@ -330,7 +451,15 @@ class McpSchemaSerializationTests {
 				rejects("ResourceLink.uri", () -> new ResourceLink("n", null, null, null, null, null, null, null)),
 				rejects("CallToolRequest.name", () -> new CallToolRequest(null, null, null, null, null)),
 				rejects("ReadResourceRequest.uri", () -> new ReadResourceRequest(null, null, null, null)),
-				rejects("GetPromptRequest.name", () -> new GetPromptRequest(null, null, null, null, null)));
+				rejects("GetPromptRequest.name", () -> new GetPromptRequest(null, null, null, null, null)),
+				rejects("ElicitResult.action", () -> new ElicitResult(null, null)),
+				rejects("CreateMessageResult.role", () -> new CreateMessageResult(null, text, "m", null, null)),
+				rejects("CreateMessageResult.content",
+						() -> new CreateMessageResult(Role.ASSISTANT, null, "m", null, null)),
+				rejects("CreateMessageResult.model",
+						() -> new CreateMessageResult(Role.ASSISTANT, text, null, null, null)),
+				rejects("ListRootsResult.roots", () -> new ListRootsResult(null)),
+				rejects("Root.uri", () -> new Root(null, null, null)));
 	}
 
 	@ParameterizedTest(name = "{0}")
@@ -400,7 +529,18 @@ class McpSchemaSerializationTests {
 				missing("ResourceLink.name", ResourceLink.class, "{\"type\":\"resource_link\",\"uri\":\"u\"}",
 						ResourceLink::name, ""),
 				missing("ResourceLink.uri", ResourceLink.class, "{\"type\":\"resource_link\",\"name\":\"n\"}",
-						ResourceLink::uri, ""));
+						ResourceLink::uri, ""),
+				missing("ElicitResult.action", ElicitResult.class, "{}", ElicitResult::action,
+						ElicitResult.Action.CANCEL),
+				missing("CreateMessageResult.role", CreateMessageResult.class,
+						"{\"content\":" + text + ",\"model\":\"m\"}", CreateMessageResult::role, Role.ASSISTANT),
+				missing("CreateMessageResult.content", CreateMessageResult.class,
+						"{\"role\":\"assistant\",\"model\":\"m\"}", CreateMessageResult::content,
+						TextContent.builder("").build()),
+				missing("CreateMessageResult.model", CreateMessageResult.class,
+						"{\"role\":\"assistant\",\"content\":" + text + "}", CreateMessageResult::model, ""),
+				missing("ListRootsResult.roots", ListRootsResult.class, "{}", ListRootsResult::roots, List.of()),
+				missing("Root.uri", Root.class, "{}", Root::uri, ""));
 	}
 
 	@ParameterizedTest(name = "{0}")
@@ -411,7 +551,10 @@ class McpSchemaSerializationTests {
 	}
 
 	static Stream<Named<Map.Entry<Class<?>, String>>> minimalValidJson() {
-		return Stream.of(valid(Icon.class, "{\"src\":\"s\"}"),
+		return Stream.of(valid(Icon.class, "{\"src\":\"s\"}"), valid(ElicitResult.class, "{\"action\":\"accept\"}"),
+				valid(CreateMessageResult.class,
+						"{\"role\":\"assistant\",\"content\":{\"type\":\"text\",\"text\":\"x\"},\"model\":\"m\"}"),
+				valid(ListRootsResult.class, "{\"roots\":[]}"), valid(Root.class, "{\"uri\":\"file:///w\"}"),
 				valid(Implementation.class, "{\"name\":\"n\",\"version\":\"1\"}"),
 				valid(Resource.class, "{\"uri\":\"u\",\"name\":\"n\"}"),
 				valid(ResourceTemplate.class, "{\"uriTemplate\":\"u\",\"name\":\"n\"}"),

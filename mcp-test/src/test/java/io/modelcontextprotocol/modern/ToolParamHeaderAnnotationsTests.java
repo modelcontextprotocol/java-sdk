@@ -370,8 +370,107 @@ class ToolParamHeaderAnnotationsTests {
 				  }
 				}
 				""" })
-		void annotationsOutsidePropertiesChainsAreIgnored(String schema) {
+		void annotationsOutsidePropertiesChainsAreInvalid(String schema) {
 			ToolParamHeaderAnnotations annotations = parse(schema);
+
+			assertThat(annotations.isValid()).isFalse();
+			assertThat(annotations.valid()).isEmpty();
+			assertThat(annotations.invalid()).isNotEmpty()
+				.allSatisfy(invalid -> assertThat(invalid.problems())
+					.contains("not statically reachable from the schema root through properties"));
+		}
+
+		@Test
+		void unreachableAnnotationHasTheKeysLeadingToIt() {
+			ToolParamHeaderAnnotations annotations = parse("""
+					{
+					  "type": "object",
+					  "properties": {
+					    "regions": {
+					      "type": "array",
+					      "items": {
+					        "type": "object",
+					        "properties": { "region": { "type": "string", "x-mcp-header": "Region" } }
+					      }
+					    }
+					  },
+					  "allOf": [{ "type": "object" }, { "type": "string", "x-mcp-header": "Tenant" }]
+					}
+					""");
+
+			assertThat(annotations.invalid()).extracting(InvalidAnnotation::path)
+				.containsExactly(List.of("properties", "regions", "items", "properties", "region"),
+						List.of("allOf", "1"));
+		}
+
+		@Test
+		void unreachableAnnotationListsItsOtherProblemsToo() {
+			ToolParamHeaderAnnotations annotations = parse("""
+					{
+					  "type": "object",
+					  "additionalProperties": { "type": "number", "x-mcp-header": "Score" }
+					}
+					""");
+
+			assertThat(annotations.invalid()).singleElement()
+				.satisfies(invalid -> assertThat(invalid.problems()).containsExactly(
+						"not statically reachable from the schema root through properties", "unsupported type number"));
+		}
+
+		@Test
+		void reachableAnnotationStaysValidNextToAnUnreachableOne() {
+			ToolParamHeaderAnnotations annotations = parse("""
+					{
+					  "type": "object",
+					  "properties": {
+					    "region": { "type": "string", "x-mcp-header": "Region" }
+					  },
+					  "$defs": {
+					    "zone": { "type": "string", "x-mcp-header": "Zone" }
+					  }
+					}
+					""");
+
+			assertThat(annotations.isValid()).isFalse();
+			assertThat(annotations.valid()).extracting(Annotation::name).containsExactly("Region");
+			assertThat(annotations.invalid()).extracting(InvalidAnnotation::path)
+				.containsExactly(List.of("$defs", "zone"));
+		}
+
+		@Test
+		void unreachableAnnotationCollidesWithAReachableOne() {
+			ToolParamHeaderAnnotations annotations = parse("""
+					{
+					  "type": "object",
+					  "properties": {
+					    "region": { "type": "string", "x-mcp-header": "Region" }
+					  },
+					  "$defs": {
+					    "region": { "type": "string", "x-mcp-header": "region" }
+					  }
+					}
+					""");
+
+			assertThat(annotations.valid()).isEmpty();
+			assertThat(annotations.invalid()).hasSize(2);
+		}
+
+		@Test
+		void valuesThatAreNotSchemasAreNotSearched() {
+			ToolParamHeaderAnnotations annotations = parse("""
+					{
+					  "type": "object",
+					  "properties": {
+					    "options": {
+					      "type": "object",
+					      "default": { "x-mcp-header": "Default" },
+					      "examples": [{ "x-mcp-header": "Example" }],
+					      "const": { "x-mcp-header": "Const" }
+					    },
+					    "x-mcp-header": { "type": "string" }
+					  }
+					}
+					""");
 
 			assertThat(annotations.valid()).isEmpty();
 			assertThat(annotations.invalid()).isEmpty();
