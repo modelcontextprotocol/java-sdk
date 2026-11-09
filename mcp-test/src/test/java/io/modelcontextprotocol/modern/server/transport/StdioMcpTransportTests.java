@@ -50,6 +50,7 @@ import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.McpSyncResponse;
 import io.modelcontextprotocol.modern.server.McpTransportResponse;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncTool;
+import io.modelcontextprotocol.modern.server.feature.McpChangeFeed;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
 import io.modelcontextprotocol.modern.server.feature.McpSyncTool;
 import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
@@ -621,6 +622,24 @@ class StdioMcpTransportTests {
 		this.transport.closeGracefully().block(Duration.ofSeconds(1));
 
 		await().atMost(Duration.ofSeconds(1)).untilTrue(publisherCancelled);
+	}
+
+	@Test
+	void listenWithoutNotificationsIsAnsweredWithAnError() throws Exception {
+		McpServer server = McpServer.builder()
+			.serverInfo(SERVER_INFO)
+			.jsonMapper(this.jsonMapper)
+			.feature(ToolsFeature.ofAsync(emptyTools(), this.jsonMapper, PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE))
+			.subscriptions(new McpChangeFeed())
+			.build();
+		start(server);
+
+		send("subscriptions/listen", 3, Map.of("_meta", meta()));
+
+		// The error is the first line: no acknowledgement precedes it.
+		String line = readLineWithTimeout();
+		assertThatJson(line).inPath("$.id").isEqualTo(3);
+		assertThatJson(line).inPath("$.error.code").isEqualTo(ErrorCodes.INVALID_PARAMS);
 	}
 
 	@Test
