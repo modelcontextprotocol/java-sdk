@@ -391,14 +391,27 @@ public class HttpServletMcpTransport extends HttpServlet {
 	/**
 	 * Validates {@code Mcp-Method}, {@code MCP-Protocol-Version} and, for the three named
 	 * methods, {@code Mcp-Name} against the request body.
+	 * <p>
+	 * Each of these headers must appear on exactly one header line. Intermediaries
+	 * disagree on which copy of a repeated header counts (the first, the last, or all of
+	 * them joined with {@code ", "}), so accepting a repeated header would let a request
+	 * be routed or authorized on one value while the server validates another.
+	 * <p>
+	 * Values already joined into one line by an intermediary are only caught by the body
+	 * comparison. A joined {@code Mcp-Name} can still match when the name or URI itself
+	 * contains {@code ", "}.
 	 * @return a human-readable mismatch description, or {@code null} if the headers are
 	 * consistent with the body
 	 */
 	private String validateHeaders(HttpServletRequest request, JSONRPCRequest jsonRpcRequest) {
-		String methodHeader = request.getHeader("Mcp-Method");
-		if (methodHeader == null) {
+		List<String> methodHeaders = Collections.list(request.getHeaders("Mcp-Method"));
+		if (methodHeaders.isEmpty()) {
 			return "Missing required header: Mcp-Method";
 		}
+		if (methodHeaders.size() > 1) {
+			return "Mcp-Method header has more than one value";
+		}
+		String methodHeader = methodHeaders.get(0);
 		if (!methodHeader.equals(jsonRpcRequest.method())) {
 			return "Mcp-Method header does not match request method";
 		}
@@ -407,10 +420,14 @@ public class HttpServletMcpTransport extends HttpServlet {
 		// which answers it with -32602.
 		String bodyVersion = protocolVersionFromMeta(jsonRpcRequest.params());
 		if (bodyVersion != null) {
-			String versionHeader = request.getHeader("MCP-Protocol-Version");
-			if (versionHeader == null) {
+			List<String> versionHeaders = Collections.list(request.getHeaders("MCP-Protocol-Version"));
+			if (versionHeaders.isEmpty()) {
 				return "Missing required header: MCP-Protocol-Version";
 			}
+			if (versionHeaders.size() > 1) {
+				return "MCP-Protocol-Version header has more than one value";
+			}
+			String versionHeader = versionHeaders.get(0);
 			if (!versionHeader.equals(bodyVersion)) {
 				return "MCP-Protocol-Version header does not match _meta protocol version";
 			}
@@ -427,10 +444,14 @@ public class HttpServletMcpTransport extends HttpServlet {
 		if (!(paramsMap.get(nameKey) instanceof String expectedName)) {
 			return null;
 		}
-		String nameHeader = request.getHeader("Mcp-Name");
-		if (nameHeader == null) {
+		List<String> nameHeaders = Collections.list(request.getHeaders("Mcp-Name"));
+		if (nameHeaders.isEmpty()) {
 			return "Missing required header: Mcp-Name";
 		}
+		if (nameHeaders.size() > 1) {
+			return "Mcp-Name header has more than one value";
+		}
+		String nameHeader = nameHeaders.get(0);
 		String decoded = McpHeaderDecoder.decodeValue(nameHeader);
 		if (decoded == null) {
 			return "Mcp-Name header has a malformed value";
