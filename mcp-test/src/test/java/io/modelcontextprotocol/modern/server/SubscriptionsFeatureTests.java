@@ -7,13 +7,16 @@ package io.modelcontextprotocol.modern.server;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
+import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
+import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
 import io.modelcontextprotocol.modern.McpSchema.SubscriptionFilter;
 import io.modelcontextprotocol.modern.McpSchema.SubscriptionsAcknowledgedParams;
@@ -27,6 +30,8 @@ import io.modelcontextprotocol.modern.server.feature.ResourcesPage;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -35,7 +40,10 @@ import static io.modelcontextprotocol.modern.server.ModernTestFixtures.SERVER_IN
 import static io.modelcontextprotocol.modern.server.ModernTestFixtures.emptyTools;
 import static io.modelcontextprotocol.modern.server.ModernTestFixtures.meta;
 import static io.modelcontextprotocol.modern.server.ModernTestFixtures.respond;
+import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 
 class SubscriptionsFeatureTests {
 
@@ -172,6 +180,77 @@ class SubscriptionsFeatureTests {
 	}
 
 	@Test
+	void listenWithoutNotificationsIsRejected() {
+		McpServer server = toolsServer(new McpChangeFeed());
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		McpTransportResponse response = server
+			.handle(McpTransportContext.EMPTY, new JSONRPCRequest("subscriptions/listen", 1, params))
+			.block();
+
+		assertNotificationsRequired(response);
+	}
+
+	@Test
+	void listenWithNullNotificationsIsRejected() {
+		McpServer server = toolsServer(new McpChangeFeed());
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("notifications", null);
+		McpTransportResponse response = server
+			.handle(McpTransportContext.EMPTY, new JSONRPCRequest("subscriptions/listen", 1, params))
+			.block();
+
+		assertNotificationsRequired(response);
+	}
+
+	@ParameterizedTest
+	@MethodSource("nonObjectNotifications")
+	void listenWithNonObjectNotificationsIsRejected(Object notifications) {
+		McpServer server = toolsServer(new McpChangeFeed());
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("notifications", notifications);
+		McpTransportResponse response = server
+			.handle(McpTransportContext.EMPTY, new JSONRPCRequest("subscriptions/listen", 1, params))
+			.block();
+
+		assertNotificationsRequired(response);
+	}
+
+	static Stream<Object> nonObjectNotifications() {
+		// "" and [] matter in particular: a mapper configured with
+		// ACCEPT_EMPTY_STRING_AS_NULL_OBJECT / ACCEPT_EMPTY_ARRAY_AS_NULL_OBJECT would
+		// coerce them to null, which SubscriptionsListenRequest turns into an empty
+		// filter.
+		return Stream.of("", List.of(), true, 1);
+	}
+
+	@Test
+	void emptyNotificationsIsAcknowledgedAndStaysOpen() {
+		McpChangeFeed feed = new McpChangeFeed();
+		McpServer server = toolsServer(feed);
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("notifications", Map.of());
+		var invocation = (McpTransportResponse.Streaming) server
+			.handle(McpTransportContext.EMPTY, new JSONRPCRequest("subscriptions/listen", 1, params))
+			.block();
+
+		StepVerifier.create(invocation.messages())
+			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg))
+				.isEqualTo(SubscriptionFilter.EMPTY))
+			.then(() -> feed.broadcast(new ServerChange.ToolsListChanged()))
+			.then(server::closeGracefully)
+			.expectNextMatches(msg -> msg instanceof JSONRPCResponse)
+			.verifyComplete();
+	}
+
+	@Test
 	void resourceSubscribeIsAdvertisedAndHonouredWhenRepositorySupportsIt() {
 		McpServer server = resourcesServer(true, new McpChangeFeed());
 
@@ -266,6 +345,15 @@ class SubscriptionsFeatureTests {
 		params.put("notifications", Map.of("toolsListChanged", true));
 		JSONRPCRequest request = new JSONRPCRequest("subscriptions/listen", id, params);
 		return (McpTransportResponse.Streaming) server.handle(McpTransportContext.EMPTY, request).block();
+	}
+
+	private static void assertNotificationsRequired(McpTransportResponse response) {
+		// An error response, not a stream: no acknowledgement is ever sent.
+		assertThat(response).asInstanceOf(type(McpTransportResponse.Error.class))
+			.extracting(error -> error.response().error())
+			.returns(ErrorCodes.INVALID_PARAMS, JSONRPCError::code)
+			.extracting(JSONRPCError::message, as(STRING))
+			.contains("notifications", "required");
 	}
 
 	private static Object subscriptionIdOf(JSONRPCNotification notification) {

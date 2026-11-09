@@ -297,6 +297,20 @@ class HttpServletMcpTransportIntegrationTests {
 	}
 
 	@Test
+	void listenWithoutNotificationsIsAnsweredAsJsonError() throws Exception {
+		HttpRequest request = post("subscriptions/listen", Map.of("_meta", meta())).build();
+		// Bounded: an accepted listen would open an event stream that never ends.
+		HttpResponse<String> response = HttpClient.newHttpClient()
+			.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+			.get(5, TimeUnit.SECONDS);
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThat(response.headers().firstValue("Content-Type"))
+			.hasValueSatisfying(v -> assertThat(v).contains("application/json"));
+		assertThat(errorCode(response)).isEqualTo(ErrorCodes.INVALID_PARAMS);
+	}
+
+	@Test
 	void customErrorCodeUsesConfiguredStatus() throws Exception {
 		HttpResponse<String> response = callTool("quota");
 
