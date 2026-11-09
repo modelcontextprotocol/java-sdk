@@ -55,6 +55,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
@@ -415,6 +416,39 @@ class HttpServletMcpTransportIntegrationTests {
 		@SuppressWarnings("unchecked")
 		Map<String, Object> error = (Map<String, Object>) parsed.get("error");
 		assertThat(((Number) error.get("code")).intValue()).isEqualTo(ErrorCodes.HEADER_MISMATCH);
+	}
+
+	@ParameterizedTest
+	@CsvSource({ "Mcp-Method, tools/call", "Mcp-Method, tools/list", "Mcp-Name, echo", "Mcp-Name, other",
+			"MCP-Protocol-Version, " + McpSchema.LATEST_PROTOCOL_VERSION })
+	void repeatedStandardHeaderIsRejected(String name, String extraValue) throws Exception {
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("name", "echo");
+		// The request already carries a valid value for every standard header; this adds
+		// a second line for one of them.
+		HttpRequest request = post("tools/call", params).header("Mcp-Name", "echo").header(name, extraValue).build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThatJson(response.body()).inPath("$.error.code").isEqualTo(ErrorCodes.HEADER_MISMATCH);
+		assertThatJson(response.body()).inPath("$.error.message").isEqualTo(name + " header has more than one value");
+	}
+
+	@Test
+	void commaJoinedMcpMethodIsRejected() throws Exception {
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("name", "echo");
+		HttpRequest request = post("tools/call", params).header("Mcp-Name", "echo")
+			.setHeader("Mcp-Method", "tools/call, tools/list")
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThatJson(response.body()).inPath("$.error.code").isEqualTo(ErrorCodes.HEADER_MISMATCH);
+		assertThatJson(response.body()).inPath("$.error.message")
+			.isEqualTo("Mcp-Method header does not match request method");
 	}
 
 	@Test
