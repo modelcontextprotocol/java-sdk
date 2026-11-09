@@ -11,7 +11,6 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -22,22 +21,18 @@ import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.Implementation;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
-import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpServer;
-import io.modelcontextprotocol.modern.server.feature.McpAsyncToolRepository;
+import io.modelcontextprotocol.modern.server.ModernTestFixtures;
 import io.modelcontextprotocol.modern.server.feature.McpChangeFeed;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
-import io.modelcontextprotocol.modern.server.feature.ToolsPage;
-import io.modelcontextprotocol.modern.server.feature.McpAsyncTool;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import reactor.core.publisher.Mono;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -65,17 +60,7 @@ class HttpServletMcpTransportSlowClientIntegrationTests {
 		McpServer server = McpServer.builder()
 			.serverInfo(Implementation.builder("slow-client-test-server", "1.0.0").build())
 			.jsonMapper(JSON_MAPPER)
-			.feature(ToolsFeature.ofAsync(new McpAsyncToolRepository() {
-				@Override
-				public Mono<ToolsPage> list(McpRequestContext ctx, String cursor) {
-					return Mono.just(ToolsPage.of(List.of()));
-				}
-
-				@Override
-				public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
-					return Mono.empty();
-				}
-			}))
+			.feature(ToolsFeature.ofAsync(ModernTestFixtures.emptyTools()))
 			.subscriptions(publisher)
 			.build();
 		HttpServletMcpTransport transport = HttpServletMcpTransport.builder(server)

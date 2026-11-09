@@ -6,7 +6,7 @@ package io.modelcontextprotocol.modern.server.feature.repository;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 import io.modelcontextprotocol.modern.McpSchema.Tool;
@@ -33,7 +33,7 @@ import reactor.core.publisher.Mono;
  */
 public final class InMemoryAsyncToolRepository implements McpAsyncToolRepository {
 
-	private final Map<String, McpAsyncTool> tools = new ConcurrentSkipListMap<>();
+	private final NavigableMap<String, McpAsyncTool> tools = new ConcurrentSkipListMap<>();
 
 	private final McpChangeBroadcaster changeBroadcaster;
 
@@ -83,8 +83,8 @@ public final class InMemoryAsyncToolRepository implements McpAsyncToolRepository
 	}
 
 	private ToolsPage page(String cursor) {
-		KeyCursorPagination.Page<Tool> page = KeyCursorPagination.page(this.tools.values(),
-				tool -> tool.definition().name(), McpAsyncTool::definition, cursor, this.pageSize);
+		KeyCursorPagination.Page<Tool> page = KeyCursorPagination.page(this.tools, McpAsyncTool::definition, cursor,
+				this.pageSize);
 		return new ToolsPage(page.items(), page.nextCursor(), null, null);
 	}
 

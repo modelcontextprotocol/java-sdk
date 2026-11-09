@@ -18,8 +18,8 @@ import io.modelcontextprotocol.modern.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.modern.McpSchema.Prompt;
 import io.modelcontextprotocol.modern.McpSchema.PromptArgument;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
-import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpServer;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemoryAsyncPromptRepository;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
@@ -37,21 +37,10 @@ class PromptsFeatureTests {
 
 	private static final McpServer SERVER = McpServer.builder()
 		.serverInfo(SERVER_INFO)
-		.feature(PromptsFeature.ofAsync(new McpAsyncPromptRepository() {
-			@Override
-			public Mono<PromptsPage> list(McpRequestContext ctx, String cursor) {
-				return Mono.just(PromptsPage.of(List.of(GREETING)));
-			}
-
-			@Override
-			public Mono<McpAsyncPrompt> find(McpRequestContext ctx, String name) {
-				return GREETING.name().equals(name)
-						? Mono.just(McpAsyncPrompt.of(GREETING,
-								(c, request) -> Mono
-									.just(McpAsyncResponse.result(GetPromptResult.builder(List.of()).build()))))
-						: Mono.empty();
-			}
-		}, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
+		.feature(PromptsFeature.ofAsync(InMemoryAsyncPromptRepository.builder()
+			.prompt(McpAsyncPrompt.of(GREETING,
+					(c, request) -> Mono.just(McpAsyncResponse.result(GetPromptResult.builder(List.of()).build()))))
+			.build(), McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
 		.build();
 
 	private static JSONRPCResponse get(String name, Map<String, String> arguments) {
@@ -81,21 +70,12 @@ class PromptsFeatureTests {
 		Prompt sampled = Prompt.builder("sampled").build();
 		McpServer server = McpServer.builder()
 			.serverInfo(SERVER_INFO)
-			.feature(PromptsFeature.ofAsync(new McpAsyncPromptRepository() {
-				@Override
-				public Mono<PromptsPage> list(McpRequestContext ctx, String cursor) {
-					return Mono.just(PromptsPage.of(List.of(sampled)));
-				}
-
-				@Override
-				public Mono<McpAsyncPrompt> find(McpRequestContext ctx, String name) {
-					return Mono.just(McpAsyncPrompt.of(sampled, ClientCapabilities.builder().sampling().build(),
-							(c, request) -> {
-								called.set(true);
-								return Mono.just(McpAsyncResponse.result(GetPromptResult.builder(List.of()).build()));
-							}));
-				}
-			}, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
+			.feature(PromptsFeature.ofAsync(InMemoryAsyncPromptRepository.builder()
+				.prompt(McpAsyncPrompt.of(sampled, ClientCapabilities.builder().sampling().build(), (c, request) -> {
+					called.set(true);
+					return Mono.just(McpAsyncResponse.result(GetPromptResult.builder(List.of()).build()));
+				}))
+				.build(), McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
 			.build();
 		JSONRPCRequest request = new JSONRPCRequest("prompts/get", 1, Map.of("_meta", meta(), "name", "sampled"));
 

@@ -6,7 +6,7 @@ package io.modelcontextprotocol.modern.server.feature.repository;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 import io.modelcontextprotocol.modern.McpSchema.Tool;
@@ -29,7 +29,7 @@ import io.modelcontextprotocol.util.Assert;
  */
 public final class InMemorySyncToolRepository implements McpSyncToolRepository {
 
-	private final Map<String, McpSyncTool> tools = new ConcurrentSkipListMap<>();
+	private final NavigableMap<String, McpSyncTool> tools = new ConcurrentSkipListMap<>();
 
 	private final McpChangeBroadcaster changeBroadcaster;
 
@@ -70,8 +70,8 @@ public final class InMemorySyncToolRepository implements McpSyncToolRepository {
 
 	@Override
 	public ToolsPage list(McpRequestContext ctx, String cursor) {
-		KeyCursorPagination.Page<Tool> page = KeyCursorPagination.page(this.tools.values(),
-				tool -> tool.definition().name(), McpSyncTool::definition, cursor, this.pageSize);
+		KeyCursorPagination.Page<Tool> page = KeyCursorPagination.page(this.tools, McpSyncTool::definition, cursor,
+				this.pageSize);
 		return new ToolsPage(page.items(), page.nextCursor(), null, null);
 	}
 

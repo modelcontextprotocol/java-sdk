@@ -6,7 +6,7 @@ package io.modelcontextprotocol.modern.server.feature.repository;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 import io.modelcontextprotocol.modern.McpSchema.Resource;
@@ -52,9 +52,9 @@ import reactor.core.publisher.Mono;
  */
 public final class InMemoryAsyncResourceRepository implements McpAsyncResourceRepository {
 
-	private final Map<String, StaticResource> resources = new ConcurrentSkipListMap<>();
+	private final NavigableMap<String, StaticResource> resources = new ConcurrentSkipListMap<>();
 
-	private final Map<String, TemplatedResource> templates = new ConcurrentSkipListMap<>();
+	private final NavigableMap<String, TemplatedResource> templates = new ConcurrentSkipListMap<>();
 
 	private final McpUriTemplateManagerFactory uriTemplateManagerFactory;
 
@@ -164,14 +164,13 @@ public final class InMemoryAsyncResourceRepository implements McpAsyncResourceRe
 	}
 
 	private ResourcesPage page(String cursor) {
-		KeyCursorPagination.Page<Resource> page = KeyCursorPagination.page(this.resources.values(),
-				resource -> resource.definition().uri(), StaticResource::definition, cursor, this.pageSize);
+		KeyCursorPagination.Page<Resource> page = KeyCursorPagination.page(this.resources, StaticResource::definition,
+				cursor, this.pageSize);
 		return new ResourcesPage(page.items(), page.nextCursor(), null, null);
 	}
 
 	private ResourceTemplatesPage templatesPage(String cursor) {
-		KeyCursorPagination.Page<ResourceTemplate> page = KeyCursorPagination.page(this.templates.values(),
-				template -> template.template().definition().uriTemplate(),
+		KeyCursorPagination.Page<ResourceTemplate> page = KeyCursorPagination.page(this.templates,
 				template -> template.template().definition(), cursor, this.pageSize);
 		return new ResourceTemplatesPage(page.items(), page.nextCursor(), null, null);
 	}

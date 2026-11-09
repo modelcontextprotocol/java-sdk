@@ -24,6 +24,7 @@ import io.modelcontextprotocol.modern.McpSchema.Tool;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.ToolsPage;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncTool;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemoryAsyncToolRepository;
 import io.modelcontextprotocol.util.ToolsUtils;
 import reactor.core.publisher.Mono;
 
@@ -110,17 +111,7 @@ public final class ModernTestFixtures {
 
 	/** A tool repository with no tools. */
 	public static McpAsyncToolRepository emptyTools() {
-		return new McpAsyncToolRepository() {
-			@Override
-			public Mono<ToolsPage> list(McpRequestContext ctx, String cursor) {
-				return Mono.just(ToolsPage.of(List.of()));
-			}
-
-			@Override
-			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
-				return Mono.empty();
-			}
-		};
+		return InMemoryAsyncToolRepository.builder().build();
 	}
 
 }

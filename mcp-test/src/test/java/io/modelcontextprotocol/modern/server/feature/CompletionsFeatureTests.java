@@ -27,6 +27,8 @@ import io.modelcontextprotocol.modern.server.McpFeature;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.McpSyncResponse;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemorySyncPromptRepository;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemorySyncResourceRepository;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
@@ -69,56 +71,24 @@ class CompletionsFeatureTests {
 				"shop".equals(context.get("database")) ? List.of("orders", "customers") : List.of()));
 	};
 
-	private final McpSyncPromptRepository prompts = new McpSyncPromptRepository() {
-		@Override
-		public PromptsPage list(McpRequestContext ctx, String cursor) {
-			return PromptsPage.of(List.of(CODE_REVIEW, PLAIN));
-		}
+	// Completion never reads the templates, so their reader is never called.
+	private static final McpSyncResource NOT_READ = McpSyncResource.of((ctx, request) -> {
+		throw new AssertionError("completion must not read the resource");
+	});
 
-		@Override
-		public McpSyncPrompt find(McpRequestContext ctx, String name) {
-			return switch (name) {
-				case "code_review" -> prompt(CODE_REVIEW).withCompletionHandler(languages);
-				case "plain" -> prompt(PLAIN);
-				default -> null;
-			};
-		}
+	private final McpSyncResourceRepository resources = InMemorySyncResourceRepository.builder()
+		.template(McpSyncResourceTemplate.of(TABLE).withCompletionHandler(this.tables), NOT_READ)
+		.template(McpSyncResourceTemplate.of(FILE), NOT_READ)
+		.supportsCompletion(true)
+		.build();
 
-		@Override
-		public boolean supportsCompletion() {
-			return true;
-		}
-	};
-
-	private final McpSyncResourceRepository resources = new McpSyncResourceRepository() {
-		@Override
-		public ResourcesPage list(McpRequestContext ctx, String cursor) {
-			return ResourcesPage.of(List.of());
-		}
-
-		@Override
-		public ResourceTemplatesPage listTemplates(McpRequestContext ctx, String cursor) {
-			return ResourceTemplatesPage.of(List.of(TABLE, FILE));
-		}
-
-		@Override
-		public McpSyncResource find(McpRequestContext ctx, String uri) {
-			return null;
-		}
-
-		@Override
-		public McpSyncResourceTemplate findTemplate(McpRequestContext ctx, String uriTemplate) {
-			if (TABLE.uriTemplate().equals(uriTemplate)) {
-				return McpSyncResourceTemplate.of(TABLE).withCompletionHandler(tables);
-			}
-			return FILE.uriTemplate().equals(uriTemplate) ? McpSyncResourceTemplate.of(FILE) : null;
-		}
-
-		@Override
-		public boolean supportsCompletion() {
-			return true;
-		}
-	};
+	private McpSyncPromptRepository prompts(boolean supportsCompletion) {
+		return InMemorySyncPromptRepository.builder()
+			.prompt(prompt(CODE_REVIEW).withCompletionHandler(this.languages))
+			.prompt(prompt(PLAIN))
+			.supportsCompletion(supportsCompletion)
+			.build();
+	}
 
 	private static McpSyncPrompt prompt(Prompt definition) {
 		return McpSyncPrompt.of(definition,
@@ -130,7 +100,7 @@ class CompletionsFeatureTests {
 	}
 
 	private McpServer server() {
-		return server(PromptsFeature.ofSync(this.prompts), ResourcesFeature.ofSync(this.resources));
+		return server(PromptsFeature.ofSync(prompts(true)), ResourcesFeature.ofSync(this.resources));
 	}
 
 	private static JSONRPCResponse complete(McpServer server, Map<String, Object> ref, String argument, String value,
@@ -227,7 +197,7 @@ class CompletionsFeatureTests {
 
 	@Test
 	void refTypeNoFeatureCompletesIsInvalidParams() {
-		McpServer server = server(PromptsFeature.ofSync(this.prompts));
+		McpServer server = server(PromptsFeature.ofSync(prompts(true)));
 
 		JSONRPCResponse response = complete(server, resource(TABLE.uriTemplate()), "table", "", null);
 
@@ -237,19 +207,7 @@ class CompletionsFeatureTests {
 
 	@Test
 	void completionIsNotServedWhenNoRepositorySupportsIt() {
-		McpSyncPromptRepository withoutCompletion = new McpSyncPromptRepository() {
-			@Override
-			public PromptsPage list(McpRequestContext ctx, String cursor) {
-				return prompts.list(ctx, cursor);
-			}
-
-			@Override
-			public McpSyncPrompt find(McpRequestContext ctx, String name) {
-				return prompts.find(ctx, name);
-			}
-		};
-
-		JSONRPCResponse response = complete(server(PromptsFeature.ofSync(withoutCompletion)), prompt("code_review"),
+		JSONRPCResponse response = complete(server(PromptsFeature.ofSync(prompts(false))), prompt("code_review"),
 				"language", "ja", null);
 
 		assertThat(response.error().code()).isEqualTo(ErrorCodes.METHOD_NOT_FOUND);
@@ -274,7 +232,8 @@ class CompletionsFeatureTests {
 			}
 		};
 
-		assertThatIllegalStateException().isThrownBy(() -> server(PromptsFeature.ofSync(this.prompts), promptCompleter))
+		assertThatIllegalStateException()
+			.isThrownBy(() -> server(PromptsFeature.ofSync(prompts(true)), promptCompleter))
 			.withMessageContaining("ref/prompt");
 	}
 
@@ -295,23 +254,10 @@ class CompletionsFeatureTests {
 	}
 
 	private static McpServer serverCompleting(CompleteResult.Completion completion) {
-		McpSyncPromptRepository prompts = new McpSyncPromptRepository() {
-			@Override
-			public PromptsPage list(McpRequestContext ctx, String cursor) {
-				return PromptsPage.of(List.of(PLAIN));
-			}
-
-			@Override
-			public McpSyncPrompt find(McpRequestContext ctx, String name) {
-				return prompt(PLAIN).withCompletionHandler((c, request) -> CompleteResult.of(completion));
-			}
-
-			@Override
-			public boolean supportsCompletion() {
-				return true;
-			}
-		};
-		return server(PromptsFeature.ofSync(prompts));
+		return server(PromptsFeature.ofSync(InMemorySyncPromptRepository.builder()
+			.prompt(prompt(PLAIN).withCompletionHandler((c, request) -> CompleteResult.of(completion)))
+			.supportsCompletion(true)
+			.build()));
 	}
 
 	private static List<String> values(int count) {

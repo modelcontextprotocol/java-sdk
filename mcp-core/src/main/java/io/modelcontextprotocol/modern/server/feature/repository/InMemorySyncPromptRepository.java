@@ -6,7 +6,7 @@ package io.modelcontextprotocol.modern.server.feature.repository;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 import io.modelcontextprotocol.modern.McpSchema.Prompt;
@@ -35,7 +35,7 @@ import io.modelcontextprotocol.util.Assert;
  */
 public final class InMemorySyncPromptRepository implements McpSyncPromptRepository {
 
-	private final Map<String, McpSyncPrompt> prompts = new ConcurrentSkipListMap<>();
+	private final NavigableMap<String, McpSyncPrompt> prompts = new ConcurrentSkipListMap<>();
 
 	private final McpChangeBroadcaster changeBroadcaster;
 
@@ -79,8 +79,8 @@ public final class InMemorySyncPromptRepository implements McpSyncPromptReposito
 
 	@Override
 	public PromptsPage list(McpRequestContext ctx, String cursor) {
-		KeyCursorPagination.Page<Prompt> page = KeyCursorPagination.page(this.prompts.values(),
-				prompt -> prompt.definition().name(), McpSyncPrompt::definition, cursor, this.pageSize);
+		KeyCursorPagination.Page<Prompt> page = KeyCursorPagination.page(this.prompts, McpSyncPrompt::definition,
+				cursor, this.pageSize);
 		return new PromptsPage(page.items(), page.nextCursor(), null, null);
 	}
 

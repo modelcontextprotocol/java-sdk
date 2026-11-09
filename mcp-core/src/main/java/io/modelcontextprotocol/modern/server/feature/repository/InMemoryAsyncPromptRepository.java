@@ -6,7 +6,7 @@ package io.modelcontextprotocol.modern.server.feature.repository;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 import io.modelcontextprotocol.modern.McpSchema.Prompt;
@@ -39,7 +39,7 @@ import reactor.core.publisher.Mono;
  */
 public final class InMemoryAsyncPromptRepository implements McpAsyncPromptRepository {
 
-	private final Map<String, McpAsyncPrompt> prompts = new ConcurrentSkipListMap<>();
+	private final NavigableMap<String, McpAsyncPrompt> prompts = new ConcurrentSkipListMap<>();
 
 	private final McpChangeBroadcaster changeBroadcaster;
 
@@ -92,8 +92,8 @@ public final class InMemoryAsyncPromptRepository implements McpAsyncPromptReposi
 	}
 
 	private PromptsPage page(String cursor) {
-		KeyCursorPagination.Page<Prompt> page = KeyCursorPagination.page(this.prompts.values(),
-				prompt -> prompt.definition().name(), McpAsyncPrompt::definition, cursor, this.pageSize);
+		KeyCursorPagination.Page<Prompt> page = KeyCursorPagination.page(this.prompts, McpAsyncPrompt::definition,
+				cursor, this.pageSize);
 		return new PromptsPage(page.items(), page.nextCursor(), null, null);
 	}
 
