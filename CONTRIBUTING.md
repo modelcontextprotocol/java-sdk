@@ -91,6 +91,7 @@ address the problem.
 **We accept contributions created with the help of AI coding agents, but they must be carefully reviewed by a human who remains accountable for the quality of the contribution.**
 These can be issues or pull requests. For issues, please ensure you describe your particular use-case, and not general considerations found by an AI agent.
 Contributions submitted by GitHub accounts controlled by autonomous AI bots are forbidden.
+This also applies to comments: automated bot accounts must not comment on issues, pull requests, or discussions. Comments, including reviews, must be written by a human who takes responsibility for their content.
 
 ## Making Changes
 
