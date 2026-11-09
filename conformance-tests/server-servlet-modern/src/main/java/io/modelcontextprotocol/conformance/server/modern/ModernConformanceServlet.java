@@ -1,12 +1,8 @@
 package io.modelcontextprotocol.conformance.server.modern;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.BiFunction;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.modelcontextprotocol.json.McpJsonDefaults;
@@ -14,7 +10,6 @@ import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.modern.McpSchema.AudioContent;
 import io.modelcontextprotocol.modern.McpSchema.BlobResourceContents;
 import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
-import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
 import io.modelcontextprotocol.modern.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.modern.McpSchema.CompleteRequest;
@@ -23,7 +18,6 @@ import io.modelcontextprotocol.modern.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.modern.McpSchema.ElicitFormRequest;
 import io.modelcontextprotocol.modern.McpSchema.EmbeddedResource;
 import io.modelcontextprotocol.modern.McpSchema.GetPromptOutcome;
-import io.modelcontextprotocol.modern.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.modern.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.modern.McpSchema.ImageContent;
 import io.modelcontextprotocol.modern.McpSchema.Implementation;
@@ -31,9 +25,9 @@ import io.modelcontextprotocol.modern.McpSchema.InputRequiredResult;
 import io.modelcontextprotocol.modern.McpSchema.Prompt;
 import io.modelcontextprotocol.modern.McpSchema.PromptArgument;
 import io.modelcontextprotocol.modern.McpSchema.PromptMessage;
+import io.modelcontextprotocol.modern.McpSchema.ReadResourceOutcome;
 import io.modelcontextprotocol.modern.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.modern.McpSchema.Resource;
-import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.modern.McpSchema.Role;
 import io.modelcontextprotocol.modern.McpSchema.SamplingMessage;
@@ -41,29 +35,25 @@ import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.TextResourceContents;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
 import io.modelcontextprotocol.modern.server.InputResponses;
-import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpServer;
-import io.modelcontextprotocol.modern.server.McpSyncNotifier;
 import io.modelcontextprotocol.modern.server.McpSyncResponse;
 import io.modelcontextprotocol.modern.server.feature.McpChangeBroadcaster;
 import io.modelcontextprotocol.modern.server.feature.McpChangeFeed;
 import io.modelcontextprotocol.modern.server.feature.McpSyncPrompt;
-import io.modelcontextprotocol.modern.server.feature.McpSyncPromptRepository;
 import io.modelcontextprotocol.modern.server.feature.McpSyncResource;
-import io.modelcontextprotocol.modern.server.feature.McpSyncResourceRepository;
 import io.modelcontextprotocol.modern.server.feature.McpSyncResourceTemplate;
 import io.modelcontextprotocol.modern.server.feature.McpSyncTool;
-import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.PromptsFeature;
-import io.modelcontextprotocol.modern.server.feature.PromptsPage;
-import io.modelcontextprotocol.modern.server.feature.ResourceTemplatesPage;
 import io.modelcontextprotocol.modern.server.feature.ResourcesFeature;
-import io.modelcontextprotocol.modern.server.feature.ResourcesPage;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
-import io.modelcontextprotocol.modern.server.feature.ToolsPage;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemorySyncPromptRepository;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemorySyncResourceRepository;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemorySyncToolRepository;
 import io.modelcontextprotocol.modern.server.transport.HttpServletMcpTransport;
 import io.modelcontextprotocol.server.transport.DefaultServerTransportSecurityValidator;
+import io.modelcontextprotocol.util.DefaultMcpUriTemplateManager;
+import io.modelcontextprotocol.util.McpUriTemplateManager;
 import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.Wrapper;
@@ -73,7 +63,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Conformance server for the 2026-07-28 (stateless) revision, built on the
- * {@code io.modelcontextprotocol.modern} server.
+ * {@code io.modelcontextprotocol.modern} server. Its tools, resources and prompts are
+ * served from the SDK's in-memory repositories.
  */
 public class ModernConformanceServlet {
 
@@ -127,7 +118,11 @@ public class ModernConformanceServlet {
 			}
 			""";
 
-	private static final Pattern TEMPLATE_URI = Pattern.compile("test://template/(.+)/data");
+	private static final String TEMPLATE_URI = "test://template/{id}/data";
+
+	// Extracts {id} in the template's reader, which the resource repository only calls
+	// for URIs that matched this template.
+	private static final McpUriTemplateManager TEMPLATE_VARIABLES = new DefaultMcpUriTemplateManager(TEMPLATE_URI);
 
 	private static final McpJsonMapper JSON = McpJsonDefaults.getMapper();
 
@@ -138,9 +133,9 @@ public class ModernConformanceServlet {
 		McpChangeFeed changes = new McpChangeFeed();
 		McpServer mcpServer = McpServer.builder()
 			.serverInfo(Implementation.builder("mcp-modern-conformance-server", "1.0.0").build())
-			.feature(ToolsFeature.ofSync(new ConformanceTools(changes)))
-			.feature(ResourcesFeature.ofSync(new ConformanceResources()))
-			.feature(PromptsFeature.ofSync(new ConformancePrompts()))
+			.feature(ToolsFeature.ofSync(tools(changes)))
+			.feature(ResourcesFeature.ofSync(resources()))
+			.feature(PromptsFeature.ofSync(prompts()))
 			.subscriptions(changes)
 			.build();
 
@@ -195,8 +190,8 @@ public class ModernConformanceServlet {
 		return tomcat;
 	}
 
-	private static CallToolResult text(String text) {
-		return CallToolResult.builder().addContent(TextContent.builder(text).build()).build();
+	private static McpSyncResponse<CallToolOutcome> text(String text) {
+		return McpSyncResponse.result(CallToolResult.builder().addContent(TextContent.builder(text).build()).build());
 	}
 
 	private static CompleteResult completeFrom(List<String> candidates, CompleteRequest request) {
@@ -246,28 +241,6 @@ public class ModernConformanceServlet {
 		return InputResponses.get(inputResponses, key, Map.class, JSON).orElse(null);
 	}
 
-	@FunctionalInterface
-	private interface Handler<R, O extends Result> {
-
-		McpSyncResponse<O> handle(McpRequestContext ctx, R request);
-
-	}
-
-	@FunctionalInterface
-	private interface StreamingTool {
-
-		CallToolResult run(McpRequestContext ctx, CallToolRequest request, McpSyncNotifier notifier);
-
-	}
-
-	private static <R, O extends Result> Handler<R, O> respond(BiFunction<McpRequestContext, R, O> fn) {
-		return (ctx, request) -> McpSyncResponse.result(fn.apply(ctx, request));
-	}
-
-	private static Handler<CallToolRequest, CallToolOutcome> stream(StreamingTool tool) {
-		return (ctx, request) -> McpSyncResponse.streaming(notifier -> tool.run(ctx, request, notifier));
-	}
-
 	private static final ClientCapabilities.Elicitation FORM = new ClientCapabilities.Elicitation(
 			new ClientCapabilities.Elicitation.Form(), null);
 
@@ -277,142 +250,179 @@ public class ModernConformanceServlet {
 
 	private static final ClientCapabilities ROOTS = ClientCapabilities.builder().roots().build();
 
-	private static final class ConformanceTools implements McpSyncToolRepository {
+	// Tools
 
-		private final Map<String, McpSyncTool> tools = new LinkedHashMap<>();
-
-		ConformanceTools(McpChangeBroadcaster changes) {
-			add("test_simple_text", "Returns simple text content for testing",
-					respond((ctx, req) -> text("This is a simple text response for testing.")));
-			add("test_image_content", "Returns image content for testing",
-					respond((ctx, req) -> CallToolResult.builder()
+	/**
+	 * The tools of the conformance scenarios. {@code test_trigger_*} broadcast list
+	 * changes without changing the catalog, so that the listings other scenarios check do
+	 * not depend on the order in which scenarios run.
+	 */
+	private static InMemorySyncToolRepository tools(McpChangeBroadcaster changes) {
+		return InMemorySyncToolRepository.builder()
+			.tool(McpSyncTool.of(Tool.builder("test_simple_text", EMPTY_JSON_SCHEMA)
+				.description("Returns simple text content for testing")
+				.build(), (ctx, req) -> text("This is a simple text response for testing.")))
+			.tool(McpSyncTool.of(
+					Tool.builder("test_image_content", EMPTY_JSON_SCHEMA)
+						.description("Returns image content for testing")
+						.build(),
+					(ctx, req) -> McpSyncResponse.result(CallToolResult.builder()
 						.addContent(ImageContent.builder(RED_PIXEL_PNG, "image/png").build())
-						.build()));
-			add("test_audio_content", "Returns audio content for testing",
-					respond((ctx, req) -> CallToolResult.builder()
+						.build())))
+			.tool(McpSyncTool.of(
+					Tool.builder("test_audio_content", EMPTY_JSON_SCHEMA)
+						.description("Returns audio content for testing")
+						.build(),
+					(ctx, req) -> McpSyncResponse.result(CallToolResult.builder()
 						.addContent(AudioContent.builder(MINIMAL_WAV, "audio/wav").build())
-						.build()));
-			add("test_embedded_resource", "Returns embedded resource content for testing",
-					respond((ctx,
-							req) -> CallToolResult.builder()
-								.addContent(
-										EmbeddedResource
-											.builder(TextResourceContents
-												.builder("test://embedded-resource",
-														"This is an embedded resource content.")
-												.mimeType("text/plain")
-												.build())
-											.build())
-								.build()));
-			add("test_multiple_content_types", "Returns multiple content types for testing",
-					respond((ctx,
-							req) -> CallToolResult.builder()
-								.addContent(TextContent.builder("Multiple content types test:").build())
-								.addContent(ImageContent.builder(RED_PIXEL_PNG, "image/png").build())
-								.addContent(
-										EmbeddedResource
-											.builder(TextResourceContents
-												.builder("test://mixed-content-resource",
-														"{\"test\":\"data\",\"value\":123}")
-												.mimeType("application/json")
-												.build())
-											.build())
-								.build()));
-			add("test_error_handling", "Tool that returns an error for testing error handling",
-					respond((ctx, req) -> CallToolResult.builder()
+						.build())))
+			.tool(McpSyncTool
+				.of(Tool.builder("test_embedded_resource", EMPTY_JSON_SCHEMA)
+					.description("Returns embedded resource content for testing")
+					.build(),
+						(ctx, req) -> McpSyncResponse.result(CallToolResult.builder()
+							.addContent(EmbeddedResource
+								.builder(TextResourceContents
+									.builder("test://embedded-resource", "This is an embedded resource content.")
+									.mimeType("text/plain")
+									.build())
+								.build())
+							.build())))
+			.tool(McpSyncTool
+				.of(Tool.builder("test_multiple_content_types", EMPTY_JSON_SCHEMA)
+					.description("Returns multiple content types for testing")
+					.build(),
+						(ctx, req) -> McpSyncResponse.result(CallToolResult.builder()
+							.addContent(TextContent.builder("Multiple content types test:").build())
+							.addContent(ImageContent.builder(RED_PIXEL_PNG, "image/png").build())
+							.addContent(EmbeddedResource
+								.builder(TextResourceContents
+									.builder("test://mixed-content-resource", "{\"test\":\"data\",\"value\":123}")
+									.mimeType("application/json")
+									.build())
+								.build())
+							.build())))
+			.tool(McpSyncTool.of(
+					Tool.builder("test_error_handling", EMPTY_JSON_SCHEMA)
+						.description("Tool that returns an error for testing error handling")
+						.build(),
+					(ctx, req) -> McpSyncResponse.result(CallToolResult.builder()
 						.addContent(TextContent.builder("This tool intentionally returns an error for testing").build())
 						.isError(true)
-						.build()));
-			add("test_tool_with_progress", "Tool that reports progress notifications", stream((ctx, req, notifier) -> {
-				notifier.progress(0, 100.0, null);
-				sleep(50);
-				notifier.progress(50, 100.0, null);
-				sleep(50);
-				notifier.progress(100, 100.0, null);
-				return text("Tool execution completed with progress");
-			}));
+						.build())))
+			.tool(McpSyncTool.of(Tool.builder("test_tool_with_progress", EMPTY_JSON_SCHEMA)
+				.description("Tool that reports progress notifications")
+				.build(), (ctx, req) -> McpSyncResponse.streaming(notifier -> {
+					notifier.progress(0, 100.0, null);
+					sleep(50);
+					notifier.progress(50, 100.0, null);
+					sleep(50);
+					notifier.progress(100, 100.0, null);
+					return CallToolResult.builder()
+						.addContent(TextContent.builder("Tool execution completed with progress").build())
+						.build();
+				})))
 
 			// SEP-1613 / SEP-2106 JSON Schema 2020-12 keyword preservation
-			add(Tool.builder("json_schema_2020_12_tool", JSON, JSON_SCHEMA_2020_12_INPUT)
+			.tool(McpSyncTool.of(Tool.builder("json_schema_2020_12_tool", JSON, JSON_SCHEMA_2020_12_INPUT)
 				.description("Tool with JSON Schema 2020-12 features (SEP-1613, SEP-2106)")
-				.build(), respond((ctx, req) -> text("ok")));
+				.build(), (ctx, req) -> text("ok")))
 
 			// SEP-2243 custom headers: the scenario exercises the first tool with an
 			// x-mcp-header annotation, so this must stay the only annotated tool.
-			add(Tool.builder("test_x_mcp_header", JSON, X_MCP_HEADER_INPUT)
+			.tool(McpSyncTool.of(Tool.builder("test_x_mcp_header", JSON, X_MCP_HEADER_INPUT)
 				.description("Tests SEP-2243 Mcp-Param-* server-side validation")
-				.build(), respond((ctx, req) -> {
+				.build(), (ctx, req) -> {
 					Object region = req.arguments() != null ? req.arguments().get("region") : null;
 					return text("region=" + (region != null ? region : "<none>"));
-				}));
+				}))
 
 			// SEP-2575 diagnostic tools
-			add("test_missing_capability", "Test tool requiring sampling", SAMPLING,
-					respond((ctx, req) -> text("Success")));
-			add("test_streaming_elicitation", "Diagnostic tool validating response progress streams",
-					stream((ctx, req, notifier) -> {
-						notifier.progress(50, 100.0, null);
-						return text("Streaming complete");
-					}));
+			.tool(McpSyncTool.of(Tool.builder("test_missing_capability", EMPTY_JSON_SCHEMA)
+				.description("Test tool requiring sampling")
+				.build(), SAMPLING, (ctx, req) -> text("Success")))
+			.tool(McpSyncTool.of(Tool.builder("test_streaming_elicitation", EMPTY_JSON_SCHEMA)
+				.description("Diagnostic tool validating response progress streams")
+				.build(), (ctx, req) -> McpSyncResponse.streaming(notifier -> {
+					notifier.progress(50, 100.0, null);
+					return CallToolResult.builder()
+						.addContent(TextContent.builder("Streaming complete").build())
+						.build();
+				})))
 			// Logging is deprecated and unsupported, so no log is ever sent; the suite
 			// checks exactly that.
-			add("test_logging_tool", "Diagnostic logging validator tool",
-					stream((ctx, req, notifier) -> text("Logging evaluated")));
-			add("test_trigger_tool_change", "Emits a tools list-changed notification", respond((ctx, req) -> {
-				changes.broadcast(new ServerChange.ToolsListChanged());
-				return text("Mutation triggered");
-			}));
-			add("test_trigger_prompt_change", "Emits a prompts list-changed notification", respond((ctx, req) -> {
-				changes.broadcast(new ServerChange.PromptsListChanged());
-				return text("Mutation triggered");
-			}));
+			.tool(McpSyncTool.of(Tool.builder("test_logging_tool",
+					EMPTY_JSON_SCHEMA)
+				.description("Diagnostic logging validator tool")
+				.build(),
+					(ctx, req) -> McpSyncResponse.streaming(notifier -> CallToolResult.builder()
+						.addContent(TextContent.builder("Logging evaluated").build())
+						.build())))
+			.tool(McpSyncTool.of(Tool.builder("test_trigger_tool_change", EMPTY_JSON_SCHEMA)
+				.description("Emits a tools list-changed notification")
+				.build(), (ctx, req) -> {
+					changes.broadcast(new ServerChange.ToolsListChanged());
+					return text("Mutation triggered");
+				}))
+			.tool(McpSyncTool.of(Tool.builder("test_trigger_prompt_change", EMPTY_JSON_SCHEMA)
+				.description("Emits a prompts list-changed notification")
+				.build(), (ctx, req) -> {
+					changes.broadcast(new ServerChange.PromptsListChanged());
+					return text("Mutation triggered");
+				}))
 
 			// SEP-2322 MRTR tools
-			add("test_input_required_result_elicitation", "MRTR: returns InputRequiredResult with elicitation request",
-					ELICITATION, respond((ctx, req) -> {
-						Map<String, Object> content = acceptedContent(req.inputResponses(), "user_name");
-						if (content == null || !(content.get("name") instanceof String name)) {
-							return InputRequiredResult.builder()
-								.elicit("user_name", elicitString("What is your name?", "name"))
-								.build();
-						}
-						return text("Hello, " + name + "!");
-					}));
-			add("test_input_required_result_sampling", "MRTR: returns InputRequiredResult with sampling request",
-					SAMPLING, respond((ctx, req) -> {
-						Map<String, Object> response = responseObject(req.inputResponses(), "capital_question");
-						if (response == null) {
-							return InputRequiredResult.builder()
-								.createMessage("capital_question", sample("What is the capital of France?", 100))
-								.build();
-						}
-						Object content = response.get("content");
-						Object answer = content instanceof Map<?, ?> m ? m.get("text") : null;
-						return text("Sampling result: " + answer);
-					}));
-			add("test_input_required_result_list_roots", "MRTR: returns InputRequiredResult with roots/list request",
-					ROOTS, respond((ctx, req) -> {
-						Map<String, Object> response = responseObject(req.inputResponses(), "client_roots");
-						if (response == null || !(response.get("roots") instanceof List<?> roots)) {
-							return InputRequiredResult.builder().listRoots("client_roots").build();
-						}
-						return text("Found " + roots.size() + " root(s): " + roots);
-					}));
-			add("test_input_required_result_request_state", "MRTR: returns InputRequiredResult with requestState",
-					ELICITATION, respond((ctx, req) -> {
-						Map<String, Object> content = acceptedContent(req.inputResponses(), "confirm");
-						if ("request-state".equals(req.requestState()) && content != null
-								&& Boolean.TRUE.equals(content.get("ok"))) {
-							return text("state-ok: requestState validated");
-						}
-						return InputRequiredResult.builder()
-							.elicit("confirm", elicitConfirm())
-							.requestState("request-state")
-							.build();
-					}));
-			add("test_input_required_result_multiple_inputs",
-					"MRTR: returns InputRequiredResult with multiple input requests",
-					ClientCapabilities.builder().elicitation(FORM).sampling().roots().build(), respond((ctx, req) -> {
+			.tool(McpSyncTool.of(Tool.builder("test_input_required_result_elicitation", EMPTY_JSON_SCHEMA)
+				.description("MRTR: returns InputRequiredResult with elicitation request")
+				.build(), ELICITATION, (ctx, req) -> {
+					Map<String, Object> content = acceptedContent(req.inputResponses(), "user_name");
+					if (content == null || !(content.get("name") instanceof String name)) {
+						return McpSyncResponse.result(InputRequiredResult.builder()
+							.elicit("user_name", elicitString("What is your name?", "name"))
+							.build());
+					}
+					return text("Hello, " + name + "!");
+				}))
+			.tool(McpSyncTool.of(Tool.builder("test_input_required_result_sampling", EMPTY_JSON_SCHEMA)
+				.description("MRTR: returns InputRequiredResult with sampling request")
+				.build(), SAMPLING, (ctx, req) -> {
+					Map<String, Object> response = responseObject(req.inputResponses(), "capital_question");
+					if (response == null) {
+						return McpSyncResponse.result(InputRequiredResult.builder()
+							.createMessage("capital_question", sample("What is the capital of France?", 100))
+							.build());
+					}
+					Object content = response.get("content");
+					Object answer = content instanceof Map<?, ?> m ? m.get("text") : null;
+					return text("Sampling result: " + answer);
+				}))
+			.tool(McpSyncTool.of(Tool.builder("test_input_required_result_list_roots", EMPTY_JSON_SCHEMA)
+				.description("MRTR: returns InputRequiredResult with roots/list request")
+				.build(), ROOTS, (ctx, req) -> {
+					Map<String, Object> response = responseObject(req.inputResponses(), "client_roots");
+					if (response == null || !(response.get("roots") instanceof List<?> roots)) {
+						return McpSyncResponse.result(InputRequiredResult.builder().listRoots("client_roots").build());
+					}
+					return text("Found " + roots.size() + " root(s): " + roots);
+				}))
+			.tool(McpSyncTool.of(Tool.builder("test_input_required_result_request_state", EMPTY_JSON_SCHEMA)
+				.description("MRTR: returns InputRequiredResult with requestState")
+				.build(), ELICITATION, (ctx, req) -> {
+					Map<String, Object> content = acceptedContent(req.inputResponses(), "confirm");
+					if ("request-state".equals(req.requestState()) && content != null
+							&& Boolean.TRUE.equals(content.get("ok"))) {
+						return text("state-ok: requestState validated");
+					}
+					return McpSyncResponse.result(InputRequiredResult.builder()
+						.elicit("confirm", elicitConfirm())
+						.requestState("request-state")
+						.build());
+				}))
+			.tool(McpSyncTool.of(
+					Tool.builder("test_input_required_result_multiple_inputs", EMPTY_JSON_SCHEMA)
+						.description("MRTR: returns InputRequiredResult with multiple input requests")
+						.build(),
+					ClientCapabilities.builder().elicitation(FORM).sampling().roots().build(), (ctx, req) -> {
 						Map<String, Object> user = acceptedContent(req.inputResponses(), "user_name");
 						Map<String, Object> greeting = responseObject(req.inputResponses(), "greeting");
 						Map<String, Object> roots = responseObject(req.inputResponses(), "client_roots");
@@ -421,225 +431,164 @@ public class ModernConformanceServlet {
 							return text("Name: " + user.get("name") + "; Roots: "
 									+ (roots.get("roots") instanceof List<?> l ? l.size() : 0));
 						}
-						return InputRequiredResult.builder()
+						return McpSyncResponse.result(InputRequiredResult.builder()
 							.elicit("user_name", elicitString("What is your name?", "name"))
 							.createMessage("greeting", sample("Generate a greeting", 50))
 							.listRoots("client_roots")
 							.requestState("multiple-inputs")
-							.build();
-					}));
-			add("test_input_required_result_multi_round", "MRTR: multi-round InputRequiredResult workflow", ELICITATION,
-					respond((ctx, req) -> {
-						String state = req.requestState();
-						if (state != null && state.startsWith("round-1")) {
-							Map<String, Object> step1 = acceptedContent(req.inputResponses(), "step1");
-							if (step1 != null && step1.get("name") instanceof String name) {
-								return InputRequiredResult.builder()
-									.elicit("step2", elicitString("Step 2: What is your favorite color?", "color"))
-									.requestState("round-2:" + name)
-									.build();
-							}
+							.build());
+					}))
+			.tool(McpSyncTool.of(Tool.builder("test_input_required_result_multi_round", EMPTY_JSON_SCHEMA)
+				.description("MRTR: multi-round InputRequiredResult workflow")
+				.build(), ELICITATION, (ctx, req) -> {
+					String state = req.requestState();
+					if (state != null && state.startsWith("round-1")) {
+						Map<String, Object> step1 = acceptedContent(req.inputResponses(), "step1");
+						if (step1 != null && step1.get("name") instanceof String name) {
+							return McpSyncResponse.result(InputRequiredResult.builder()
+								.elicit("step2", elicitString("Step 2: What is your favorite color?", "color"))
+								.requestState("round-2:" + name)
+								.build());
 						}
-						if (state != null && state.startsWith("round-2:")) {
-							Map<String, Object> step2 = acceptedContent(req.inputResponses(), "step2");
-							if (step2 != null && step2.get("color") instanceof String color) {
-								return text("Multi-round complete for " + state.substring("round-2:".length())
-										+ " who likes " + color);
-							}
+					}
+					if (state != null && state.startsWith("round-2:")) {
+						Map<String, Object> step2 = acceptedContent(req.inputResponses(), "step2");
+						if (step2 != null && step2.get("color") instanceof String color) {
+							return text("Multi-round complete for " + state.substring("round-2:".length())
+									+ " who likes " + color);
 						}
-						return InputRequiredResult.builder()
-							.elicit("step1", elicitString("Step 1: What is your name?", "name"))
-							.requestState("round-1")
-							.build();
-					}));
+					}
+					return McpSyncResponse.result(InputRequiredResult.builder()
+						.elicit("step1", elicitString("Step 1: What is your name?", "name"))
+						.requestState("round-1")
+						.build());
+				}))
 			// Integrity protection comes from the server's RequestStateCodec: a tampered
 			// requestState is rejected before this handler runs.
-			add("test_input_required_result_tampered_state", "MRTR: HMAC-signed requestState integrity test",
-					ELICITATION, respond((ctx, req) -> {
-						if ("tamper-test".equals(req.requestState())
-								&& responseObject(req.inputResponses(), "confirm") != null) {
-							return text("integrity-ok: state verified");
-						}
-						return InputRequiredResult.builder()
-							.elicit("confirm", elicitConfirm())
-							.requestState("tamper-test")
-							.build();
-					}));
-			add("test_input_required_result_capabilities", "MRTR: respects client capabilities in inputRequests",
-					respond((ctx, req) -> {
-						if (req.inputResponses() != null && !req.inputResponses().isEmpty()) {
-							return text("capabilities-ok: received " + String.join(",", req.inputResponses().keySet()));
-						}
-						ClientCapabilities caps = ctx.clientCapabilities();
-						if (!caps.supportsElicitationForm() && !caps.supportsSampling()) {
-							return text("No supported capabilities declared");
-						}
-						InputRequiredResult.Builder builder = InputRequiredResult.builder()
-							.requestState("capabilities-test:" + UUID.randomUUID());
-						if (caps.supportsElicitationForm()) {
-							builder.elicit("elicit_input", elicitString("Elicitation input", "value"));
-						}
-						if (caps.supportsSampling()) {
-							builder.createMessage("sample_input", sample("Sample request", 50));
-						}
-						return builder.build();
-					}));
-		}
-
-		private void add(String name, String description, Handler<CallToolRequest, CallToolOutcome> handler) {
-			add(name, description, ClientCapabilities.NONE, handler);
-		}
-
-		private void add(String name, String description, ClientCapabilities requiredCapabilities,
-				Handler<CallToolRequest, CallToolOutcome> handler) {
-			add(Tool.builder(name, EMPTY_JSON_SCHEMA).description(description).build(), requiredCapabilities, handler);
-		}
-
-		private void add(Tool tool, Handler<CallToolRequest, CallToolOutcome> handler) {
-			add(tool, ClientCapabilities.NONE, handler);
-		}
-
-		private void add(Tool tool, ClientCapabilities requiredCapabilities,
-				Handler<CallToolRequest, CallToolOutcome> handler) {
-			this.tools.put(tool.name(), McpSyncTool.of(tool, requiredCapabilities, handler::handle));
-		}
-
-		@Override
-		public ToolsPage list(McpRequestContext ctx, String cursor) {
-			return ToolsPage.of(this.tools.values().stream().map(McpSyncTool::definition).toList());
-		}
-
-		@Override
-		public McpSyncTool find(McpRequestContext ctx, String name) {
-			return this.tools.get(name);
-		}
-
-		private static void sleep(long millis) {
-			try {
-				Thread.sleep(millis);
-			}
-			catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
-		}
-
+			.tool(McpSyncTool.of(Tool.builder("test_input_required_result_tampered_state", EMPTY_JSON_SCHEMA)
+				.description("MRTR: HMAC-signed requestState integrity test")
+				.build(), ELICITATION, (ctx, req) -> {
+					if ("tamper-test".equals(req.requestState())
+							&& responseObject(req.inputResponses(), "confirm") != null) {
+						return text("integrity-ok: state verified");
+					}
+					return McpSyncResponse.result(InputRequiredResult.builder()
+						.elicit("confirm", elicitConfirm())
+						.requestState("tamper-test")
+						.build());
+				}))
+			.tool(McpSyncTool.of(Tool.builder("test_input_required_result_capabilities", EMPTY_JSON_SCHEMA)
+				.description("MRTR: respects client capabilities in inputRequests")
+				.build(), (ctx, req) -> {
+					if (req.inputResponses() != null && !req.inputResponses().isEmpty()) {
+						return text("capabilities-ok: received " + String.join(",", req.inputResponses().keySet()));
+					}
+					ClientCapabilities caps = ctx.clientCapabilities();
+					if (!caps.supportsElicitationForm() && !caps.supportsSampling()) {
+						return text("No supported capabilities declared");
+					}
+					InputRequiredResult.Builder builder = InputRequiredResult.builder()
+						.requestState("capabilities-test:" + UUID.randomUUID());
+					if (caps.supportsElicitationForm()) {
+						builder.elicit("elicit_input", elicitString("Elicitation input", "value"));
+					}
+					if (caps.supportsSampling()) {
+						builder.createMessage("sample_input", sample("Sample request", 50));
+					}
+					return McpSyncResponse.result(builder.build());
+				}))
+			.build();
 	}
 
-	private static final class ConformanceResources implements McpSyncResourceRepository {
-
-		private static final List<Resource> RESOURCES = List.of(
-				Resource.builder("test://static-text", "Static Text Resource")
-					.description("A static text resource for testing")
-					.mimeType("text/plain")
-					.build(),
-				Resource.builder("test://static-binary", "Static Binary Resource")
-					.description("A static binary resource for testing")
-					.mimeType("image/png")
-					.build(),
-				Resource.builder("test://watched-resource", "Watched Resource")
-					.description("A resource that can be subscribed to for updates")
-					.mimeType("text/plain")
-					.build());
-
-		@Override
-		public ResourcesPage list(McpRequestContext ctx, String cursor) {
-			return ResourcesPage.of(RESOURCES);
+	private static void sleep(long millis) {
+		try {
+			Thread.sleep(millis);
 		}
-
-		private static final McpSyncResourceTemplate TEMPLATE = McpSyncResourceTemplate
-			.of(ResourceTemplate.builder("test://template/{id}/data", "Template Resource")
-				.description("A resource template for testing parameter substitution")
-				.mimeType("application/json")
-				.build())
-			.withCompletionHandler((ctx, request) -> completeFrom(List.of("1", "2", "3"), request));
-
-		@Override
-		public ResourceTemplatesPage listTemplates(McpRequestContext ctx, String cursor) {
-			return ResourceTemplatesPage.of(List.of(TEMPLATE.definition()));
+		catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
 		}
-
-		@Override
-		public McpSyncResourceTemplate findTemplate(McpRequestContext ctx, String uriTemplate) {
-			return TEMPLATE.definition().uriTemplate().equals(uriTemplate) ? TEMPLATE : null;
-		}
-
-		@Override
-		public McpSyncResource find(McpRequestContext ctx, String uri) {
-			ReadResourceResult result = read(uri);
-			return result != null ? McpSyncResource.of((c, request) -> McpSyncResponse.result(result)) : null;
-		}
-
-		private static ReadResourceResult read(String uri) {
-			return switch (uri) {
-				case "test://static-text" -> textResource(uri, "This is the content of the static text resource.");
-				case "test://watched-resource" -> textResource(uri, "This is a watched resource content.");
-				case "test://static-binary" -> ReadResourceResult
-					.builder(List.of(BlobResourceContents.builder(uri, RED_PIXEL_PNG).mimeType("image/png").build()))
-					.build();
-				default -> templateResource(uri);
-			};
-		}
-
-		@Override
-		public boolean supportsSubscribe() {
-			return true;
-		}
-
-		@Override
-		public boolean supportsCompletion() {
-			return true;
-		}
-
-		private static ReadResourceResult textResource(String uri, String text) {
-			return ReadResourceResult
-				.builder(List.of(TextResourceContents.builder(uri, text).mimeType("text/plain").build()))
-				.build();
-		}
-
-		private static ReadResourceResult templateResource(String uri) {
-			Matcher matcher = TEMPLATE_URI.matcher(uri);
-			if (!matcher.matches()) {
-				return null;
-			}
-			String id = matcher.group(1);
-			String json = String.format("{\"id\":\"%s\",\"templateTest\":true,\"data\":\"Data for ID: %s\"}", id, id);
-			return ReadResourceResult
-				.builder(List.of(TextResourceContents.builder(uri, json).mimeType("application/json").build()))
-				.build();
-		}
-
 	}
 
-	private static final class ConformancePrompts implements McpSyncPromptRepository {
+	// Resources
 
-		private final Map<String, McpSyncPrompt> prompts = new LinkedHashMap<>();
+	private static InMemorySyncResourceRepository resources() {
+		return InMemorySyncResourceRepository.builder()
+			.resource(
+					Resource.builder("test://static-text", "Static Text Resource")
+						.description("A static text resource for testing")
+						.mimeType("text/plain")
+						.build(),
+					McpSyncResource
+						.of((ctx, req) -> textResource(req.uri(), "This is the content of the static text resource.")))
+			.resource(
+					Resource.builder("test://static-binary", "Static Binary Resource")
+						.description("A static binary resource for testing")
+						.mimeType("image/png")
+						.build(),
+					McpSyncResource.of((ctx, req) -> McpSyncResponse.result(ReadResourceResult
+						.builder(List
+							.of(BlobResourceContents.builder(req.uri(), RED_PIXEL_PNG).mimeType("image/png").build()))
+						.build())))
+			.resource(
+					Resource.builder("test://watched-resource", "Watched Resource")
+						.description("A resource that can be subscribed to for updates")
+						.mimeType("text/plain")
+						.build(),
+					McpSyncResource.of((ctx, req) -> textResource(req.uri(), "This is a watched resource content.")))
+			.template(
+					McpSyncResourceTemplate
+						.of(ResourceTemplate.builder(TEMPLATE_URI, "Template Resource")
+							.description("A resource template for testing parameter substitution")
+							.mimeType("application/json")
+							.build())
+						.withCompletionHandler((ctx, request) -> completeFrom(List.of("1", "2", "3"), request)),
+					McpSyncResource.of((ctx, req) -> {
+						String id = TEMPLATE_VARIABLES.extractVariableValues(req.uri()).get("id");
+						String json = String
+							.format("{\"id\":\"%s\",\"templateTest\":true,\"data\":\"Data for ID: %s\"}", id, id);
+						return McpSyncResponse.result(ReadResourceResult
+							.builder(List
+								.of(TextResourceContents.builder(req.uri(), json).mimeType("application/json").build()))
+							.build());
+					}))
+			.supportsSubscribe(true)
+			.supportsCompletion(true)
+			.build();
+	}
 
-		ConformancePrompts() {
-			add(Prompt.builder("test_simple_prompt").description("A simple prompt for testing").build(),
-					respond((ctx,
-							req) -> messages(PromptMessage
-								.builder(Role.USER, TextContent.builder("This is a simple prompt for testing.").build())
-								.build())));
-			add(Prompt.builder("test_prompt_with_arguments")
+	private static McpSyncResponse<ReadResourceOutcome> textResource(String uri, String text) {
+		return McpSyncResponse.result(ReadResourceResult
+			.builder(List.of(TextResourceContents.builder(uri, text).mimeType("text/plain").build()))
+			.build());
+	}
+
+	// Prompts
+
+	private static InMemorySyncPromptRepository prompts() {
+		return InMemorySyncPromptRepository.builder()
+			.prompt(McpSyncPrompt.of(
+					Prompt.builder("test_simple_prompt").description("A simple prompt for testing").build(),
+					(ctx, req) -> messages(PromptMessage
+						.builder(Role.USER, TextContent.builder("This is a simple prompt for testing.").build())
+						.build())))
+			.prompt(McpSyncPrompt.of(Prompt.builder("test_prompt_with_arguments")
 				.description("A prompt with arguments for testing")
 				.arguments(List.of(
 						PromptArgument.builder("arg1").description("First test argument").required(true).build(),
 						PromptArgument.builder("arg2").description("Second test argument").required(true).build()))
-				.build(), respond((ctx, req) -> {
+				.build(), (ctx, req) -> {
 					Map<String, String> args = req.arguments() == null ? Map.of() : req.arguments();
 					String text = String.format("Prompt with arguments: arg1='%s', arg2='%s'", args.get("arg1"),
 							args.get("arg2"));
 					return messages(PromptMessage.builder(Role.USER, TextContent.builder(text).build()).build());
-				}));
-			this.prompts.computeIfPresent("test_prompt_with_arguments", (name, prompt) -> prompt
-				.withCompletionHandler((ctx, request) -> completeFrom(List.of("alpha", "beta", "gamma"), request)));
-			add(Prompt.builder("test_prompt_with_embedded_resource")
+				}).withCompletionHandler((ctx, request) -> completeFrom(List.of("alpha", "beta", "gamma"), request)))
+			.prompt(McpSyncPrompt.of(Prompt.builder("test_prompt_with_embedded_resource")
 				.description("A prompt with embedded resource for testing")
 				.arguments(List.of(PromptArgument.builder("resourceUri")
 					.description("URI of the resource to embed")
 					.required(true)
 					.build()))
-				.build(), respond((ctx, req) -> {
+				.build(), (ctx, req) -> {
 					String resourceUri = req.arguments() == null ? null : req.arguments().get("resourceUri");
 					EmbeddedResource resource = EmbeddedResource
 						.builder(TextResourceContents.builder(resourceUri, "Embedded resource content for testing.")
@@ -651,57 +600,36 @@ public class ModernConformanceServlet {
 								.builder(Role.USER,
 										TextContent.builder("Please process the embedded resource above.").build())
 								.build());
-				}));
-			add(Prompt.builder("test_prompt_with_image").description("A prompt with image content for testing").build(),
-					respond((ctx, req) -> messages(
+				}))
+			.prompt(McpSyncPrompt.of(
+					Prompt.builder("test_prompt_with_image")
+						.description("A prompt with image content for testing")
+						.build(),
+					(ctx, req) -> messages(
 							PromptMessage.builder(Role.USER, ImageContent.builder(RED_PIXEL_PNG, "image/png").build())
 								.build(),
 							PromptMessage
 								.builder(Role.USER, TextContent.builder("Please analyze the image above.").build())
-								.build())));
-			add(Prompt.builder("test_input_required_result_prompt")
+								.build())))
+			.prompt(McpSyncPrompt.of(Prompt.builder("test_input_required_result_prompt")
 				.description("MRTR: prompt that requires elicitation input")
-				.build(), ELICITATION, respond((ctx, req) -> {
+				.build(), ELICITATION, (ctx, req) -> {
 					Map<String, Object> content = acceptedContent(req.inputResponses(), "user_context");
 					if (content == null || !(content.get("context") instanceof String context)) {
-						return InputRequiredResult.builder()
+						return McpSyncResponse.result(InputRequiredResult.builder()
 							.elicit("user_context", elicitString("What context should the prompt use?", "context"))
-							.build();
+							.build());
 					}
 					return messages(PromptMessage
 						.builder(Role.USER, TextContent.builder("Prompt with context: " + context).build())
 						.build());
-				}));
-		}
+				}))
+			.supportsCompletion(true)
+			.build();
+	}
 
-		private void add(Prompt prompt, Handler<GetPromptRequest, GetPromptOutcome> handler) {
-			add(prompt, ClientCapabilities.NONE, handler);
-		}
-
-		private void add(Prompt prompt, ClientCapabilities requiredCapabilities,
-				Handler<GetPromptRequest, GetPromptOutcome> handler) {
-			this.prompts.put(prompt.name(), McpSyncPrompt.of(prompt, requiredCapabilities, handler::handle));
-		}
-
-		private static GetPromptResult messages(PromptMessage... messages) {
-			return GetPromptResult.builder(List.of(messages)).build();
-		}
-
-		@Override
-		public PromptsPage list(McpRequestContext ctx, String cursor) {
-			return PromptsPage.of(this.prompts.values().stream().map(McpSyncPrompt::definition).toList());
-		}
-
-		@Override
-		public McpSyncPrompt find(McpRequestContext ctx, String name) {
-			return this.prompts.get(name);
-		}
-
-		@Override
-		public boolean supportsCompletion() {
-			return true;
-		}
-
+	private static McpSyncResponse<GetPromptOutcome> messages(PromptMessage... messages) {
+		return McpSyncResponse.result(GetPromptResult.builder(List.of(messages)).build());
 	}
 
 }
