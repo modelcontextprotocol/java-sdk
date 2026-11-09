@@ -60,6 +60,15 @@ import reactor.core.scheduler.Schedulers;
  * served on the container thread, so thread-locals set by servlet filters are visible to
  * sync handlers; {@code subscriptions/listen} is served asynchronously.
  * <p>
+ * The MCP specification treats a client disconnect as cancellation of its request, but
+ * the servlet API only reveals a disconnect when a write fails. A handler answering with
+ * a plain result writes nothing until it is done, so it always runs to completion and its
+ * result goes nowhere. A streaming response notices at its next message or keep-alive
+ * (see {@link Builder#keepAliveInterval}) and cancels its body. Sync handler code is
+ * blocking and is never interrupted, so a sync body keeps running until it returns; only
+ * its output is dropped. Work that must stop when the client goes away belongs in an
+ * async streaming response.
+ * <p>
  * Authentication and authorization, including {@code 401}/{@code 403} challenges, belong
  * in servlet filters in front of this servlet. Filters may decide on the
  * {@code Mcp-Method} and {@code Mcp-Name} headers: a request whose headers disagree with
@@ -555,7 +564,8 @@ public class HttpServletMcpTransport extends HttpServlet {
 		/**
 		 * How often an open event stream gets an SSE comment, keeping intermediaries from
 		 * closing it and detecting clients that went away. {@code null} disables
-		 * keep-alives. Defaults to 30 seconds.
+		 * keep-alives; a quiet stream then only notices a disconnect when its next
+		 * message fails to write. Defaults to 30 seconds.
 		 */
 		public Builder keepAliveInterval(Duration keepAliveInterval) {
 			Assert.isTrue(keepAliveInterval == null || !(keepAliveInterval.isNegative() || keepAliveInterval.isZero()),

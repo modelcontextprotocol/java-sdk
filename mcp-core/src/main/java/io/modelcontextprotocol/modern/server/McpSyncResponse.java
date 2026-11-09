@@ -18,6 +18,12 @@ public abstract class McpSyncResponse<O> {
 	private McpSyncResponse() {
 	}
 
+	/**
+	 * Answer with {@code result}. Sync handler code is never interrupted, so a cancelled
+	 * request still runs to completion; cancellation only drops its output. Over HTTP a
+	 * request answered this way does not even notice the client disconnecting. See
+	 * {@code HttpServletMcpTransport}.
+	 */
 	public static <O> McpSyncResponse<O> result(O result) {
 		return new Result<>(result);
 	}

@@ -21,6 +21,12 @@ public abstract class McpAsyncResponse<O> {
 	private McpAsyncResponse() {
 	}
 
+	/**
+	 * Answer with {@code result}. Over HTTP a disconnect is only noticed when something
+	 * is written, so a request answered this way cannot be cancelled there; work that
+	 * should stop when the client goes away belongs in a {@link #streaming} response. See
+	 * {@code HttpServletMcpTransport}.
+	 */
 	public static <O> McpAsyncResponse<O> result(O result) {
 		return new Result<>(result);
 	}
