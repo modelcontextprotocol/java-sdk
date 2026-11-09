@@ -89,7 +89,7 @@ public final class DefaultServerTransportSecurityValidator
 			else if (allowed.endsWith(":*")) {
 				// Wildcard port pattern: "http://example.com:*"
 				String baseOrigin = allowed.substring(0, allowed.length() - 2);
-				if (origin.equals(baseOrigin) || origin.startsWith(baseOrigin + ":")) {
+				if (origin.equals(baseOrigin) || matchesWithPort(origin, baseOrigin)) {
 					return;
 				}
 			}
@@ -121,13 +121,35 @@ public final class DefaultServerTransportSecurityValidator
 			else if (allowed.endsWith(":*")) {
 				// Wildcard port pattern: "example.com:*"
 				String baseHost = allowed.substring(0, allowed.length() - 2);
-				if (host.equals(baseHost) || host.startsWith(baseHost + ":")) {
+				if (host.equals(baseHost) || matchesWithPort(host, baseHost)) {
 					return;
 				}
 			}
 		}
 
 		throw new ServerTransportSecurityException(421, "Invalid Host header");
+	}
+
+	/**
+	 * Checks that {@code actual} is {@code allowed} followed by {@code ":"} and a valid
+	 * port: 1 to 5 ASCII digits, in the range 1-65535.
+	 */
+	private static boolean matchesWithPort(String actual, String allowed) {
+		if (!actual.startsWith(allowed + ":")) {
+			return false;
+		}
+		String port = actual.substring(allowed.length() + 1);
+		if (port.isEmpty() || port.length() > 5) {
+			return false;
+		}
+		for (int i = 0; i < port.length(); i++) {
+			char c = port.charAt(i);
+			if (c < '0' || c > '9') {
+				return false;
+			}
+		}
+		int portNumber = Integer.parseInt(port);
+		return portNumber >= 1 && portNumber <= 65535;
 	}
 
 	/**

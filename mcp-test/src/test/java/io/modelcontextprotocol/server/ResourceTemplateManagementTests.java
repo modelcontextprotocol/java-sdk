@@ -9,6 +9,8 @@ import java.util.List;
 
 import io.modelcontextprotocol.MockMcpServerTransport;
 import io.modelcontextprotocol.MockMcpServerTransportProvider;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
 import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
@@ -144,6 +146,38 @@ public class ResourceTemplateManagementTests {
 		// error)
 		// as per the new implementation that just logs a warning
 		StepVerifier.create(mcpAsyncServer.removeResourceTemplate("nonexistent://template/{id}")).verifyComplete();
+	}
+
+	@Test
+	void testRemoveResourceTemplateNotifiesListChanged() {
+		ResourceTemplate template = ResourceTemplate.builder(TEST_TEMPLATE_URI, TEST_TEMPLATE_NAME).build();
+
+		McpServerFeatures.AsyncResourceTemplateSpecification specification = new McpServerFeatures.AsyncResourceTemplateSpecification(
+				template, (exchange, req) -> Mono.just(ReadResourceResult.builder(List.of()).build()));
+
+		mcpAsyncServer = McpServer.async(mockTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(false, true).build())
+			.resourceTemplates(specification)
+			.build();
+
+		StepVerifier.create(mcpAsyncServer.removeResourceTemplate(TEST_TEMPLATE_URI)).verifyComplete();
+
+		assertThat(mockTransportProvider.getTransport().getAllSentMessages()).singleElement()
+			.isInstanceOfSatisfying(JSONRPCNotification.class, notification -> assertThat(notification.method())
+				.isEqualTo(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED));
+	}
+
+	@Test
+	void testRemoveNonexistentResourceTemplateDoesNotNotify() {
+		mcpAsyncServer = McpServer.async(mockTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(false, true).build())
+			.build();
+
+		StepVerifier.create(mcpAsyncServer.removeResourceTemplate("nonexistent://template/{id}")).verifyComplete();
+
+		assertThat(mockTransportProvider.getTransport().getAllSentMessages()).isEmpty();
 	}
 
 	@Test

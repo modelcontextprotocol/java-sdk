@@ -52,7 +52,10 @@ public interface McpAsyncListFilter<T> {
 	static <T> McpAsyncListFilter<T> fromSync(McpSyncListFilter<T> filter, boolean immediateExecution) {
 		Assert.notNull(filter, "filter must not be null");
 		return (transportContext, primitive) -> {
-			var visible = Mono.fromCallable(() -> filter.isVisible(transportContext, primitive));
+			// Not fromCallable: subscribeOn would fuse it into MonoSubscribeOnCallable,
+			// which can interrupt the worker thread after a downstream all() cancelled it
+			// from that thread, e.g. while that thread writes the HTTP response
+			var visible = Mono.defer(() -> Mono.just(filter.isVisible(transportContext, primitive)));
 			return immediateExecution ? visible : visible.subscribeOn(Schedulers.boundedElastic());
 		};
 	}

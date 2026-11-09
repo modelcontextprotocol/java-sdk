@@ -590,6 +590,13 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						// server does not recognise is already invalidated by the time
 						// the caller learns about it. Consumed here so that it is not
 						// handled a second time below.
+						// Detached from the session first: invalidating the session
+						// closes it, which would otherwise dispose this very exchange and
+						// complete sendMessage() through doOnCancel below.
+						Disposable ref = disposableRef.getAndSet(null);
+						if (ref != null) {
+							transportSession.removeConnection(ref);
+						}
 						handleExceptionSafely(first.getThrowable());
 						deliveredSink.error(first.getThrowable());
 						return Flux.empty();

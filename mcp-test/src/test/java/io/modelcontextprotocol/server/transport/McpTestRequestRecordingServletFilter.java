@@ -14,8 +14,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.TreeMap;
 
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
@@ -41,12 +40,13 @@ public class McpTestRequestRecordingServletFilter implements Filter {
 			throws IOException, ServletException {
 
 		if (servletRequest instanceof HttpServletRequest req) {
-			var headers = Collections.list(req.getHeaderNames())
-				.stream()
-				.collect(Collectors.toUnmodifiableMap(Function.identity(),
-						name -> String.join(",", Collections.list(req.getHeaders(name)))));
+			// Header names are case-insensitive; servlet containers may or may not
+			// normalize them
+			var headers = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
+			Collections.list(req.getHeaderNames())
+				.forEach(name -> headers.put(name, String.join(",", Collections.list(req.getHeaders(name)))));
 			var request = new CachedBodyHttpServletRequest(req);
-			calls.add(new Call(req.getMethod(), headers, request.getBodyAsString()));
+			calls.add(new Call(req.getMethod(), Collections.unmodifiableMap(headers), request.getBodyAsString()));
 			filterChain.doFilter(request, servletResponse);
 		}
 		else {

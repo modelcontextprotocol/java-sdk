@@ -17,6 +17,20 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 | 1.1.x  | [1.1.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v1.1.4) (2026-08-19) | 2025-06-18 | Security patches only |
 | 0.18.x | [0.18.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v0.18.4) (2026-08-19) | 2025-06-18 | Security patches only |
 
+## Unreleased (2.2.0)
+
+- Preview of a stateless server for the **2026-07-28** MCP specification revision, in
+  `io.modelcontextprotocol.modern`, with Servlet (Streamable HTTP) and STDIO transports. It supports
+  `server/discover`, multi round-trip requests with sealed `requestState`, `subscriptions/listen`, caching
+  hints, required client capabilities and SEP-2243 `Mcp-Param` header validation. The API may change in minor
+  releases until 3.0. See [MCP Server (2026-07-28)](docs/server-modern.md).
+- Add `McpTransportContext.putAll(Map)`, returning a context that combines an
+  existing context with additional entries, which take precedence.
+- `McpTransportContext` no longer compares contexts by their contents in
+  `equals` and `hashCode`. With `putAll`, transports can layer their own entries
+  over the context a user's extractor returns, and comparing contexts was never
+  a goal; read entries via `get(String)` instead.
+
 ## 2.0.1 — 2026-08-19
 
 - Bound STDIO and HTTP client/server reads to a configurable maximum size

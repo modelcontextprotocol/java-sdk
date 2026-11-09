@@ -14,6 +14,7 @@ import reactor.core.publisher.MonoSink;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -153,10 +154,17 @@ public class McpClientSession implements McpSession {
 			logger.debug("Received request: {}", request);
 			handleIncomingRequest(request).onErrorResume(error -> {
 
-				McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
-						&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
-								: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-										error.getMessage(), McpError.aggregateExceptionMessages(error));
+				McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError;
+				if (error instanceof McpError mcpError && mcpError.getJsonRpcError() != null) {
+					jsonRpcError = mcpError.getJsonRpcError();
+				}
+				else {
+					// The cause chain may contain internal details: log it, but only send
+					// the message to the server
+					logger.warn("Error handling request {} [{}]", request.id(), request.method(), error);
+					jsonRpcError = new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+							Objects.requireNonNullElse(error.getMessage(), "Internal error"), null);
+				}
 
 				var errorResponse = McpSchema.JSONRPCResponse.error(request.id(), jsonRpcError);
 				return Mono.just(errorResponse);

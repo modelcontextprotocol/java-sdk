@@ -7,6 +7,8 @@ package io.modelcontextprotocol.common;
 import java.util.Collections;
 import java.util.Map;
 
+import io.modelcontextprotocol.util.Assert;
+
 /**
  * Context associated with the transport layer. It allows to add transport-level metadata
  * for use further down the line. Specifically, it can be beneficial to extract HTTP
@@ -57,5 +59,25 @@ public interface McpTransportContext {
 	 * @return the associated value or {@code null} if missing.
 	 */
 	Object get(String key);
+
+	/**
+	 * Create a new context holding the values of this context and of the specified map.
+	 * When both hold the same key, the value from the provided map wins. Neither this
+	 * context nor the provided map is modified. When the provided map is empty, this
+	 * context is returned as is.
+	 * <p>
+	 * Keys absent from the provided map are looked up in this context. As with
+	 * {@link #create(Map)}, {@code null} keys and values are rejected.
+	 * @param map the values to add, taking precedence over the values of this context
+	 * @return a new context holding the merged values
+	 * @since 2.2.0
+	 */
+	default McpTransportContext putAll(Map<String, ?> map) {
+		Assert.notNull(map, "The map cannot be null");
+		if (map.isEmpty()) {
+			return this;
+		}
+		return new OverlayMcpTransportContext(this, map);
+	}
 
 }

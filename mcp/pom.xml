@@ -6,7 +6,7 @@
 	<parent>
 		<groupId>io.modelcontextprotocol.sdk</groupId>
 		<artifactId>mcp-parent</artifactId>
-		<version>2.1.0-SNAPSHOT</version>
+		<version>2.2.0-SNAPSHOT</version>
 	</parent>
 	<artifactId>mcp</artifactId>
 	<packaging>jar</packaging>
@@ -41,6 +41,26 @@
 					</execution>
 				</executions>
 			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<executions>
+					<!-- The only source here is module-info.java, which maven-javadoc-plugin
+					     (3.11.3+) skips, so it creates no javadoc jar. Maven Central requires
+					     one, so package src/main/javadoc as the javadoc jar instead. -->
+					<execution>
+						<id>javadoc-jar</id>
+						<phase>package</phase>
+						<goals>
+							<goal>jar</goal>
+						</goals>
+						<configuration>
+							<classifier>javadoc</classifier>
+							<classesDirectory>${project.basedir}/src/main/javadoc</classesDirectory>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 		</plugins>
 	</build>
 
@@ -49,13 +69,13 @@
 		<dependency>
 			<groupId>io.modelcontextprotocol.sdk</groupId>
 			<artifactId>mcp-json-jackson3</artifactId>
-			<version>2.1.0-SNAPSHOT</version>
+			<version>2.2.0-SNAPSHOT</version>
 		</dependency>
 
 		<dependency>
 			<groupId>io.modelcontextprotocol.sdk</groupId>
 			<artifactId>mcp-core</artifactId>
-			<version>2.1.0-SNAPSHOT</version>
+			<version>2.2.0-SNAPSHOT</version>
 		</dependency>
 	</dependencies>
 

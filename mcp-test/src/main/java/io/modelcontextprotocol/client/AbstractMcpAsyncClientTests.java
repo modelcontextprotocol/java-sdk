@@ -207,6 +207,26 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testListAllToolsCanBeResubscribed() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			Mono<McpSchema.ListToolsResult> listTools = mcpAsyncClient.listTools();
+
+			AtomicInteger firstSubscriptionSize = new AtomicInteger();
+			StepVerifier.create(mcpAsyncClient.initialize().then(listTools)).consumeNextWith(result -> {
+				firstSubscriptionSize.set(result.tools().size());
+				assertThat(result.tools()).isNotEmpty();
+			}).verifyComplete();
+
+			// The same Mono must be safe to subscribe again: every subscription has to
+			// start from an empty accumulator instead of appending to the previous
+			// result.
+			StepVerifier.create(listTools)
+				.consumeNextWith(result -> assertThat(result.tools()).hasSize(firstSubscriptionSize.get()))
+				.verifyComplete();
+		});
+	}
+
+	@Test
 	void testListAllToolsReturnsImmutableList() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools()))
@@ -379,6 +399,26 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testListAllResourcesCanBeResubscribed() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			Mono<McpSchema.ListResourcesResult> listResources = mcpAsyncClient.listResources();
+
+			AtomicInteger firstSubscriptionSize = new AtomicInteger();
+			StepVerifier.create(mcpAsyncClient.initialize().then(listResources)).consumeNextWith(result -> {
+				firstSubscriptionSize.set(result.resources().size());
+				assertThat(result.resources()).isNotEmpty();
+			}).verifyComplete();
+
+			// The same Mono must be safe to subscribe again: every subscription has to
+			// start from an empty accumulator instead of appending to the previous
+			// result.
+			StepVerifier.create(listResources)
+				.consumeNextWith(result -> assertThat(result.resources()).hasSize(firstSubscriptionSize.get()))
+				.verifyComplete();
+		});
+	}
+
+	@Test
 	void testListAllResourcesReturnsImmutableList() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources()))
@@ -439,6 +479,26 @@ public abstract class AbstractMcpAsyncClientTests {
 						}
 					});
 				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllPromptsCanBeResubscribed() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			Mono<McpSchema.ListPromptsResult> listPrompts = mcpAsyncClient.listPrompts();
+
+			AtomicInteger firstSubscriptionSize = new AtomicInteger();
+			StepVerifier.create(mcpAsyncClient.initialize().then(listPrompts)).consumeNextWith(result -> {
+				firstSubscriptionSize.set(result.prompts().size());
+				assertThat(result.prompts()).isNotEmpty();
+			}).verifyComplete();
+
+			// The same Mono must be safe to subscribe again: every subscription has to
+			// start from an empty accumulator instead of appending to the previous
+			// result.
+			StepVerifier.create(listPrompts)
+				.consumeNextWith(result -> assertThat(result.prompts()).hasSize(firstSubscriptionSize.get()))
 				.verifyComplete();
 		});
 	}
@@ -632,6 +692,26 @@ public abstract class AbstractMcpAsyncClientTests {
 					assertThat(result).isNotNull();
 					assertThat(result.resourceTemplates()).isNotNull();
 				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllResourceTemplatesCanBeResubscribed() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates = mcpAsyncClient.listResourceTemplates();
+
+			AtomicInteger firstSubscriptionSize = new AtomicInteger();
+			StepVerifier.create(mcpAsyncClient.initialize().then(listResourceTemplates)).consumeNextWith(result -> {
+				firstSubscriptionSize.set(result.resourceTemplates().size());
+				assertThat(result.resourceTemplates()).isNotEmpty();
+			}).verifyComplete();
+
+			// The same Mono must be safe to subscribe again: every subscription has to
+			// start from an empty accumulator instead of appending to the previous
+			// result.
+			StepVerifier.create(listResourceTemplates)
+				.consumeNextWith(result -> assertThat(result.resourceTemplates()).hasSize(firstSubscriptionSize.get()))
 				.verifyComplete();
 		});
 	}

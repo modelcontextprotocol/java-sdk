@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.client.transport;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.time.Duration;
@@ -30,11 +31,8 @@ import org.mockito.ArgumentCaptor;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
-import org.springframework.http.codec.ServerSentEvent;
-import org.springframework.web.util.UriComponentsBuilder;
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -78,8 +76,6 @@ class HttpClientSseClientTransportTests {
 
 		private final AtomicInteger inboundMessageCount = new AtomicInteger(0);
 
-		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
-
 		public TestHttpClientSseClientTransport(final String baseUri,
 				SseMessageEndpointValidator sseMessageEndpointValidator) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
@@ -91,13 +87,7 @@ class HttpClientSseClientTransportTests {
 			return inboundMessageCount.get();
 		}
 
-		public void simulateEndpointEvent(String jsonMessage) {
-			events.tryEmitNext(ServerSentEvent.<String>builder().event("endpoint").data(jsonMessage).build());
-			inboundMessageCount.incrementAndGet();
-		}
-
 		public void simulateMessageEvent(String jsonMessage) {
-			events.tryEmitNext(ServerSentEvent.<String>builder().event("message").data(jsonMessage).build());
 			inboundMessageCount.incrementAndGet();
 		}
 
@@ -333,7 +323,7 @@ class HttpClientSseClientTransportTests {
 	}
 
 	@Test
-	void testRequestCustomizer() {
+	void testRequestCustomizer() throws URISyntaxException {
 		var mockCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
 
 		// Create a transport with the customizer
@@ -348,8 +338,7 @@ class HttpClientSseClientTransportTests {
 			.verifyComplete();
 
 		// Verify the customizer was called
-		verify(mockCustomizer).customize(any(), eq("GET"),
-				eq(UriComponentsBuilder.fromUriString(host).path("/sse").build().toUri()), isNull(), eq(context));
+		verify(mockCustomizer).customize(any(), eq("GET"), eq(new URI(host + "/sse")), isNull(), eq(context));
 		clearInvocations(mockCustomizer);
 
 		// Send test message
@@ -373,7 +362,7 @@ class HttpClientSseClientTransportTests {
 	}
 
 	@Test
-	void testAsyncRequestCustomizer() {
+	void testAsyncRequestCustomizer() throws URISyntaxException {
 		var mockCustomizer = mock(McpAsyncHttpClientRequestCustomizer.class);
 		when(mockCustomizer.customize(any(), any(), any(), any(), any()))
 			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
@@ -390,8 +379,7 @@ class HttpClientSseClientTransportTests {
 			.verifyComplete();
 
 		// Verify the customizer was called
-		verify(mockCustomizer).customize(any(), eq("GET"),
-				eq(UriComponentsBuilder.fromUriString(host).path("/sse").build().toUri()), isNull(), eq(context));
+		verify(mockCustomizer).customize(any(), eq("GET"), eq(new URI(host + "/sse")), isNull(), eq(context));
 		clearInvocations(mockCustomizer);
 
 		// Send test message

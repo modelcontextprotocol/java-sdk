@@ -27,8 +27,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.AfterParameterizedClassInvocation;
-import org.junit.jupiter.params.BeforeParameterizedClassInvocation;
 import org.junit.jupiter.params.Parameter;
 import org.junit.jupiter.params.ParameterizedClass;
 import org.junit.jupiter.params.provider.Arguments;
@@ -67,15 +65,13 @@ class McpSyncListFilteringIntegrationTests<SYNC_TOOL_SPEC, ASYNC_TOOL_SPEC> {
 
 	};
 
-	@BeforeParameterizedClassInvocation
-	static void createTransportAndStartTomcat(ServerFactory serverFactory) {
+	@BeforeEach
+	void setUp() {
+		serverFactory.reset();
 		var port = TomcatTestUtil.findAvailablePort();
 		baseUrl = "http://localhost:" + port;
 		startTomcat(serverFactory.transport(), port);
-	}
 
-	@BeforeEach
-	void setUp() {
 		var clientTransport = HttpClientStreamableHttpTransport.builder(baseUrl)
 			.jsonMapper(McpJsonDefaults.getMapper())
 			.addHttpRequestCustomizer((builder, method, endpoint, body, context) -> requestCustomizer.customize(builder,
@@ -90,10 +86,6 @@ class McpSyncListFilteringIntegrationTests<SYNC_TOOL_SPEC, ASYNC_TOOL_SPEC> {
 	@AfterEach
 	void tearDown() {
 		mcpClient.closeGracefully();
-	}
-
-	@AfterParameterizedClassInvocation
-	static void afterAll() {
 		stopTomcat();
 	}
 
@@ -373,14 +365,21 @@ class McpSyncListFilteringIntegrationTests<SYNC_TOOL_SPEC, ASYNC_TOOL_SPEC> {
 
 		Servlet transport();
 
+		/**
+		 * Replaces the transport with a fresh one, to start each test from a clean slate.
+		 */
+		void reset();
+
 	}
 
 	static class StatefulServerFactory implements
 			ServerFactory<McpServerFeatures.SyncToolSpecification, McpServerFeatures.AsyncToolSpecification> {
 
-		private final HttpServletStreamableServerTransportProvider transport = HttpServletStreamableServerTransportProvider
-			.builder()
-			.contextExtractor(request -> {
+		private HttpServletStreamableServerTransportProvider transport;
+
+		@Override
+		public void reset() {
+			this.transport = HttpServletStreamableServerTransportProvider.builder().contextExtractor(request -> {
 				var headers = new HashMap<String, Object>();
 				var names = request.getHeaderNames();
 				while (names.hasMoreElements()) {
@@ -388,8 +387,8 @@ class McpSyncListFilteringIntegrationTests<SYNC_TOOL_SPEC, ASYNC_TOOL_SPEC> {
 					headers.put(name, request.getHeader(name));
 				}
 				return McpTransportContext.create(headers);
-			})
-			.build();
+			}).build();
+		}
 
 		@Override
 		public ServerBuilderWrapper<McpServerFeatures.SyncToolSpecification, McpSyncListFilter<McpSchema.Tool>> syncServer() {
@@ -529,8 +528,11 @@ class McpSyncListFilteringIntegrationTests<SYNC_TOOL_SPEC, ASYNC_TOOL_SPEC> {
 	static class StatelessServerFactory implements
 			ServerFactory<McpStatelessServerFeatures.SyncToolSpecification, McpStatelessServerFeatures.AsyncToolSpecification> {
 
-		private final HttpServletStatelessServerTransport transport = HttpServletStatelessServerTransport.builder()
-			.contextExtractor(request -> {
+		private HttpServletStatelessServerTransport transport;
+
+		@Override
+		public void reset() {
+			this.transport = HttpServletStatelessServerTransport.builder().contextExtractor(request -> {
 				var headers = new HashMap<String, Object>();
 				var names = request.getHeaderNames();
 				while (names.hasMoreElements()) {
@@ -538,8 +540,8 @@ class McpSyncListFilteringIntegrationTests<SYNC_TOOL_SPEC, ASYNC_TOOL_SPEC> {
 					headers.put(name, request.getHeader(name));
 				}
 				return McpTransportContext.create(headers);
-			})
-			.build();
+			}).build();
+		}
 
 		@Override
 		public ServerBuilderWrapper<McpStatelessServerFeatures.SyncToolSpecification, McpSyncListFilter<McpSchema.Tool>> syncServer() {

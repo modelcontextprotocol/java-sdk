@@ -87,18 +87,36 @@ public final class ServerParameterUtils {
 			run(npmCommand("install", "--prefix", staging.toString(), "--no-save", "--no-audit", "--no-fund",
 					"--loglevel=error", "@modelcontextprotocol/server-everything@" + SERVER_EVERYTHING_VERSION));
 			try {
-				Files.move(staging, installDir, StandardCopyOption.ATOMIC_MOVE);
+				moveIntoPlace(staging, installDir);
 			}
 			catch (IOException e) {
-				// Another build won the race and installed it first, which is fine as
-				// long as the result is usable.
-				if (!Files.isRegularFile(serverScriptIn(installDir))) {
-					throw new UncheckedIOException("Failed to install server-everything to " + installDir, e);
+				// The directory exists but lacks the server, e.g. after the OS pruned
+				// the temporary directory: replace it instead of failing on every run.
+				deleteRecursively(installDir);
+				try {
+					moveIntoPlace(staging, installDir);
+				}
+				catch (IOException retryFailure) {
+					throw new UncheckedIOException("Failed to install server-everything to " + installDir,
+							retryFailure);
 				}
 			}
 		}
 		finally {
 			deleteRecursively(staging);
+		}
+	}
+
+	private static void moveIntoPlace(Path staging, Path installDir) throws IOException {
+		try {
+			Files.move(staging, installDir, StandardCopyOption.ATOMIC_MOVE);
+		}
+		catch (IOException e) {
+			// Another build won the race and installed it first, which is fine as long
+			// as the result is usable.
+			if (!Files.isRegularFile(serverScriptIn(installDir))) {
+				throw e;
+			}
 		}
 	}
 

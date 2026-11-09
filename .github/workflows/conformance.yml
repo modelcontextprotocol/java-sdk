@@ -6,9 +6,47 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+env:
+  CONFORMANCE: '@modelcontextprotocol/conformance@0.2.0-alpha.12'
+
 jobs:
   server:
     name: Server Conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build and start server
+        run: |
+          ./mvnw clean install -DskipTests
+          ./mvnw exec:java -pl conformance-tests/server-servlet -Dexec.mainClass="io.modelcontextprotocol.conformance.server.ConformanceServlet" &
+          timeout 30 bash -c 'until curl -s http://localhost:8080/mcp > /dev/null 2>&1; do sleep 0.5; done'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run conformance tests
+        run: |
+          npx --yes "$CONFORMANCE" server \
+            --url http://localhost:8080/mcp \
+            --suite active \
+            --spec-version 2025-11-25 \
+            --expected-failures ./conformance-tests/conformance-baseline.yml
+
+  modern-server:
+    name: Modern Server Conformance (2026-07-28)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,16 +61,19 @@ jobs:
       - name: Build and start server
         run: |
           mvn clean install -DskipTests
-          mvn exec:java -pl conformance-tests/server-servlet -Dexec.mainClass="io.modelcontextprotocol.conformance.server.ConformanceServlet" &
-          timeout 30 bash -c 'until curl -s http://localhost:8080/mcp > /dev/null 2>&1; do sleep 0.5; done'
+          mvn exec:java -pl conformance-tests/server-servlet-modern &
+          timeout 30 bash -c 'until curl -s http://localhost:8081/mcp > /dev/null 2>&1; do sleep 0.5; done'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - name: Run conformance tests
-        uses: modelcontextprotocol/conformance@v0.1.16
-        with:
-          mode: server
-          url: http://localhost:8080/mcp
-          suite: active
-          expected-failures: ./conformance-tests/conformance-baseline.yml
+        run: |
+          npx --yes "$CONFORMANCE" server \
+            --url http://localhost:8081/mcp \
+            --requirements 2026-07-28
 
   client:
     name: Client Conformance
@@ -41,25 +82,30 @@ jobs:
       matrix:
         scenario: [initialize, tools_call, elicitation-sep1034-client-defaults, sse-retry]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: 'maven'
 
       - name: Build client
-        run: mvn clean install -DskipTests
+        run: ./mvnw clean install -DskipTests
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - name: Run conformance test
-        uses: modelcontextprotocol/conformance@v0.1.16
-        with:
-          mode: client
-          command: 'java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-*-SNAPSHOT.jar'
-          scenario: ${{ matrix.scenario }}
-          expected-failures: ./conformance-tests/conformance-baseline.yml
+        run: |
+          npx --yes "$CONFORMANCE" client \
+            --command 'java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-*-SNAPSHOT.jar' \
+            --scenario ${{ matrix.scenario }} \
+            --spec-version 2025-11-25 \
+            --expected-failures ./conformance-tests/conformance-baseline.yml
 
   auth:
     name: Auth Conformance
@@ -82,17 +128,17 @@ jobs:
         - auth/token-endpoint-auth-none
         - auth/pre-registration
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: 'maven'
 
       - name: Build client
-        run: mvn clean install -DskipTests
+        run: ./mvnw clean install -DskipTests
 
       - name: Run conformance test
         uses: modelcontextprotocol/conformance@v0.1.16
