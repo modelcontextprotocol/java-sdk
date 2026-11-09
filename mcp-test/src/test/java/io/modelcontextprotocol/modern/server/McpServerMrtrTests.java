@@ -23,6 +23,7 @@ import io.modelcontextprotocol.modern.McpSchema.InputRequired;
 import io.modelcontextprotocol.modern.McpSchema.InputRequiredResult;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
 import io.modelcontextprotocol.modern.McpSchema.ReadResourceResult;
+import io.modelcontextprotocol.modern.McpSchema.Resource;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.TextResourceContents;
@@ -30,8 +31,8 @@ import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncResource;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncResourceRepository;
 import io.modelcontextprotocol.modern.server.feature.ResourcesFeature;
-import io.modelcontextprotocol.modern.server.feature.ResourcesPage;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemoryAsyncResourceRepository;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
@@ -216,22 +217,11 @@ class McpServerMrtrTests {
 
 	@Test
 	void resourceInputRequestsAreCheckedToo() {
-		McpAsyncResourceRepository repo = new McpAsyncResourceRepository() {
-			@Override
-			public Mono<ResourcesPage> list(McpRequestContext ctx, String cursor) {
-				return Mono.just(ResourcesPage.of(List.of()));
-			}
-
-			@Override
-			public Mono<McpAsyncResource> find(McpRequestContext ctx, String uri) {
-				return Mono.just(McpAsyncResource.of(this::read));
-			}
-
-			private Mono<McpAsyncResponse<McpSchema.ReadResourceOutcome>> read(McpRequestContext ctx,
-					McpSchema.ReadResourceRequest request) {
-				return Mono.just(McpAsyncResponse.result(InputRequiredResult.builder().listRoots("q1").build()));
-			}
-		};
+		McpAsyncResourceRepository repo = InMemoryAsyncResourceRepository.builder()
+			.resource(Resource.builder("file:///a.txt", "a").build(),
+					McpAsyncResource.of((ctx, request) -> Mono
+						.just(McpAsyncResponse.result(InputRequiredResult.builder().listRoots("q1").build()))))
+			.build();
 		McpServer server = baseBuilder()
 			.feature(ResourcesFeature.ofAsync(repo, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
 			.build();
@@ -245,26 +235,14 @@ class McpServerMrtrTests {
 
 	@Test
 	void retryResultIsMarkedUncacheable() {
-		McpAsyncResourceRepository repo = new McpAsyncResourceRepository() {
-			@Override
-			public Mono<ResourcesPage> list(McpRequestContext ctx, String cursor) {
-				return Mono.just(ResourcesPage.of(List.of()));
-			}
-
-			@Override
-			public Mono<McpAsyncResource> find(McpRequestContext ctx, String uri) {
-				return Mono.just(McpAsyncResource.of(this::read));
-			}
-
-			private Mono<McpAsyncResponse<McpSchema.ReadResourceOutcome>> read(McpRequestContext ctx,
-					McpSchema.ReadResourceRequest request) {
-				return Mono.just(McpAsyncResponse.result(ReadResourceResult
-					.builder(List.of(new TextResourceContents(request.uri(), "text/plain", "content", null)))
-					.ttlMs(60_000L)
-					.cacheScope(CacheScope.PUBLIC)
-					.build()));
-			}
-		};
+		McpAsyncResourceRepository repo = InMemoryAsyncResourceRepository.builder()
+			.resource(Resource.builder("file:///a.txt", "a").build(),
+					McpAsyncResource.of((ctx, request) -> Mono.just(McpAsyncResponse.result(ReadResourceResult
+						.builder(List.of(new TextResourceContents(request.uri(), "text/plain", "content", null)))
+						.ttlMs(60_000L)
+						.cacheScope(CacheScope.PUBLIC)
+						.build()))))
+			.build();
 		McpServer server = baseBuilder()
 			.feature(ResourcesFeature.ofAsync(repo, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
 			.build();
@@ -285,27 +263,20 @@ class McpServerMrtrTests {
 	@SuppressWarnings("unchecked")
 	void resourceRequestStateIsBoundToTheUriNotAStrayName() {
 		AtomicReference<String> seenRequestState = new AtomicReference<>();
-		McpAsyncResourceRepository repo = new McpAsyncResourceRepository() {
-			@Override
-			public Mono<ResourcesPage> list(McpRequestContext ctx, String cursor) {
-				return Mono.just(ResourcesPage.of(List.of()));
+		McpAsyncResource reader = McpAsyncResource.of((ctx, request) -> {
+			if (request.requestState() != null) {
+				seenRequestState.set(request.requestState());
+				return Mono.just(McpAsyncResponse.result(ReadResourceResult.builder(List.of()).build()));
 			}
-
-			@Override
-			public Mono<McpAsyncResource> find(McpRequestContext ctx, String uri) {
-				return Mono.just(McpAsyncResource.of(this::read));
-			}
-
-			private Mono<McpAsyncResponse<McpSchema.ReadResourceOutcome>> read(McpRequestContext ctx,
-					McpSchema.ReadResourceRequest request) {
-				if (request.requestState() != null) {
-					seenRequestState.set(request.requestState());
-					return Mono.just(McpAsyncResponse.result(ReadResourceResult.builder(List.of()).build()));
-				}
-				return Mono.just(McpAsyncResponse
-					.result(InputRequiredResult.builder().elicit("q1", CONFIRM).requestState("for-a").build()));
-			}
-		};
+			return Mono.just(McpAsyncResponse
+				.result(InputRequiredResult.builder().elicit("q1", CONFIRM).requestState("for-a").build()));
+		});
+		// Both URIs exist, so the replay against b.txt is rejected for its requestState
+		// being sealed for a.txt, not for naming an unknown resource.
+		McpAsyncResourceRepository repo = InMemoryAsyncResourceRepository.builder()
+			.resource(Resource.builder("file:///a.txt", "a").build(), reader)
+			.resource(Resource.builder("file:///b.txt", "b").build(), reader)
+			.build();
 		McpServer server = baseBuilder()
 			.feature(ResourcesFeature.ofAsync(repo, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE))
 			.build();

@@ -19,17 +19,15 @@ import io.modelcontextprotocol.json.schema.JsonSchemaValidator.ValidationRespons
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.McpSchema.CacheScope;
-import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
-import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
 import io.modelcontextprotocol.modern.server.McpParamHeaders;
-import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.ModernTestFixtures;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemoryAsyncToolRepository;
 import io.modelcontextprotocol.util.ToolsUtils;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -622,23 +620,13 @@ class ToolsFeatureParamHeadersTests {
 	}
 
 	private McpServer server(Tool tool, JsonSchemaValidator validator) {
-		McpAsyncToolRepository repository = new McpAsyncToolRepository() {
-			@Override
-			public Mono<ToolsPage> list(McpRequestContext ctx, String cursor) {
-				return Mono.just(ToolsPage.of(List.of(tool)));
-			}
-
-			@Override
-			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
-				return Mono.just(McpAsyncTool.of(tool, this::call));
-			}
-
-			public Mono<McpAsyncResponse<CallToolOutcome>> call(McpRequestContext ctx, CallToolRequest request) {
-				ToolsFeatureParamHeadersTests.this.called.set(true);
+		McpAsyncToolRepository repository = InMemoryAsyncToolRepository.builder()
+			.tool(McpAsyncTool.of(tool, (ctx, request) -> {
+				this.called.set(true);
 				return Mono.just(McpAsyncResponse
 					.result(CallToolResult.builder().addContent(TextContent.builder("ok").build()).build()));
-			}
-		};
+			}))
+			.build();
 		return McpServer.builder()
 			.serverInfo(SERVER_INFO)
 			.feature(ToolsFeature.ofAsync(repository, McpJsonDefaults.getMapper(), validator, 0L, CacheScope.PRIVATE))

@@ -24,6 +24,9 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
   `server/discover`, multi round-trip requests with sealed `requestState`, `subscriptions/listen`, caching
   hints, required client capabilities and SEP-2243 `Mcp-Param` header validation. The API may change in minor
   releases until 3.0. See [MCP Server (2026-07-28)](docs/server-modern.md).
+- Add in-memory repositories for the 2026-07-28 server: `InMemorySyncToolRepository`,
+  `InMemorySyncPromptRepository`, `InMemorySyncResourceRepository` and their async counterparts
+  `InMemoryAsyncToolRepository`, `InMemoryAsyncPromptRepository` and `InMemoryAsyncResourceRepository`, with runtime add and remove, change broadcasts and paging. See [In-Memory Repositories](docs/server-modern.md#in-memory-repositories).
 - Add `McpTransportContext.putAll(Map)`, returning a context that combines an
   existing context with additional entries, which take precedence.
 - `McpTransportContext` no longer compares contexts by their contents in

@@ -44,7 +44,6 @@ import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
 import io.modelcontextprotocol.modern.server.McpParamHeaders;
-import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpRequestManager;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.McpSyncResponse;
@@ -52,10 +51,9 @@ import io.modelcontextprotocol.modern.server.McpTransportResponse;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncTool;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
 import io.modelcontextprotocol.modern.server.feature.McpSyncTool;
-import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
-import io.modelcontextprotocol.modern.server.feature.ToolsPage;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemorySyncToolRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
@@ -582,19 +580,11 @@ class StdioMcpTransportTests {
 		McpServer server = McpServer.builder()
 			.serverInfo(SERVER_INFO)
 			.jsonMapper(this.jsonMapper)
-			.feature(ToolsFeature.ofSync(new McpSyncToolRepository() {
-				@Override
-				public ToolsPage list(McpRequestContext ctx, String cursor) {
-					return ToolsPage.of(List.of(tool));
-				}
-
-				@Override
-				public McpSyncTool find(McpRequestContext ctx, String name) {
-					return McpSyncTool.of(tool, (callCtx, req) -> McpSyncResponse
-						.result(CallToolResult.builder().addContent(TextContent.builder("ok").build()).build()));
-				}
-
-			}, this.jsonMapper, PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE))
+			.feature(
+					ToolsFeature.ofSync(InMemorySyncToolRepository.builder()
+						.tool(McpSyncTool.of(tool, (callCtx, req) -> McpSyncResponse
+							.result(CallToolResult.builder().addContent(TextContent.builder("ok").build()).build())))
+						.build(), this.jsonMapper, PERMISSIVE_VALIDATOR, 0L, CacheScope.PRIVATE))
 			.build();
 		start(server);
 

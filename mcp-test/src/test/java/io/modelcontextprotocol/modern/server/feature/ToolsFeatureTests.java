@@ -36,6 +36,8 @@ import io.modelcontextprotocol.modern.server.McpAsyncResponse;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.McpSyncResponse;
 import io.modelcontextprotocol.modern.server.ModernTestFixtures;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemoryAsyncToolRepository;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemorySyncToolRepository;
 import io.modelcontextprotocol.util.ToolsUtils;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -107,17 +109,9 @@ class ToolsFeatureTests {
 
 	private static McpServer structuredServer(JsonSchemaValidator validator,
 			McpAsyncResponse<CallToolOutcome> response) {
-		McpAsyncToolRepository repo = new McpAsyncToolRepository() {
-			@Override
-			public Mono<ToolsPage> list(McpRequestContext ctx, String cursor) {
-				return Mono.just(ToolsPage.of(List.of(STRUCTURED_TOOL)));
-			}
-
-			@Override
-			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
-				return Mono.just(McpAsyncTool.of(STRUCTURED_TOOL, (c, request) -> Mono.just(response)));
-			}
-		};
+		McpAsyncToolRepository repo = InMemoryAsyncToolRepository.builder()
+			.tool(McpAsyncTool.of(STRUCTURED_TOOL, (c, request) -> Mono.just(response)))
+			.build();
 		return baseBuilder()
 			.feature(ToolsFeature.ofAsync(repo, McpJsonDefaults.getMapper(), validator, 0L, CacheScope.PRIVATE))
 			.build();
@@ -191,20 +185,10 @@ class ToolsFeatureTests {
 		.build();
 
 	private static McpAsyncToolRepository requiring(ClientCapabilities required, AtomicBoolean called) {
-		return new McpAsyncToolRepository() {
-			@Override
-			public Mono<ToolsPage> list(McpRequestContext ctx, String cursor) {
-				return Mono.just(ToolsPage.of(List.of(ECHO_TOOL)));
-			}
-
-			@Override
-			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
-				return Mono.just(McpAsyncTool.of(ECHO_TOOL, required, (c, request) -> {
-					called.set(true);
-					return Mono.just(McpAsyncResponse.result(greeting("client")));
-				}));
-			}
-		};
+		return InMemoryAsyncToolRepository.builder().tool(McpAsyncTool.of(ECHO_TOOL, required, (c, request) -> {
+			called.set(true);
+			return Mono.just(McpAsyncResponse.result(greeting("client")));
+		})).build();
 	}
 
 	private static JSONRPCRequest callEchoDeclaring(Map<String, Object> clientCapabilities) {
@@ -262,21 +246,13 @@ class ToolsFeatureTests {
 	@Test
 	void syncToolRequirementIsCheckedBeforeTheStreamStarts() {
 		AtomicBoolean called = new AtomicBoolean();
-		McpSyncToolRepository repo = new McpSyncToolRepository() {
-			@Override
-			public ToolsPage list(McpRequestContext ctx, String cursor) {
-				return ToolsPage.of(List.of(ECHO_TOOL));
-			}
-
-			@Override
-			public McpSyncTool find(McpRequestContext ctx, String name) {
-				return McpSyncTool.of(ECHO_TOOL, ClientCapabilities.builder().sampling().build(),
-						(c, request) -> McpSyncResponse.streaming(notifier -> {
-							called.set(true);
-							return greeting("client");
-						}));
-			}
-		};
+		McpSyncToolRepository repo = InMemorySyncToolRepository.builder()
+			.tool(McpSyncTool.of(ECHO_TOOL, ClientCapabilities.builder().sampling().build(),
+					(c, request) -> McpSyncResponse.streaming(notifier -> {
+						called.set(true);
+						return greeting("client");
+					})))
+			.build();
 		McpServer server = baseBuilder().feature(tools(repo)).build();
 
 		McpTransportResponse response = server.handle(McpTransportContext.EMPTY, callEchoDeclaring(Map.of())).block();
@@ -317,20 +293,10 @@ class ToolsFeatureTests {
 
 	private static McpSyncToolRepository singleGreetingRepo(Function<McpRequestContext, String> principal,
 			AtomicReference<String> handlerThread) {
-		return new McpSyncToolRepository() {
-			@Override
-			public ToolsPage list(McpRequestContext ctx, String cursor) {
-				return ToolsPage.of(List.of(ECHO_TOOL));
-			}
-
-			@Override
-			public McpSyncTool find(McpRequestContext ctx, String name) {
-				return McpSyncTool.of(ECHO_TOOL, (c, request) -> {
-					handlerThread.set(Thread.currentThread().getName());
-					return McpSyncResponse.result(greeting(principal.apply(c)));
-				});
-			}
-		};
+		return InMemorySyncToolRepository.builder().tool(McpSyncTool.of(ECHO_TOOL, (c, request) -> {
+			handlerThread.set(Thread.currentThread().getName());
+			return McpSyncResponse.result(greeting(principal.apply(c)));
+		})).build();
 	}
 
 	// Records how many messages the consumer had already received when the handler's
@@ -338,22 +304,14 @@ class ToolsFeatureTests {
 	private static McpSyncToolRepository streamingGreetingRepo(Function<McpRequestContext, String> principal,
 			AtomicReference<String> handlerThread, List<JSONRPCMessage> delivered,
 			AtomicInteger deliveredWhenProgressReturned) {
-		return new McpSyncToolRepository() {
-			@Override
-			public ToolsPage list(McpRequestContext ctx, String cursor) {
-				return ToolsPage.of(List.of(ECHO_TOOL));
-			}
-
-			@Override
-			public McpSyncTool find(McpRequestContext ctx, String name) {
-				return McpSyncTool.of(ECHO_TOOL, (c, request) -> McpSyncResponse.streaming(notifier -> {
-					handlerThread.set(Thread.currentThread().getName());
-					notifier.progress(1.0, 1.0, "greeting");
-					deliveredWhenProgressReturned.set(delivered.size());
-					return greeting(principal.apply(c));
-				}));
-			}
-		};
+		return InMemorySyncToolRepository.builder()
+			.tool(McpSyncTool.of(ECHO_TOOL, (c, request) -> McpSyncResponse.streaming(notifier -> {
+				handlerThread.set(Thread.currentThread().getName());
+				notifier.progress(1.0, 1.0, "greeting");
+				deliveredWhenProgressReturned.set(delivered.size());
+				return greeting(principal.apply(c));
+			})))
+			.build();
 	}
 
 	private static JSONRPCResponse callSingle(Mono<McpTransportResponse> invocation) {

@@ -18,16 +18,14 @@ import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
 import io.modelcontextprotocol.modern.McpSchema.SubscriptionFilter;
 import io.modelcontextprotocol.modern.McpSchema.SubscriptionsAcknowledgedParams;
 import io.modelcontextprotocol.modern.McpSchema;
-import io.modelcontextprotocol.modern.server.feature.McpAsyncResource;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncResourceRepository;
 import io.modelcontextprotocol.modern.server.feature.McpChangeFeed;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
 import io.modelcontextprotocol.modern.server.feature.ResourcesFeature;
-import io.modelcontextprotocol.modern.server.feature.ResourcesPage;
 import io.modelcontextprotocol.modern.server.feature.ServerChange;
 import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
+import io.modelcontextprotocol.modern.server.feature.repository.InMemoryAsyncResourceRepository;
 import org.junit.jupiter.api.Test;
-import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import static io.modelcontextprotocol.modern.server.ModernTestFixtures.PERMISSIVE_VALIDATOR;
@@ -205,22 +203,9 @@ class SubscriptionsFeatureTests {
 	}
 
 	private static McpServer resourcesServer(boolean supportsSubscribe, McpChangePublisher publisher) {
-		McpAsyncResourceRepository repository = new McpAsyncResourceRepository() {
-			@Override
-			public Mono<ResourcesPage> list(McpRequestContext ctx, String cursor) {
-				return Mono.just(ResourcesPage.of(List.of()));
-			}
-
-			@Override
-			public Mono<McpAsyncResource> find(McpRequestContext ctx, String uri) {
-				return Mono.empty();
-			}
-
-			@Override
-			public boolean supportsSubscribe() {
-				return supportsSubscribe;
-			}
-		};
+		McpAsyncResourceRepository repository = InMemoryAsyncResourceRepository.builder()
+			.supportsSubscribe(supportsSubscribe)
+			.build();
 		McpServer.Builder builder = McpServer.builder()
 			.serverInfo(SERVER_INFO)
 			.feature(ResourcesFeature.ofAsync(repository, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE));
