@@ -291,11 +291,10 @@ class SubscriptionsFeatureTests {
 		McpChangeFeed feed = new McpChangeFeed();
 		McpServer server = toolsServer(feed);
 
-		// Trigger a change from the subscribing thread the change is broadcast right when
-		// ack is received.
-		// This simulates high CPU loads in test harnesses, were writing the ack might
-		// happen
-		// sooner than any subsequent event subscription.
+		// Broadcast a change synchronously from inside the ack's onNext, on the
+		// thread delivering the ack. This is the earliest moment a test harness
+		// reacting to the ack can broadcast a change, so the stream must already
+		// be subscribed to the feed by the time the ack is emitted.
 		Flux<JSONRPCMessage> messages = listen(server, 1).messages().doOnNext(msg -> {
 			if (msg instanceof JSONRPCNotification notification
 					&& notification.method().equals(McpSchema.METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED)) {
