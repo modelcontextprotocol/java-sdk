@@ -77,12 +77,14 @@ class McpAsyncClientListenTests {
 
 	private final List<McpTransportRequest> scriptedRequests = new CopyOnWriteArrayList<>();
 
+	private Long toolsTtlMs;
+
 	// A server with tools and subscribable resources, but no prompts.
 	private McpServer server() {
 		McpSyncToolRepository tools = new McpSyncToolRepository() {
 			@Override
 			public ToolsPage list(McpRequestContext ctx, String cursor) {
-				return ToolsPage.of(List.of(PLAIN));
+				return new ToolsPage(List.of(PLAIN), null, toolsTtlMs, null);
 			}
 
 			@Override
@@ -420,6 +422,32 @@ class McpAsyncClientListenTests {
 			.expectNext(new ToolsListChanged())
 			.then(() -> {
 				client.tool("plain").call().block(TIMEOUT);
+				assertThat(listedTools(transport)).isEqualTo(3);
+			})
+			.thenCancel()
+			.verify(TIMEOUT);
+	}
+
+	@Test
+	void toolChangesDropTheKeptListing() {
+		TestChangePublisher.Stream stream = this.changes.nextStream();
+		this.toolsTtlMs = 60_000L;
+		MockMcpClientTransport transport = new MockMcpClientTransport(server(), JSON_MAPPER, false);
+		McpAsyncClient client = client(transport);
+		client.listTools().list().block(TIMEOUT);
+		client.listTools().list().block(TIMEOUT);
+		assertThat(listedTools(transport)).isEqualTo(1);
+
+		StepVerifier.create(client.listen().toolsChanged().events())
+			.expectNextMatches(Subscribed.class::isInstance)
+			.then(() -> {
+				client.listTools().list().block(TIMEOUT);
+				assertThat(listedTools(transport)).isEqualTo(2);
+				stream.broadcastWhenListening(new ServerChange.ToolsListChanged());
+			})
+			.expectNext(new ToolsListChanged())
+			.then(() -> {
+				client.listTools().list().block(TIMEOUT);
 				assertThat(listedTools(transport)).isEqualTo(3);
 			})
 			.thenCancel()

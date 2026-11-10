@@ -7,6 +7,8 @@ package io.modelcontextprotocol.modern.client.transport;
 import java.net.URI;
 import java.net.http.HttpHeaders;
 
+import io.modelcontextprotocol.modern.client.McpClientException;
+
 /**
  * The server answered with an HTTP error status that carries no JSON-RPC error, or with
  * an authorization error no {@link McpHttpAuthorizationErrorHandler} retried. The request
@@ -14,7 +16,7 @@ import java.net.http.HttpHeaders;
  *
  * @author Dariusz Jędrzejczyk
  */
-public class McpHttpStatusException extends RuntimeException {
+public class McpHttpStatusException extends McpClientException {
 
 	private final URI uri;
 

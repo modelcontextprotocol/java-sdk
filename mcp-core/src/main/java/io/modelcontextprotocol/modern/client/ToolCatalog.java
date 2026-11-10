@@ -7,6 +7,7 @@ package io.modelcontextprotocol.modern.client;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,16 +28,20 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 /**
- * The tool definitions a client has listed, kept so that a {@code tools/call} by name can
- * mirror the arguments the tool annotates with {@code x-mcp-header} into
- * {@code Mcp-Param-{Name}} headers. Used only with transports that mirror tool params.
- * Thread-safe.
+ * The tools a client has listed. Thread-safe.
  * <p>
- * A valid definition is used for as long as it is kept, whatever its {@code ttlMs}: the
+ * It keeps the client's last listing of all tools for its {@code ttlMs}, so that
+ * {@code listTools()} can return it without asking the server again. A client stands for
+ * one identity, so a private listing is kept as well.
+ * <p>
+ * When the transport mirrors tool params, it also keeps the definition of every tool it
+ * has seen, so that a {@code tools/call} by name can mirror the arguments the tool
+ * annotates with {@code x-mcp-header} into {@code Mcp-Param-{Name}} headers. A valid
+ * definition is used for as long as it is kept, whatever its {@code ttlMs}: the
  * definition only shapes headers, and a server rejects stale headers with {@code -32020}
  * before running the tool, which makes the caller list the tools again. A definition with
  * invalid annotations is listed again once its {@code ttlMs} has passed, so a tool the
- * server has fixed becomes callable.
+ * server has fixed becomes callable. Such tools are left out of every listing.
  */
 final class ToolCatalog {
 
@@ -44,37 +49,74 @@ final class ToolCatalog {
 
 	// The generation grows with every invalidation and every full listing, so a listing
 	// that started before either doesn't replace what they left.
-	private final AtomicReference<State> state = new AtomicReference<>(new State(0, Map.of()));
+	private final AtomicReference<State> state = new AtomicReference<>(new State(0, Map.of(), null));
+
+	private final boolean mirrorsToolParams;
 
 	private final int maxPages;
 
 	/**
+	 * @param mirrorsToolParams whether the transport mirrors tool params, so definitions
+	 * are kept for headers
 	 * @param maxPages the most pages a full listing reads
 	 */
-	ToolCatalog(int maxPages) {
+	ToolCatalog(boolean mirrorsToolParams, int maxPages) {
+		this.mirrorsToolParams = mirrorsToolParams;
 		this.maxPages = maxPages;
 	}
 
 	/**
-	 * Keeps the tools of a page and returns the page without the tools whose annotations
-	 * are invalid, which are logged. Tools of other pages are kept as they are.
+	 * Whether the transport mirrors tool params into headers.
+	 */
+	boolean mirrorsToolParams() {
+		return this.mirrorsToolParams;
+	}
+
+	/**
+	 * Keeps the definitions of one page and returns the page without the tools whose
+	 * annotations are invalid, which are logged. Definitions of other pages are kept as
+	 * they are. Without param mirroring the page is returned as it is.
 	 */
 	ListToolsResult accept(ListToolsResult page) {
+		if (!this.mirrorsToolParams) {
+			return page;
+		}
 		Map<String, Entry> pageEntries = entries(page);
 		Map<String, Entry> previous = this.state.getAndUpdate(current -> {
 			Map<String, Entry> merged = new LinkedHashMap<>(current.entries());
 			merged.putAll(pageEntries);
-			return new State(current.generation(), Collections.unmodifiableMap(merged));
+			return new State(current.generation(), Collections.unmodifiableMap(merged), current.listing());
 		}).entries();
 		pageEntries.forEach((name, entry) -> warnIfNewlyInvalid(previous.get(name), entry));
 		return withoutInvalid(page, pageEntries);
 	}
 
 	/**
-	 * Drops every definition, so the next call by name lists the tools again.
+	 * Drops the kept listing and every definition, so the next listing and the next call
+	 * by name ask the server again.
 	 */
 	void invalidate() {
-		this.state.updateAndGet(current -> new State(current.generation() + 1, Map.of()));
+		this.state.updateAndGet(current -> new State(current.generation() + 1, Map.of(), null));
+	}
+
+	/**
+	 * The kept listing of all tools, or {@code null} if there is none or its
+	 * {@code ttlMs} has passed.
+	 */
+	@Nullable ListToolsResult listing() {
+		Listing listing = this.state.get().listing();
+		return listing != null && listing.isFresh() ? listing.result() : null;
+	}
+
+	/**
+	 * Lists all tools and keeps the result, as one listing.
+	 * @param lister lists the page at a cursor, {@code null} for the first page; the
+	 * pages are taken as the server sent them
+	 * @throws McpInvalidResultException if the listing doesn't end within
+	 * {@code maxPages} pages
+	 */
+	Mono<ListToolsResult> listAll(Function<String, Mono<ListToolsResult>> lister) {
+		return listAllEntries(lister).map(Listed::result);
 	}
 
 	/**
@@ -99,8 +141,8 @@ final class ToolCatalog {
 	 * {@link #annotations}.
 	 */
 	Mono<List<Annotation>> refreshed(String name, Function<String, Mono<ListToolsResult>> lister) {
-		return listAll(lister).map(listed -> {
-			Entry entry = listed.get(name);
+		return listAllEntries(lister).map(listed -> {
+			Entry entry = listed.entries().get(name);
 			if (entry == null) {
 				// Without a definition the client can't know which arguments the server
 				// expects as headers.
@@ -141,17 +183,26 @@ final class ToolCatalog {
 		return Collections.unmodifiableMap(headers);
 	}
 
-	private Mono<Map<String, Entry>> listAll(Function<String, Mono<ListToolsResult>> lister) {
+	private Mono<Listed> listAllEntries(Function<String, Mono<ListToolsResult>> lister) {
 		return Mono.defer(() -> {
 			long generation = this.state.get().generation();
 			return Listings.pages(McpSchema.METHOD_TOOLS_LIST, lister, ListToolsResult::nextCursor, this.maxPages)
 				.map(pages -> {
 					Map<String, Entry> listed = new LinkedHashMap<>();
-					pages.forEach(page -> listed.putAll(entries(page)));
+					List<ListToolsResult> returned = new ArrayList<>();
+					for (ListToolsResult page : pages) {
+						Map<String, Entry> pageEntries = entries(page);
+						listed.putAll(pageEntries);
+						returned.add(this.mirrorsToolParams ? withoutInvalid(page, pageEntries) : page);
+					}
+					ListToolsResult result = Listings.allTools(returned);
+					Map<String, Entry> kept = this.mirrorsToolParams ? Collections.unmodifiableMap(listed) : Map.of();
 					State previous = this.state.getAndUpdate(current -> current.generation() == generation
-							? new State(generation + 1, Collections.unmodifiableMap(listed)) : current);
-					listed.forEach((name, entry) -> warnIfNewlyInvalid(previous.entries().get(name), entry));
-					return listed;
+							? new State(generation + 1, kept, Listing.of(result)) : current);
+					if (this.mirrorsToolParams) {
+						listed.forEach((name, entry) -> warnIfNewlyInvalid(previous.entries().get(name), entry));
+					}
+					return new Listed(listed, result);
 				});
 		});
 	}
@@ -222,7 +273,27 @@ final class ToolCatalog {
 		return BigDecimal.valueOf(number.longValue());
 	}
 
-	private record State(long generation, Map<String, Entry> entries) {
+	private record State(long generation, Map<String, Entry> entries, @Nullable Listing listing) {
+	}
+
+	private record Listed(Map<String, Entry> entries, ListToolsResult result) {
+	}
+
+	/**
+	 * A listing of all tools, kept until its {@code ttlMs} has passed.
+	 */
+	private record Listing(ListToolsResult result, long expiresAtNanos) {
+
+		// A listing with no ttlMs may not be kept at all.
+		@Nullable static Listing of(ListToolsResult result) {
+			long ttlMs = result.ttlMs() == null ? 0 : result.ttlMs();
+			return ttlMs > 0 ? new Listing(result, Deadlines.after(Duration.ofMillis(ttlMs))) : null;
+		}
+
+		boolean isFresh() {
+			return System.nanoTime() - this.expiresAtNanos < 0;
+		}
+
 	}
 
 	/**

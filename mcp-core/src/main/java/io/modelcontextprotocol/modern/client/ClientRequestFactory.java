@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.modern.client;
 
 import java.util.Map;
+import java.util.function.Function;
 
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
@@ -13,6 +14,7 @@ import io.modelcontextprotocol.modern.McpSchema.ListToolsResult;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
 import org.jspecify.annotations.Nullable;
+import reactor.core.publisher.Mono;
 
 /**
  * Creates the requests and listen streams of a client over what all of them share: the
@@ -24,15 +26,13 @@ final class ClientRequestFactory {
 
 	private final JsonRpcRequestSender sender;
 
-	// Present exactly when the transport mirrors tool params into headers.
-	@Nullable private final ToolCatalog catalog;
+	private final ToolCatalog catalog;
 
 	private final int maxInputRounds;
 
 	private final int maxListPages;
 
-	ClientRequestFactory(JsonRpcRequestSender sender, @Nullable ToolCatalog catalog, int maxInputRounds,
-			int maxListPages) {
+	ClientRequestFactory(JsonRpcRequestSender sender, ToolCatalog catalog, int maxInputRounds, int maxListPages) {
 		this.sender = sender;
 		this.catalog = catalog;
 		this.maxInputRounds = maxInputRounds;
@@ -72,7 +72,7 @@ final class ClientRequestFactory {
 	 */
 	MultiRoundTripRequest<CallToolResult> toolCall(String name, Object params, CallSettings<?> settings,
 			@Nullable Tool tool) {
-		if (this.catalog == null) {
+		if (!this.catalog.mirrorsToolParams()) {
 			return request(McpSchema.METHOD_TOOLS_CALL, name, params, settings, CallToolResult.class);
 		}
 		return request(McpSchema.METHOD_TOOLS_CALL, params, settings, CallToolResult.class,
@@ -84,7 +84,24 @@ final class ClientRequestFactory {
 	 * transport mirrors tool params.
 	 */
 	ListToolsResult listedTools(ListToolsResult page) {
-		return this.catalog == null ? page : this.catalog.accept(page);
+		return this.catalog.accept(page);
+	}
+
+	/**
+	 * The client's kept listing of all tools, or {@code null} if there is none or it is
+	 * stale.
+	 */
+	@Nullable ListToolsResult keptTools() {
+		return this.catalog.listing();
+	}
+
+	/**
+	 * Lists all tools and keeps the result.
+	 * @param lister lists the page at a cursor as the server sent it, {@code null} for
+	 * the first page
+	 */
+	Mono<ListToolsResult> listAllTools(Function<String, Mono<ListToolsResult>> lister) {
+		return this.catalog.listAll(lister);
 	}
 
 	private <R extends Result> MultiRoundTripRequest<R> request(String method, Object params, CallSettings<?> settings,

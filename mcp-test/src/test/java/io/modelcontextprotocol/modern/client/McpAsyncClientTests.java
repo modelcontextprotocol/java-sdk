@@ -253,7 +253,7 @@ class McpAsyncClientTests {
 	void listToolsCollectsEveryPage() {
 		McpAsyncClient client = client(transport(server().build()));
 
-		ListToolsResult all = client.listTools().block(TIMEOUT);
+		ListToolsResult all = client.listTools().list().block(TIMEOUT);
 
 		assertThat(all.tools()).extracting(Tool::name).containsExactly("echo", "ask", "confirm", "who");
 		assertThat(all.nextCursor()).isNull();
@@ -263,7 +263,7 @@ class McpAsyncClientTests {
 	void listingThatDoesNotEndWithinTheLimitFails() {
 		McpAsyncClient client = McpClient.async(transport(server().build())).maxListPages(1).build();
 
-		assertThatThrownBy(() -> client.listTools().block(TIMEOUT)).isInstanceOf(McpInvalidResultException.class)
+		assertThatThrownBy(() -> client.listTools().list().block(TIMEOUT)).isInstanceOf(McpInvalidResultException.class)
 			.hasMessageContaining("1 pages");
 	}
 
@@ -470,7 +470,7 @@ class McpAsyncClientTests {
 		McpAsyncClient first = client(transport);
 		McpAsyncClient second = client(transport);
 
-		Flux.concat(first.listTools(), second.listTools(), first.listTools()).blockLast(TIMEOUT);
+		Flux.concat(first.listTools().list(), second.listTools().list(), first.listTools().list()).blockLast(TIMEOUT);
 
 		assertThat(transport.requests()).extracting(request -> request.message().id()).doesNotHaveDuplicates();
 	}
@@ -500,7 +500,7 @@ class McpAsyncClientTests {
 		MockMcpClientTransport transport = transport(server().supportedVersions(List.of("2099-01-01")).build());
 		McpAsyncClient client = client(transport);
 
-		assertThatThrownBy(() -> client.listTools().block(TIMEOUT)).isInstanceOf(McpException.class)
+		assertThatThrownBy(() -> client.listTools().list().block(TIMEOUT)).isInstanceOf(McpException.class)
 			.satisfies(ex -> assertThat(((McpException) ex).error().code())
 				.isEqualTo(ErrorCodes.UNSUPPORTED_PROTOCOL_VERSION));
 		assertThat(transport.requests()).hasSize(1);

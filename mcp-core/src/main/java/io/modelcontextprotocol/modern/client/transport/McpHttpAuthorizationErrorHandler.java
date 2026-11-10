@@ -17,6 +17,9 @@ import reactor.core.scheduler.Schedulers;
  * {@link #maxRetries()} times. When it doesn't ask for a retry, the request fails with
  * {@link McpHttpStatusException}. The time it takes doesn't count towards the round
  * timeout.
+ * <p>
+ * A transport may call it on any thread. The identity of the call is the {@code context};
+ * thread-locals of the thread that started the call are not available.
  *
  * @author Dariusz Jędrzejczyk
  */

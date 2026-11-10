@@ -13,7 +13,7 @@ import java.util.Locale;
  *
  * @author Dariusz Jędrzejczyk
  */
-public class McpTimeoutException extends RuntimeException {
+public class McpTimeoutException extends McpClientException {
 
 	/** Which timeout expired. */
 	public enum Kind {

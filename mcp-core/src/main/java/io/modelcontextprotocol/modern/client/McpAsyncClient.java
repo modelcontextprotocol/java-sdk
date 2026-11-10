@@ -194,20 +194,11 @@ public final class McpAsyncClient {
 	}
 
 	/**
-	 * All the server's tools: every page of {@code tools().list()}, as one result that
-	 * may be kept for the shortest {@code ttlMs} of its pages, and is private if any page
-	 * is. A listing longer than {@link McpClient.Builder#maxListPages maxListPages} fails
-	 * with {@link McpInvalidResultException}.
-	 * <p>
-	 * When the transport mirrors tool arguments into headers, tools whose
-	 * {@code x-mcp-header} annotations are invalid are left out of every listing, and
-	 * logged.
+	 * All the server's tools, as one result: the listing the client keeps, or every page
+	 * of {@code tools().list()} when it keeps none; see {@link ListToolsSpec}.
 	 */
-	public Mono<ListToolsResult> listTools() {
-		return Listings
-			.pages(McpSchema.METHOD_TOOLS_LIST, cursor -> tools().cursor(cursor).list(), ListToolsResult::nextCursor,
-					this.requester.maxListPages())
-			.map(Listings::allTools);
+	public ListToolsSpec listTools() {
+		return new ListToolsSpec(this.requester, false, this.requester.settings());
 	}
 
 	@Nullable private static <V> Map<String, V> copy(@Nullable Map<String, V> map) {
@@ -300,6 +291,96 @@ public final class McpAsyncClient {
 
 		private ListSpec<R> with(CallSettings<Mono<?>> settings) {
 			return new ListSpec<>(this.requester, this.method, this.resultType, this.listed, this.cursor, settings);
+		}
+
+	}
+
+	/**
+	 * Lists all the server's tools as one result, kept for the shortest {@code ttlMs} of
+	 * its pages and private if any page is. Immutable.
+	 * <p>
+	 * The client keeps the last such listing until its {@code ttlMs} has passed, and
+	 * returns it instead of asking the server again. A client stands for one identity, so
+	 * a private listing is kept as well. The kept listing is replaced by every listing of
+	 * all tools, including the one a call by name makes, and dropped when a listen stream
+	 * reports that the tools may have changed. A listing with a {@code ttlMs} of
+	 * {@code 0} isn't kept.
+	 * <p>
+	 * A listing longer than {@link McpClient.Builder#maxListPages maxListPages} fails
+	 * with {@link McpInvalidResultException}. When the transport mirrors tool arguments
+	 * into headers, tools whose {@code x-mcp-header} annotations are invalid are left
+	 * out, and logged.
+	 */
+	public static final class ListToolsSpec {
+
+		private final AsyncClientRequester requester;
+
+		private final boolean skipCache;
+
+		private final CallSettings<Mono<?>> settings;
+
+		private ListToolsSpec(AsyncClientRequester requester, boolean skipCache, CallSettings<Mono<?>> settings) {
+			this.requester = requester;
+			this.skipCache = skipCache;
+			this.settings = settings;
+		}
+
+		/**
+		 * Asks the server even when the client keeps a listing, and keeps the new one.
+		 */
+		public ListToolsSpec skipCache() {
+			return new ListToolsSpec(this.requester, true, this.settings);
+		}
+
+		/**
+		 * The timeout of each exchange, instead of the client's.
+		 */
+		public ListToolsSpec roundTimeout(Duration roundTimeout) {
+			return with(this.settings.withRoundTimeout(roundTimeout));
+		}
+
+		/**
+		 * The bound on each page's call, instead of the client's.
+		 */
+		public ListToolsSpec callTimeout(Duration callTimeout) {
+			return with(this.settings.withCallTimeout(callTimeout));
+		}
+
+		/**
+		 * Receives the progress of each page's call, instead of the client's listener.
+		 * The next notification, and the result, wait for the {@code Mono} it returns.
+		 */
+		public ListToolsSpec progress(Function<ProgressParams, Mono<Void>> listener) {
+			return with(this.settings.withProgress(listener));
+		}
+
+		/**
+		 * Entries added to the {@code _meta} of each page's request, replacing those set
+		 * before.
+		 * @throws IllegalArgumentException for {@code progressToken} and keys with the
+		 * {@code io.modelcontextprotocol/} prefix, which the client sets itself
+		 */
+		public ListToolsSpec meta(Map<String, ?> meta) {
+			return with(this.settings.withMeta(meta));
+		}
+
+		/**
+		 * Lists the tools, or returns the kept listing.
+		 */
+		public Mono<ListToolsResult> list() {
+			return Mono.defer(() -> {
+				ListToolsResult kept = this.skipCache ? null : this.requester.keptTools();
+				if (kept != null) {
+					return Mono.just(kept);
+				}
+				ListSpec<ListToolsResult> pages = new ListSpec<>(this.requester, McpSchema.METHOD_TOOLS_LIST,
+						ListToolsResult.class, UnaryOperator.identity(), null, this.settings);
+				return this.requester.listAllTools(cursor -> pages.cursor(cursor).list());
+			});
+		}
+
+		private ListToolsSpec with(CallSettings<Mono<?>> settings) {
+			return new ListToolsSpec(this.requester, this.skipCache, settings);
 		}
 
 	}

@@ -10,7 +10,7 @@ package io.modelcontextprotocol.modern.client;
  *
  * @author Dariusz Jędrzejczyk
  */
-public class McpResponseLostException extends RuntimeException {
+public class McpResponseLostException extends McpClientException {
 
 	private final String method;
 

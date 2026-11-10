@@ -231,7 +231,7 @@ class McpSyncClientTests {
 		McpSyncClient client = client().build();
 
 		assertThat(textOf(client.tool("echo").call())).isEqualTo("echo");
-		assertThat(client.listTools().tools()).extracting(Tool::name).containsExactly("greet");
+		assertThat(client.listTools().list().tools()).extracting(Tool::name).containsExactly("greet");
 	}
 
 	@Test
@@ -591,7 +591,7 @@ class McpSyncClientTests {
 
 		try (McpSyncClient.Listening listening = client.listen().toolsChanged().open(event -> {
 			if (event instanceof SubscriptionEvent.Subscribed) {
-				listed.complete(client.listTools());
+				listed.complete(client.listTools().list());
 			}
 		})) {
 			assertThat(listed).succeedsWithin(Duration.ofSeconds(5));

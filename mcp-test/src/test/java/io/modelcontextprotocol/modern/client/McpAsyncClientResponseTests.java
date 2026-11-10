@@ -100,7 +100,7 @@ class McpAsyncClientResponseTests {
 		McpAsyncClient client = client(
 				request -> result(request, Map.of("resultType", ResultType.INPUT_REQUIRED, "requestState", "s")));
 
-		assertThatThrownBy(() -> client.listTools().block(TIMEOUT)).isInstanceOf(McpInvalidResultException.class)
+		assertThatThrownBy(() -> client.listTools().list().block(TIMEOUT)).isInstanceOf(McpInvalidResultException.class)
 			.satisfies(ex -> assertThat(((McpInvalidResultException) ex).resultType())
 				.isEqualTo(ResultType.INPUT_REQUIRED));
 	}
@@ -109,7 +109,8 @@ class McpAsyncClientResponseTests {
 	void resultThatIsNotAnObjectIsInvalid() {
 		McpAsyncClient client = client(request -> result(request, List.of()));
 
-		assertThatThrownBy(() -> client.listTools().block(TIMEOUT)).isInstanceOf(McpInvalidResultException.class);
+		assertThatThrownBy(() -> client.listTools().list().block(TIMEOUT))
+			.isInstanceOf(McpInvalidResultException.class);
 	}
 
 	@Test
@@ -136,7 +137,7 @@ class McpAsyncClientResponseTests {
 		McpAsyncClient client = client(request -> error(request,
 				new JSONRPCError(ErrorCodes.MISSING_REQUIRED_CLIENT_CAPABILITY, "Missing", "not an object")));
 
-		assertThatThrownBy(() -> client.listTools().block(TIMEOUT))
+		assertThatThrownBy(() -> client.listTools().list().block(TIMEOUT))
 			.isInstanceOf(McpMissingClientCapabilityException.class)
 			.satisfies(ex -> assertThat(((McpMissingClientCapabilityException) ex).requiredCapabilities()).isNull());
 	}
@@ -151,7 +152,7 @@ class McpAsyncClientResponseTests {
 									request.protocolVersion())));
 		})).protocolVersions(List.of(McpSchema.LATEST_PROTOCOL_VERSION, "2026-02-02", "2026-01-01")).build();
 
-		assertThatThrownBy(() -> client.listTools().block(TIMEOUT)).isInstanceOf(McpException.class)
+		assertThatThrownBy(() -> client.listTools().list().block(TIMEOUT)).isInstanceOf(McpException.class)
 			.satisfies(ex -> assertThat(((McpException) ex).error().code())
 				.isEqualTo(ErrorCodes.UNSUPPORTED_PROTOCOL_VERSION));
 		assertThat(this.requests).extracting(McpTransportRequest::protocolVersion)
@@ -168,7 +169,7 @@ class McpAsyncClientResponseTests {
 												request.protocolVersion())))
 						: result(request, Map.of("tools", List.of())));
 
-		client.listTools().block(TIMEOUT);
+		client.listTools().list().block(TIMEOUT);
 
 		assertThat(this.requests).extracting(McpTransportRequest::protocolVersion)
 			.containsExactly(McpSchema.LATEST_PROTOCOL_VERSION, McpSchema.LATEST_PROTOCOL_VERSION);
@@ -234,7 +235,7 @@ class McpAsyncClientResponseTests {
 				JSONRPCResponse.result(request.message().id(),
 						Map.of("tools", List.of(), "ttlMs", 0, "cacheScope", "private"))));
 
-		ListToolsResult result = client.listTools().block(TIMEOUT);
+		ListToolsResult result = client.listTools().list().block(TIMEOUT);
 
 		assertThat(result.tools()).isEmpty();
 	}

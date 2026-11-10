@@ -65,7 +65,7 @@ class McpSyncClientIntegrationTests {
 		McpSyncClient client = client().build();
 
 		DiscoverResult discovered = client.discover();
-		ListToolsResult tools = client.listTools();
+		ListToolsResult tools = client.listTools().list();
 		ListToolsResult firstPage = client.tools().list();
 		List<Resource> resources = client.resources().list().resources();
 		List<ResourceTemplate> templates = client.resourceTemplates().list().resourceTemplates();
@@ -171,7 +171,7 @@ class McpSyncClientIntegrationTests {
 
 		try (McpSyncClient.Listening listening = client.listen().toolsChanged().open(event -> {
 			if (event instanceof SubscriptionEvent.ToolsListChanged) {
-				relisted.complete(client.listTools());
+				relisted.complete(client.listTools().list());
 			}
 			events.onEvent(event);
 		})) {

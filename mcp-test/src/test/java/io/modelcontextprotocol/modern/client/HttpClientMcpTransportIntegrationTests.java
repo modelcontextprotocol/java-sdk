@@ -64,6 +64,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * {@link HttpClientMcpTransport} against the modern server's servlet transport.
@@ -501,7 +502,7 @@ class HttpClientMcpTransportIntegrationTests {
 	void asyncClientListsAndCallsTools() {
 		McpAsyncClient client = McpClient.async(HttpClientMcpTransport.builder(ENDPOINT).build()).build();
 
-		List<Tool> tools = client.listTools().block(Duration.ofSeconds(5)).tools();
+		List<Tool> tools = client.listTools().list().block(Duration.ofSeconds(5)).tools();
 		CallToolResult streamed = client.tool("streamer").call().block(Duration.ofSeconds(5));
 
 		assertThat(tools).extracting(Tool::name).containsExactly("region", "streamer");
@@ -552,6 +553,57 @@ class HttpClientMcpTransportIntegrationTests {
 		assertThat(((TextContent) result.content().get(0)).text()).isEqualTo("region:eu-west1");
 		// The catalog's listing and the call are each sent for the provided identity.
 		assertThat(SEEN_AUTHORIZATION).containsOnly("Bearer alice").hasSizeGreaterThanOrEqualTo(2);
+	}
+
+	@Test
+	void syncCustomizerMayBlockAndSeesOnlyTheCallsContextOnEveryAttempt() {
+		ThreadLocal<String> callerState = new ThreadLocal<>();
+		AtomicReference<String> token = new AtomicReference<>("Bearer stale");
+		List<String> seen = new CopyOnWriteArrayList<>();
+		HttpClientMcpTransport transport = HttpClientMcpTransport.builder(ENDPOINT)
+			.requestCustomizer(header(REQUIRE_TOKEN, "yes"))
+			.requestCustomizer(McpHttpRequestCustomizer.fromSync((request, headers, context) -> {
+				// Blocking is allowed here.
+				Mono.delay(Duration.ofMillis(5)).block();
+				seen.add(request.mcpMethod() + " " + context.get("user") + " " + callerState.get() + " "
+						+ Thread.currentThread().getName().startsWith("boundedElastic"));
+				headers.set("Authorization", token.get());
+			}))
+			.authorizationErrorHandler(McpHttpAuthorizationErrorHandler.fromSync((request, response, context) -> {
+				token.set(GOOD_TOKEN);
+				return true;
+			}))
+			.build();
+		McpSyncClient client = McpClient.sync(transport)
+			.transportContextProvider(() -> McpTransportContext.create(Map.of("user", "alice")))
+			.build();
+
+		callerState.set("caller");
+		try {
+			// By name, so the call follows the listing of the tools in one exchange, and
+			// the listing is answered with 401 first.
+			client.tool("region").arguments(Map.of("region", "eu-west1")).call();
+		}
+		finally {
+			callerState.remove();
+		}
+
+		assertThat(seen).containsExactly("tools/list alice null true", "tools/list alice null true",
+				"tools/call alice null true");
+	}
+
+	@Test
+	void hookFailureReachesTheSyncCallerUnwrapped() {
+		IllegalStateException failure = new IllegalStateException("login required");
+		HttpClientMcpTransport transport = HttpClientMcpTransport.builder(ENDPOINT)
+			.requestCustomizer(header(REQUIRE_TOKEN, "yes"))
+			.authorizationErrorHandler(McpHttpAuthorizationErrorHandler.fromSync((request, response, context) -> {
+				throw failure;
+			}))
+			.build();
+		McpSyncClient client = McpClient.sync(transport).build();
+
+		assertThatThrownBy(() -> client.tool(STREAMER_TOOL).call()).isSameAs(failure);
 	}
 
 	@Test

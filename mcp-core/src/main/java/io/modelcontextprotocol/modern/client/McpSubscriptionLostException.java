@@ -10,7 +10,7 @@ package io.modelcontextprotocol.modern.client;
  *
  * @author Dariusz Jędrzejczyk
  */
-public class McpSubscriptionLostException extends RuntimeException {
+public class McpSubscriptionLostException extends McpClientException {
 
 	public McpSubscriptionLostException(Throwable cause) {
 		super("The subscriptions/listen stream ended without a result", cause);

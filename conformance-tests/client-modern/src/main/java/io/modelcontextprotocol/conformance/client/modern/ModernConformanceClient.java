@@ -65,7 +65,7 @@ public final class ModernConformanceClient {
 				case "http-standard-headers" -> standardHeaders(client);
 				case "http-custom-headers" -> customHeaders(client);
 				case "http-invalid-tool-headers" -> invalidToolHeaders(client);
-				case "json-schema-ref-no-deref" -> client.listTools();
+				case "json-schema-ref-no-deref" -> client.listTools().list();
 				case "json-schema-2020-12-preservation" -> schemaPreservation(client);
 				default -> {
 					System.err.println("Unknown scenario: " + scenario);
@@ -105,7 +105,7 @@ public final class ModernConformanceClient {
 	}
 
 	private static void toolsCall(McpSyncClient client) {
-		Tool tool = client.listTools().tools().get(0);
+		Tool tool = client.listTools().list().tools().get(0);
 		CallToolResult result = client.tool(tool.name()).arguments(Map.of("a", 5, "b", 3)).call();
 		System.out.println(tool.name() + ": " + result.content());
 	}
@@ -117,7 +117,7 @@ public final class ModernConformanceClient {
 	 */
 	private static void requestMetadata(McpSyncClient client) {
 		System.out.println("Server: " + client.discover().supportedVersions());
-		client.listTools();
+		client.listTools().list();
 	}
 
 	/**
@@ -126,7 +126,7 @@ public final class ModernConformanceClient {
 	 * between), and in one call that answers them with the client's elicitation handler.
 	 */
 	private static void multiRoundTrip(McpSyncClient client) {
-		client.listTools();
+		client.listTools().list();
 
 		McpSyncClient.ToolSpec echoState = client.tool("test_mrtr_echo_state").arguments(Map.of());
 		CallToolOutcome first = echoState.callOnce();
@@ -146,7 +146,7 @@ public final class ModernConformanceClient {
 	 * standard headers.
 	 */
 	private static void standardHeaders(McpSyncClient client) {
-		for (Tool tool : client.listTools().tools()) {
+		for (Tool tool : client.listTools().list().tools()) {
 			client.tool(tool.name()).arguments(Map.of()).call();
 		}
 		for (Resource resource : client.resources().list().resources()) {
@@ -174,7 +174,7 @@ public final class ModernConformanceClient {
 	 * annotations are left out of the listing.
 	 */
 	private static void invalidToolHeaders(McpSyncClient client) {
-		for (Tool tool : client.listTools().tools()) {
+		for (Tool tool : client.listTools().list().tools()) {
 			client.tool(tool).arguments(sampleArguments(tool)).call();
 		}
 	}
@@ -184,6 +184,7 @@ public final class ModernConformanceClient {
 	 */
 	private static void schemaPreservation(McpSyncClient client) {
 		Tool focal = client.listTools()
+			.list()
 			.tools()
 			.stream()
 			.filter(tool -> tool.name().equals("json_schema_2020_12_tool"))

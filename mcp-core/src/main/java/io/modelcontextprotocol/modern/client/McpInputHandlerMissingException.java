@@ -14,7 +14,7 @@ import io.modelcontextprotocol.util.Assert;
  *
  * @author Dariusz Jędrzejczyk
  */
-public class McpInputHandlerMissingException extends RuntimeException {
+public class McpInputHandlerMissingException extends McpClientException {
 
 	private final String inputKey;
 

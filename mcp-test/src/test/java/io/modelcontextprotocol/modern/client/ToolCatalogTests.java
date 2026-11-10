@@ -47,7 +47,7 @@ class ToolCatalogTests {
 
 	@Test
 	void listingThatStartedBeforeAnInvalidationIsNotKept() {
-		ToolCatalog catalog = new ToolCatalog(McpClient.DEFAULT_MAX_LIST_PAGES);
+		ToolCatalog catalog = new ToolCatalog(true, McpClient.DEFAULT_MAX_LIST_PAGES);
 		Sinks.One<ListToolsResult> slowPage = Sinks.one();
 		AtomicInteger listings = new AtomicInteger();
 		Function<String, Mono<ListToolsResult>> lister = cursor -> listings.incrementAndGet() == 1 ? slowPage.asMono()
@@ -69,7 +69,7 @@ class ToolCatalogTests {
 
 	@Test
 	void finishedListingIsKept() {
-		ToolCatalog catalog = new ToolCatalog(McpClient.DEFAULT_MAX_LIST_PAGES);
+		ToolCatalog catalog = new ToolCatalog(true, McpClient.DEFAULT_MAX_LIST_PAGES);
 		AtomicInteger listings = new AtomicInteger();
 		Function<String, Mono<ListToolsResult>> lister = cursor -> {
 			listings.incrementAndGet();

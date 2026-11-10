@@ -13,7 +13,7 @@ import org.jspecify.annotations.Nullable;
  *
  * @author Dariusz Jędrzejczyk
  */
-public class McpInvalidResultException extends RuntimeException {
+public class McpInvalidResultException extends McpClientException {
 
 	private final String method;
 

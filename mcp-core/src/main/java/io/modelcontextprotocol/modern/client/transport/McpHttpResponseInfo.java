@@ -20,10 +20,19 @@ public final class McpHttpResponseInfo {
 
 	private final HttpHeaders headers;
 
-	McpHttpResponseInfo(int statusCode, HttpHeaders headers) {
-		Assert.notNull(headers, "headers must not be null");
+	private McpHttpResponseInfo(int statusCode, HttpHeaders headers) {
 		this.statusCode = statusCode;
 		this.headers = headers;
+	}
+
+	/**
+	 * The status and headers of a response.
+	 * @param statusCode the HTTP status code
+	 * @param headers the response headers
+	 */
+	public static McpHttpResponseInfo of(int statusCode, HttpHeaders headers) {
+		Assert.notNull(headers, "headers must not be null");
+		return new McpHttpResponseInfo(statusCode, headers);
 	}
 
 	/**

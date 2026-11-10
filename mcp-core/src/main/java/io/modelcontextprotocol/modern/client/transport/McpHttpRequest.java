@@ -6,6 +6,7 @@ package io.modelcontextprotocol.modern.client.transport;
 
 import java.net.URI;
 import java.net.http.HttpHeaders;
+import java.util.Map;
 
 import io.modelcontextprotocol.util.Assert;
 import org.jspecify.annotations.Nullable;
@@ -29,19 +30,27 @@ public final class McpHttpRequest {
 
 	private final String body;
 
-	McpHttpRequest(URI uri, String httpMethod, HttpHeaders headers, String mcpMethod, @Nullable String mcpName,
-			String body) {
+	private McpHttpRequest(Builder builder) {
+		this.uri = builder.uri;
+		this.httpMethod = builder.httpMethod;
+		this.headers = builder.headers;
+		this.mcpMethod = builder.mcpMethod;
+		this.mcpName = builder.mcpName;
+		this.body = builder.body;
+	}
+
+	/**
+	 * A builder of the HTTP request that carries {@code request}: a {@code POST} to
+	 * {@code uri} with {@code body}, and no headers until they are set.
+	 * @param uri the server's MCP endpoint
+	 * @param request the MCP request, which gives the MCP method and name
+	 * @param body the JSON-RPC request as sent
+	 */
+	public static Builder builder(URI uri, McpTransportRequest request, String body) {
 		Assert.notNull(uri, "uri must not be null");
-		Assert.hasText(httpMethod, "httpMethod must not be empty");
-		Assert.notNull(headers, "headers must not be null");
-		Assert.hasText(mcpMethod, "mcpMethod must not be empty");
+		Assert.notNull(request, "request must not be null");
 		Assert.notNull(body, "body must not be null");
-		this.uri = uri;
-		this.httpMethod = httpMethod;
-		this.headers = headers;
-		this.mcpMethod = mcpMethod;
-		this.mcpName = mcpName;
-		this.body = body;
+		return new Builder(uri, request.method(), request.name(), body);
 	}
 
 	/**
@@ -93,6 +102,57 @@ public final class McpHttpRequest {
 		// The body may hold user data and the headers credentials.
 		return "McpHttpRequest[" + this.httpMethod + " " + this.uri + ", " + this.mcpMethod
 				+ (this.mcpName != null ? " " + this.mcpName : "") + "]";
+	}
+
+	/**
+	 * Builds a {@link McpHttpRequest}.
+	 */
+	public static final class Builder {
+
+		private final URI uri;
+
+		private final String mcpMethod;
+
+		private final @Nullable String mcpName;
+
+		private final String body;
+
+		private String httpMethod = "POST";
+
+		private HttpHeaders headers = HttpHeaders.of(Map.of(), (name, value) -> true);
+
+		private Builder(URI uri, String mcpMethod, @Nullable String mcpName, String body) {
+			this.uri = uri;
+			this.mcpMethod = mcpMethod;
+			this.mcpName = mcpName;
+			this.body = body;
+		}
+
+		/**
+		 * Sets the HTTP method; {@code POST} by default.
+		 */
+		public Builder httpMethod(String httpMethod) {
+			Assert.hasText(httpMethod, "httpMethod must not be empty");
+			this.httpMethod = httpMethod;
+			return this;
+		}
+
+		/**
+		 * Sets the request headers; see {@link McpHttpRequest#headers()}.
+		 */
+		public Builder headers(HttpHeaders headers) {
+			Assert.notNull(headers, "headers must not be null");
+			this.headers = headers;
+			return this;
+		}
+
+		/**
+		 * Builds the request.
+		 */
+		public McpHttpRequest build() {
+			return new McpHttpRequest(this);
+		}
+
 	}
 
 }

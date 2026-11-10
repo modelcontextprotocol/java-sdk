@@ -9,7 +9,7 @@ package io.modelcontextprotocol.modern.client;
  *
  * @author Dariusz Jędrzejczyk
  */
-public class McpInputRoundsExceededException extends RuntimeException {
+public class McpInputRoundsExceededException extends McpClientException {
 
 	private final String method;
 

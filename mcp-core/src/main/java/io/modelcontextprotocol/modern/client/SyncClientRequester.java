@@ -117,6 +117,23 @@ final class SyncClientRequester {
 	}
 
 	/**
+	 * The client's kept listing of all tools, or {@code null} if there is none or it is
+	 * stale.
+	 */
+	@Nullable ListToolsResult keptTools() {
+		return this.requests.keptTools();
+	}
+
+	/**
+	 * Lists all tools and keeps the result.
+	 * @param lister lists the page at a cursor as the server sent it, {@code null} for
+	 * the first page
+	 */
+	Mono<ListToolsResult> listAllTools(Function<String, Mono<ListToolsResult>> lister) {
+		return this.requests.listAllTools(lister);
+	}
+
+	/**
 	 * A sync call's progress listener as the listener of its requests. It runs on a
 	 * thread that may block, and the request reads its next message once it returns.
 	 */

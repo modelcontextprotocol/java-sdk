@@ -6,6 +6,7 @@ package io.modelcontextprotocol.modern.client;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import io.modelcontextprotocol.modern.McpSchema;
@@ -102,6 +103,23 @@ final class AsyncClientRequester {
 	 */
 	ListToolsResult listedTools(ListToolsResult page) {
 		return this.requests.listedTools(page);
+	}
+
+	/**
+	 * The client's kept listing of all tools, or {@code null} if there is none or it is
+	 * stale.
+	 */
+	@Nullable ListToolsResult keptTools() {
+		return this.requests.keptTools();
+	}
+
+	/**
+	 * Lists all tools and keeps the result.
+	 * @param lister lists the page at a cursor as the server sent it, {@code null} for
+	 * the first page
+	 */
+	Mono<ListToolsResult> listAllTools(Function<String, Mono<ListToolsResult>> lister) {
+		return this.requests.listAllTools(lister);
 	}
 
 	private <R extends Result> Mono<R> run(Supplier<MultiRoundTripRequest<R>> requestSupplier,

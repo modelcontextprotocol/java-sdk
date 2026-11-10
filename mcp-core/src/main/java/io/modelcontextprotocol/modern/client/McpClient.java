@@ -178,7 +178,7 @@ public final class McpClient {
 			JsonRpcRequestSender sender = new JsonRpcRequestSender(this.transport, mapper, this.clientInfo,
 					this.protocolVersions);
 			return new ClientRequestFactory(sender,
-					this.transport.mirrorsToolParams() ? new ToolCatalog(this.maxListPages) : null, this.maxInputRounds,
+					new ToolCatalog(this.transport.mirrorsToolParams(), this.maxListPages), this.maxInputRounds,
 					this.maxListPages);
 		}
 
@@ -263,8 +263,9 @@ public final class McpClient {
 		/**
 		 * Supplies the {@link McpTransportContext} of a call, for example the identity of
 		 * the current user. It is called on the calling thread when a call starts or a
-		 * listen stream opens, so it may read thread-locals, and its result is used for
-		 * every request of that call, also on other threads. Defaults to
+		 * listen stream opens, so it may read thread-locals. Its result is the only
+		 * identity the transport's hooks receive, for every request and retry of that
+		 * call, which may run on other threads. Defaults to
 		 * {@link McpTransportContext#EMPTY}.
 		 */
 		public SyncBuilder transportContextProvider(Supplier<McpTransportContext> provider) {

@@ -136,8 +136,9 @@ public final class HttpClientMcpTransport implements McpClientTransport {
 	private Flux<JSONRPCMessage> doExchange(McpTransportRequest request, String body, McpTransportContext context,
 			int retries) {
 		McpHttpRequestHeaders headers = McpHttpRequestHeaders.forRequest(request);
-		McpHttpRequest toCustomize = new McpHttpRequest(this.endpoint, "POST", headers.asHttpHeaders(),
-				request.method(), request.name(), body);
+		McpHttpRequest toCustomize = McpHttpRequest.builder(this.endpoint, request, body)
+			.headers(headers.asHttpHeaders())
+			.build();
 
 		return Flux.fromIterable(this.requestCustomizers)
 			.concatMap(customizer -> customizer.customize(toCustomize, headers, context))
@@ -148,8 +149,9 @@ public final class HttpClientMcpTransport implements McpClientTransport {
 				return builder.build();
 			}))
 			.flatMapMany(httpRequest -> {
-				McpHttpRequest sent = new McpHttpRequest(this.endpoint, "POST", httpRequest.headers(), request.method(),
-						request.name(), body);
+				McpHttpRequest sent = McpHttpRequest.builder(this.endpoint, request, body)
+					.headers(httpRequest.headers())
+					.build();
 				Flux<JSONRPCMessage> answer = ResponseBodyHandlers.sendAsync(this.httpClient, httpRequest)
 					.onErrorMap(ex -> errorWhileSending(request.method(), ex))
 					.flatMapMany(response -> {
@@ -178,7 +180,7 @@ public final class HttpClientMcpTransport implements McpClientTransport {
 		if (handler == null || retries >= handler.maxRetries()) {
 			return Flux.error(failure);
 		}
-		McpHttpResponseInfo info = new McpHttpResponseInfo(response.statusCode(), response.headers());
+		McpHttpResponseInfo info = McpHttpResponseInfo.of(response.statusCode(), response.headers());
 		return handler.handle(sent, info, context).defaultIfEmpty(false).flatMapMany(retry -> {
 			if (retry) {
 				logger.debug("Retrying {} after HTTP {}", request.method(), response.statusCode());

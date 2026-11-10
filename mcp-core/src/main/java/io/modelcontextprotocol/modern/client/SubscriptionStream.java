@@ -30,9 +30,9 @@ final class SubscriptionStream {
 	private final ClientCapabilities capabilities;
 
 	// Present exactly when the transport mirrors tool params into headers.
-	@Nullable private final ToolCatalog catalog;
+	private final ToolCatalog catalog;
 
-	SubscriptionStream(JsonRpcRequestSender sender, ClientCapabilities capabilities, @Nullable ToolCatalog catalog) {
+	SubscriptionStream(JsonRpcRequestSender sender, ClientCapabilities capabilities, ToolCatalog catalog) {
 		this.sender = sender;
 		this.capabilities = capabilities;
 		this.catalog = catalog;
@@ -156,9 +156,7 @@ final class SubscriptionStream {
 		}
 
 		private void invalidateCatalog() {
-			if (SubscriptionStream.this.catalog != null) {
-				SubscriptionStream.this.catalog.invalidate();
-			}
+			SubscriptionStream.this.catalog.invalidate();
 		}
 
 	}
