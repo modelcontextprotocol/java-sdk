@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.modern.server;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,7 @@ import java.util.stream.Stream;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
+import io.modelcontextprotocol.modern.JsonRpc.JSONRPCMessage;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCNotification;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
@@ -32,6 +34,7 @@ import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -281,6 +284,54 @@ class SubscriptionsFeatureTests {
 		McpServer server = resourcesServer(true, null);
 
 		assertThat(resourcesCapability(server)).containsEntry("subscribe", false);
+	}
+
+	@Test
+	void changeBroadcastAsSoonAsAckIsDeliveredReachesTheStream() {
+		McpChangeFeed feed = new McpChangeFeed();
+		McpServer server = toolsServer(feed);
+
+		// Trigger a change from the subscribing thread the change is broadcast right when
+		// ack is received.
+		// This simulates high CPU loads in test harnesses, were writing the ack might
+		// happen
+		// sooner than any subsequent event subscription.
+		Flux<JSONRPCMessage> messages = listen(server, 1).messages().doOnNext(msg -> {
+			if (msg instanceof JSONRPCNotification notification
+					&& notification.method().equals(McpSchema.METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED)) {
+				feed.broadcast(new ServerChange.ToolsListChanged());
+			}
+		});
+
+		// A lost change never arrives: time out instead of hanging.
+		StepVerifier.create(messages)
+			.expectNextMatches(msg -> ((JSONRPCNotification) msg).method()
+				.equals(McpSchema.METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED))
+			.expectNextMatches(msg -> ((JSONRPCNotification) msg).method()
+				.equals(McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED))
+			.then(server::closeGracefully)
+			.expectNextMatches(msg -> msg instanceof JSONRPCResponse)
+			.expectComplete()
+			.verify(Duration.ofSeconds(5));
+	}
+
+	@Test
+	void changeDeliveredBeforeAckIsSentFollowsTheAck() {
+		// Delivers a change as soon as the listen stream subscribes, before the ack is
+		// out.
+		McpChangePublisher publisher = () -> Flux.<ServerChange>just(new ServerChange.ToolsListChanged())
+			.concatWith(Flux.never());
+		McpServer server = toolsServer(publisher);
+
+		StepVerifier.create(listen(server, 1).messages())
+			.expectNextMatches(msg -> ((JSONRPCNotification) msg).method()
+				.equals(McpSchema.METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED))
+			.expectNextMatches(msg -> ((JSONRPCNotification) msg).method()
+				.equals(McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED))
+			.then(server::closeGracefully)
+			.expectNextMatches(msg -> msg instanceof JSONRPCResponse)
+			.expectComplete()
+			.verify(Duration.ofSeconds(5));
 	}
 
 	private static McpServer resourcesServer(boolean supportsSubscribe, McpChangePublisher publisher) {
