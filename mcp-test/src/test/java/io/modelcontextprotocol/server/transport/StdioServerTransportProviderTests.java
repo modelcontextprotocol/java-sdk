@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
@@ -30,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 
@@ -101,6 +103,48 @@ class StdioServerTransportProviderTests {
 
 		// Verify session was created with a transport
 		assertThat(testErr.toString()).doesNotContain("Error");
+	}
+
+	/**
+	 * Regression test for https://github.com/modelcontextprotocol/java-sdk/issues/303.
+	 *
+	 * {@code StdioMcpSessionTransport#sendMessage} gates the actual write on
+	 * {@code inboundReady} and {@code outboundReady} (two {@code Sinks.One<Void>}) both
+	 * completing before it proceeds. This mirrors that exact combinator: {@code
+	 * Mono.zip} completes as soon as the FIRST of two value-less {@code Mono<Void>}
+	 * sources completes -- it never actually waits for the second one -- silently
+	 * breaking the readiness barrier. {@code Mono.when} is the correct operator for
+	 * waiting on multiple completion-only signals and does wait for both.
+	 */
+	@Test
+	void monoZipDoesNotWaitForBothVoidSignals_monoWhenDoes() {
+		Sinks.One<Void> inboundReady = Sinks.one();
+		Sinks.One<Void> outboundReady = Sinks.one();
+		AtomicBoolean zipProceeded = new AtomicBoolean(false);
+
+		Mono.zip(inboundReady.asMono(), outboundReady.asMono())
+			.then(Mono.fromRunnable(() -> zipProceeded.set(true)))
+			.subscribe();
+
+		// Only outboundReady has fired; inboundReady is still pending.
+		outboundReady.tryEmitValue(null);
+
+		assertThat(zipProceeded).as("Mono.zip incorrectly proceeds after only ONE of the two signals fires").isTrue();
+
+		Sinks.One<Void> inboundReady2 = Sinks.one();
+		Sinks.One<Void> outboundReady2 = Sinks.one();
+		AtomicBoolean whenProceeded = new AtomicBoolean(false);
+
+		Mono.when(inboundReady2.asMono(), outboundReady2.asMono())
+			.then(Mono.fromRunnable(() -> whenProceeded.set(true)))
+			.subscribe();
+
+		// Only outboundReady2 has fired; inboundReady2 is still pending.
+		outboundReady2.tryEmitValue(null);
+		assertThat(whenProceeded).as("Mono.when must not proceed until BOTH signals are ready").isFalse();
+
+		inboundReady2.tryEmitValue(null);
+		assertThat(whenProceeded).as("Mono.when must proceed once BOTH signals are ready").isTrue();
 	}
 
 	@Test
