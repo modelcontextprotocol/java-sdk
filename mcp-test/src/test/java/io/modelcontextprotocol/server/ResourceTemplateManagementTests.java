@@ -6,14 +6,23 @@ package io.modelcontextprotocol.server;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.MockMcpServerTransport;
 import io.modelcontextprotocol.MockMcpServerTransportProvider;
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.CompleteRequest;
+import io.modelcontextprotocol.spec.McpSchema.CompleteResult;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
 import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
+import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.spec.McpStatelessServerTransport;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,6 +65,93 @@ public class ResourceTemplateManagementTests {
 	// ---------------------------------------
 	// Async Resource Template Tests
 	// ---------------------------------------
+
+	@Test
+	void testCompletionUsesTheReferencedResourceTemplate() {
+		// The referenced template also matches the generic one, which is checked first
+		String itemTemplate = "test://items/{itemId}";
+		String genericTemplate = "test://{category}/{id}";
+		McpServerFeatures.AsyncResourceTemplateSpecification item = new McpServerFeatures.AsyncResourceTemplateSpecification(
+				ResourceTemplate.builder(itemTemplate, "item").build(),
+				(exchange, req) -> Mono.just(ReadResourceResult.builder(List.of()).build()));
+		McpServerFeatures.AsyncResourceTemplateSpecification generic = new McpServerFeatures.AsyncResourceTemplateSpecification(
+				ResourceTemplate.builder(genericTemplate, "generic").build(),
+				(exchange, req) -> Mono.just(ReadResourceResult.builder(List.of()).build()));
+		ResourceReference itemReference = new ResourceReference(itemTemplate);
+
+		mcpAsyncServer = McpServer.async(mockTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(false, false).completions().build())
+			.resourceTemplates(generic, item)
+			.completions(new McpServerFeatures.AsyncCompletionSpecification(itemReference, (exchange,
+					req) -> Mono.just(new CompleteResult(
+							new CompleteResult.CompleteCompletion(List.of(req.argument().value() + "1"), 1, false)))))
+			.build();
+
+		MockMcpServerTransport transport = mockTransportProvider.getTransport();
+		mockTransportProvider.simulateIncomingMessage(new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "init",
+				McpSchema.InitializeRequest
+					.builder(ProtocolVersions.MCP_2025_11_25, McpSchema.ClientCapabilities.builder().build(),
+							McpSchema.Implementation.builder("test-client", "1.0.0").build())
+					.build()));
+		mockTransportProvider
+			.simulateIncomingMessage(new McpSchema.JSONRPCNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED));
+		mockTransportProvider.simulateIncomingMessage(new McpSchema.JSONRPCRequest(McpSchema.METHOD_COMPLETION_COMPLETE,
+				"complete",
+				CompleteRequest.builder(itemReference, new CompleteRequest.CompleteArgument("itemId", "4")).build()));
+
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) transport.getLastSentMessage();
+		assertThat(response.error()).isNull();
+		CompleteResult result = transport.unmarshalFrom(response.result(), new TypeRef<CompleteResult>() {
+		});
+		assertThat(result.completion().values()).containsExactly("41");
+	}
+
+	@Test
+	void testStatelessCompletionUsesTheReferencedResourceTemplate() {
+		String itemTemplate = "test://items/{itemId}";
+		String genericTemplate = "test://{category}/{id}";
+		ResourceReference itemReference = new ResourceReference(itemTemplate);
+		AtomicReference<McpStatelessServerHandler> handler = new AtomicReference<>();
+		McpStatelessServerTransport transport = new McpStatelessServerTransport() {
+			@Override
+			public void setMcpHandler(McpStatelessServerHandler mcpHandler) {
+				handler.set(mcpHandler);
+			}
+
+			@Override
+			public Mono<Void> closeGracefully() {
+				return Mono.empty();
+			}
+		};
+
+		McpStatelessAsyncServer server = McpServer.async(transport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(false, false).completions().build())
+			.resourceTemplates(
+					new McpStatelessServerFeatures.AsyncResourceTemplateSpecification(
+							ResourceTemplate.builder(genericTemplate, "generic").build(),
+							(context, req) -> Mono.just(ReadResourceResult.builder(List.of()).build())),
+					new McpStatelessServerFeatures.AsyncResourceTemplateSpecification(
+							ResourceTemplate.builder(itemTemplate, "item").build(),
+							(context, req) -> Mono.just(ReadResourceResult.builder(List.of()).build())))
+			.completions(new McpStatelessServerFeatures.AsyncCompletionSpecification(itemReference, (context,
+					req) -> Mono.just(new CompleteResult(
+							new CompleteResult.CompleteCompletion(List.of(req.argument().value() + "1"), 1, false)))))
+			.build();
+
+		McpSchema.JSONRPCResponse response = handler.get()
+			.handleRequest(McpTransportContext.EMPTY,
+					new McpSchema.JSONRPCRequest(McpSchema.METHOD_COMPLETION_COMPLETE, "complete",
+							CompleteRequest.builder(itemReference, new CompleteRequest.CompleteArgument("itemId", "4"))
+								.build()))
+			.block(Duration.ofSeconds(10));
+
+		assertThat(response.error()).isNull();
+		CompleteResult result = McpJsonDefaults.getMapper().convertValue(response.result(), CompleteResult.class);
+		assertThat(result.completion().values()).containsExactly("41");
+		server.closeGracefully().block(Duration.ofSeconds(10));
+	}
 
 	@Test
 	void testAddResourceTemplate() {
