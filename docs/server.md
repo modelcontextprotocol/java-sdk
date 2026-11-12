@@ -26,7 +26,7 @@ The MCP Server is a foundational component in the Model Context Protocol (MCP) a
 
 !!! note "2026-07-28 specification"
     This page covers the classic server, which implements the 2025-11-25 specification and earlier revisions.
-    A stateless server for the 2026-07-28 revision is available as a preview; see
+    A stateless server for the 2026-07-28 revision is also available; see
     [MCP Server (2026-07-28)](server-modern.md).
 
 The server supports both synchronous and asynchronous APIs, allowing for flexible integration in different application contexts.

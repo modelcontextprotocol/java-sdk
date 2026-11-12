@@ -5,11 +5,11 @@ description: Build a stateless MCP server for the 2026-07-28 specification revis
 
 # MCP Server (2026-07-28)
 
-!!! warning "Preview"
-    The modern server is a **preview** in 2.2.0. Its API, in the `io.modelcontextprotocol.modern` packages,
-    may change in minor releases until 3.0. There is no modern client yet, and
-    [some parts of the revision](#not-yet-supported) are not implemented. For production servers that
-    talk to today's clients, use the [classic server](server.md).
+!!! note
+    The modern server is available since 2.2.0. Its API, in the `io.modelcontextprotocol.modern` packages,
+    may change in minor releases until 3.0, and [some parts of the revision](#not-yet-supported) are not
+    implemented. For production servers that talk to today's clients, use the [classic server](server.md).
+    To call a modern server from Java, see the [modern client](client-modern.md).
 
 ## Overview
 
@@ -44,8 +44,6 @@ server is built around that:
 | Primitives | Registered specifications | Repositories you implement |
 | Server-to-client requests | Sampling, elicitation, roots, ping | Replaced by `InputRequiredResult` |
 | Logging | Supported | Not supported (deprecated by the revision) |
-| Status | Stable | Preview |
-
 By default the modern server only accepts the 2026-07-28 protocol version; change the set with
 `supportedVersions(...)` on the builder. A request declaring another version gets an
 `Unsupported protocol version` error listing the versions the server supports. Clients that start with an
@@ -230,6 +228,18 @@ provides one feature per primitive, each backed by a **repository** you implemen
 | `ToolsFeature` | `tools/list`, `tools/call` | `McpSyncToolRepository` | `McpAsyncToolRepository` |
 | `ResourcesFeature` | `resources/list`, `resources/templates/list`, `resources/read` | `McpSyncResourceRepository` | `McpAsyncResourceRepository` |
 | `PromptsFeature` | `prompts/list`, `prompts/get` | `McpSyncPromptRepository` | `McpAsyncPromptRepository` |
+
+Each request passes from the transport to the server, which hands it to the feature that serves its method.
+The feature calls your repository:
+
+```mermaid
+flowchart LR
+    C["MCP client"] --> T["Transport<br/>Servlet or STDIO"]
+    T --> S["McpServer<br/>dispatches by method"]
+    S --> TF["ToolsFeature"] --> TR["Your tool repository"]
+    S --> RF["ResourcesFeature"] --> RR["Your resource repository"]
+    S --> PF["PromptsFeature"] --> PR["Your prompt repository"]
+```
 
 Create a feature with `ofSync(repository)` or `ofAsync(repository)`. Register only the features you need; the
 server advertises a capability only when its feature is registered. `completion/complete` has no feature of its
@@ -474,6 +484,28 @@ The 2026-07-28 revision has no server-to-client requests. Instead, a `tools/call
 (elicitation, sampling, roots), each under a key you choose. The client fulfils them and retries the original
 request with the answers in `inputResponses`, keyed the same way.
 
+```mermaid
+sequenceDiagram
+    participant Client as MCP client
+    participant Server as McpServer
+    participant Handler as Your handler
+
+    Client->>Server: tools/call
+    Server->>Handler: request without inputResponses
+    Handler-->>Server: InputRequiredResult (input requests, requestState)
+    Note over Server: seals requestState
+    Server-->>Client: input_required
+    Note over Client: asks the user
+    Client->>Server: tools/call with inputResponses and requestState
+    Note over Server: opens requestState
+    Server->>Handler: request with inputResponses and requestState
+    Handler-->>Server: CallToolResult
+    Server-->>Client: complete result
+```
+
+The handler runs once per round and keeps nothing in memory between rounds. Whatever it needs to remember
+travels in `requestState` (see [Carrying State Across Rounds](#carrying-state-across-rounds)).
+
 ```java
 (ctx, request) -> {
     ElicitResult answer = InputResponses.get(
@@ -689,7 +721,6 @@ record TaskChanged(String taskId) implements ServerChange {
 
 ## Not Yet Supported
 
-- A modern client. Use the conformance suite or another SDK's client to exercise the server.
 - Tasks.
 - Logging, which the 2026-07-28 revision deprecates. The modern server never sends log messages.
 - Spring WebMVC and WebFlux transports. Spring AI's transports target the classic server.
