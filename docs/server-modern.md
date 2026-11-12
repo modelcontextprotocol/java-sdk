@@ -476,9 +476,9 @@ request with the answers in `inputResponses`, keyed the same way.
 
 ```java
 (ctx, request) -> {
-    Optional<ElicitResponse> answer = InputResponses.get(
-            request.inputResponses(), "user_name", ElicitResponse.class, jsonMapper);
-    if (answer.isEmpty() || !"accept".equals(answer.get().action())) {
+    ElicitResult answer = InputResponses.get(
+            request.inputResponses(), "user_name", ElicitResult.class, jsonMapper);
+    if (answer == null || answer.action() != ElicitResult.Action.ACCEPT) {
         return McpSyncResponse.result(InputRequiredResult.builder()
             .elicit("user_name", ElicitFormRequest.builder("What is your name?", Map.of(
                     "type", "object",
@@ -488,19 +488,15 @@ request with the answers in `inputResponses`, keyed the same way.
             .build());
     }
     return McpSyncResponse.result(CallToolResult.builder()
-        .addContent(TextContent.builder("Hello, " + answer.get().content().get("name") + "!").build())
+        .addContent(TextContent.builder("Hello, " + answer.content().get("name") + "!").build())
         .build());
-}
-
-// Your own type for the shape of an elicitation response
-@JsonIgnoreProperties(ignoreUnknown = true)
-record ElicitResponse(String action, Map<String, Object> content) {
 }
 ```
 
 `InputRequiredResult.builder()` offers `elicit(key, ElicitFormRequest)`, `elicitUrl(key, message, url)`,
 `createMessage(key, CreateMessageRequest)` and `listRoots(key)`. `InputResponses.get(...)` converts a response
-to a type of your choice and answers malformed responses with an invalid-params error.
+to a type of your choice, such as `ElicitResult`, `CreateMessageResult` or `ListRootsResult`; it returns `null`
+when there is no response under the key and answers malformed responses with an invalid-params error.
 
 A handler may only request input the client declared it can provide. Requesting anything else is a server bug
 and is answered with an internal error. Either check `ctx.clientCapabilities()` before asking, or declare the
@@ -570,10 +566,10 @@ changes.broadcast(new ServerChange.ToolsListChanged());
 changes.broadcast(new ServerChange.ResourceUpdated("file:///config.json"));
 ```
 
-The change types are `ToolsListChanged`, `PromptsListChanged`, `ResourcesListChanged` and
-`ResourceUpdated(uri)`. Each is forwarded only if the matching feature is registered; `ResourceUpdated` also
-requires the resource repository's `supportsSubscribe()` to return `true`. Changes broadcast while no client is
-listening are dropped.
+The core change types are `ToolsListChanged`, `PromptsListChanged`, `ResourcesListChanged` and
+`ResourceUpdated(uri)`; a [custom feature](#custom-features) may define its own. Each is forwarded only if the
+matching feature is registered; `ResourceUpdated` also requires the resource repository's
+`supportsSubscribe()` to return `true`. Changes broadcast while no client is listening are dropped.
 
 `McpChangeFeed` only reaches listeners connected to the same instance. With several instances, implement
 `McpChangePublisher` over a shared message bus so that every instance sees every change.
@@ -649,6 +645,38 @@ Methods listed in `inputRequiredMethods()` may answer with an `InputRequiredResu
 and verifies their `requestState` before calling the handler, which receives the original, unsealed value.
 For methods **not** listed, the server does not touch `requestState`: a handler that reads it gets whatever the
 client sent, unverified. List every method that relies on `requestState`.
+
+A feature can also add its own fields to the `subscriptions/listen` filter, as an extension such as Tasks adds
+`taskIds`. The filter (`McpSchema.SubscriptionFilter`) is an open JSON object, so such fields reach the server
+as the client sent them. `honouredSubscriptions(ctx, requested)` returns the part of them the feature agrees to
+honour: the server acknowledges it next to the core fields, and leaves out any field no feature honours. To
+reject the request instead, for example because the client didn't declare the extension, throw an
+`McpException`; it is the answer to the listen request, and no stream opens.
+
+The feature then publishes its changes through the server's `McpChangePublisher` as its own `ServerChange`. A
+change names its notification method and params and decides which honoured filters cover it; the server adds the
+stream's `io.modelcontextprotocol/subscriptionId` to the notification's `_meta`:
+
+```java
+record TaskChanged(String taskId) implements ServerChange {
+
+    @Override
+    public String method() {
+        return "notifications/tasks";
+    }
+
+    @Override
+    public Object params() {
+        return Map.of("taskId", taskId);
+    }
+
+    @Override
+    public boolean isHonouredBy(SubscriptionFilter honoured) {
+        return honoured.get("taskIds") instanceof List<?> ids && ids.contains(taskId);
+    }
+
+}
+```
 
 ## Error Handling
 

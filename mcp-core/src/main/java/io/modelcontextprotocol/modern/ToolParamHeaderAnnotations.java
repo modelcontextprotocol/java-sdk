@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import io.modelcontextprotocol.modern.McpSchema.Tool;
@@ -30,6 +31,18 @@ public final class ToolParamHeaderAnnotations {
 
 	// RFC 9110 token: 1*tchar
 	private static final Pattern TOKEN = Pattern.compile("[!#$%&'*+\\-.^_`|~0-9A-Za-z]+");
+
+	// JSON Schema keywords whose value is a schema or an array of schemas
+	// (draft-07 and 2020-12), other than properties.
+	private static final Set<String> SUBSCHEMA_KEYWORDS = Set.of("items", "prefixItems", "additionalItems", "contains",
+			"unevaluatedItems", "additionalProperties", "unevaluatedProperties", "propertyNames", "not", "if", "then",
+			"else", "allOf", "anyOf", "oneOf");
+
+	// Keywords whose value maps names to schemas.
+	private static final Set<String> SCHEMA_MAP_KEYWORDS = Set.of("patternProperties", "dependentSchemas",
+			"dependencies", "$defs", "definitions");
+
+	private static final String UNREACHABLE = "not statically reachable from the schema root through properties";
 
 	private final List<Annotation> valid;
 
@@ -70,7 +83,8 @@ public final class ToolParamHeaderAnnotations {
 	 * @param name the value of the {@code x-mcp-header} keyword, which may not be a
 	 * string
 	 * @param path the {@code properties} keys leading from the schema root to the
-	 * argument
+	 * argument; for an annotation that isn't statically reachable, every key leading to
+	 * the annotated schema, keywords and array indexes included
 	 * @param problems why the annotation is invalid, in human-readable form, with
 	 * characters outside printable ASCII written as Unicode escapes
 	 */
@@ -112,10 +126,12 @@ public final class ToolParamHeaderAnnotations {
 	/**
 	 * Parses the {@code x-mcp-header} annotations of the tool's input schema.
 	 * <p>
-	 * Only chains of {@code properties} keys are followed from the schema root, so
-	 * annotations under {@code items}, {@code allOf}, {@code $ref} or any other keyword
-	 * are ignored. An annotation is invalid if:
+	 * Arguments are reached from the schema root through chains of {@code properties}
+	 * keys. An annotation is invalid if:
 	 * <ul>
+	 * <li>it isn't statically reachable that way: it is on the root schema, or under
+	 * {@code items}, {@code allOf}, {@code $defs} (where {@code $ref} targets live) or
+	 * any other keyword whose value is a schema;</li>
 	 * <li>its name is not a string, is empty, or isn't an RFC 9110 token;</li>
 	 * <li>its name equals another annotation's ignoring case, in which case both are
 	 * invalid;</li>
@@ -128,7 +144,7 @@ public final class ToolParamHeaderAnnotations {
 	 */
 	public static ToolParamHeaderAnnotations parse(Tool tool) {
 		List<Candidate> candidates = new ArrayList<>();
-		collect(tool.inputSchema(), List.of(), candidates);
+		collect(tool.inputSchema(), List.of(), List.of(), candidates);
 		flagCollisions(candidates);
 		List<Annotation> valid = new ArrayList<>();
 		List<InvalidAnnotation> invalid = new ArrayList<>();
@@ -170,22 +186,82 @@ public final class ToolParamHeaderAnnotations {
 		return this.invalid.isEmpty();
 	}
 
-	// Depth-first in schema order, following only properties keys.
-	private static void collect(Map<?, ?> schema, List<String> parent, List<Candidate> candidates) {
-		if (!(schema.get("properties") instanceof Map<?, ?> properties)) {
-			return;
+	// Depth-first in schema order: arguments through properties keys, then the
+	// unreachable annotations under the schema's other keywords.
+	// The pointer holds every key from the root, keywords included.
+	private static void collect(Map<?, ?> schema, List<String> parent, List<String> pointer,
+			List<Candidate> candidates) {
+		if (pointer.isEmpty() && schema.containsKey(KEYWORD)) {
+			candidates.add(unreachable(List.of(), schema));
 		}
-		for (Map.Entry<?, ?> entry : properties.entrySet()) {
-			if (!(entry.getKey() instanceof String key) || !(entry.getValue() instanceof Map<?, ?> property)) {
+		if (schema.get("properties") instanceof Map<?, ?> properties) {
+			for (Map.Entry<?, ?> entry : properties.entrySet()) {
+				if (!(entry.getKey() instanceof String key) || !(entry.getValue() instanceof Map<?, ?> property)) {
+					continue;
+				}
+				List<String> path = new ArrayList<>(parent);
+				path.add(key);
+				if (property.containsKey(KEYWORD)) {
+					candidates.add(candidate(List.copyOf(path), property));
+				}
+				collect(property, path, append(pointer, "properties", key), candidates);
+			}
+		}
+		collectUnreachable(schema, pointer, candidates);
+	}
+
+	// Every annotation in the subschemas of the schema's keywords other than
+	// properties, whose own properties are followed too.
+	private static void collectUnreachable(Map<?, ?> schema, List<String> location, List<Candidate> candidates) {
+		for (Map.Entry<?, ?> entry : schema.entrySet()) {
+			if (!(entry.getKey() instanceof String keyword)) {
 				continue;
 			}
-			List<String> path = new ArrayList<>(parent);
-			path.add(key);
-			if (property.containsKey(KEYWORD)) {
-				candidates.add(candidate(List.copyOf(path), property));
+			if (SUBSCHEMA_KEYWORDS.contains(keyword)) {
+				if (entry.getValue() instanceof List<?> list) {
+					for (int i = 0; i < list.size(); i++) {
+						unreachableIn(list.get(i), append(location, keyword, String.valueOf(i)), candidates);
+					}
+				}
+				else {
+					unreachableIn(entry.getValue(), append(location, keyword), candidates);
+				}
 			}
-			collect(property, path, candidates);
+			else if (SCHEMA_MAP_KEYWORDS.contains(keyword) && entry.getValue() instanceof Map<?, ?> schemas) {
+				for (Map.Entry<?, ?> named : schemas.entrySet()) {
+					unreachableIn(named.getValue(), append(location, keyword, String.valueOf(named.getKey())),
+							candidates);
+				}
+			}
 		}
+	}
+
+	private static void unreachableIn(Object value, List<String> location, List<Candidate> candidates) {
+		if (!(value instanceof Map<?, ?> schema)) {
+			return;
+		}
+		if (schema.containsKey(KEYWORD)) {
+			candidates.add(unreachable(location, schema));
+		}
+		if (schema.get("properties") instanceof Map<?, ?> properties) {
+			for (Map.Entry<?, ?> entry : properties.entrySet()) {
+				unreachableIn(entry.getValue(), append(location, "properties", String.valueOf(entry.getKey())),
+						candidates);
+			}
+		}
+		collectUnreachable(schema, location, candidates);
+	}
+
+	private static List<String> append(List<String> path, String... keys) {
+		List<String> appended = new ArrayList<>(path);
+		appended.addAll(List.of(keys));
+		return List.copyOf(appended);
+	}
+
+	private static Candidate unreachable(List<String> location, Map<?, ?> schema) {
+		Candidate candidate = candidate(location, schema);
+		candidate.problems().add(0, UNREACHABLE);
+		return candidate;
 	}
 
 	private static Candidate candidate(List<String> path, Map<?, ?> property) {

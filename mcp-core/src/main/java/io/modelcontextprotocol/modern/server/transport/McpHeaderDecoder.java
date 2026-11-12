@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import io.modelcontextprotocol.modern.McpHttp.Headers;
 import io.modelcontextprotocol.modern.server.McpParamHeaders;
 import io.modelcontextprotocol.server.transport.HeaderAccessor;
 import reactor.util.annotation.Nullable;
@@ -33,10 +34,6 @@ import reactor.util.annotation.Nullable;
  * @author Daniel Garnier-Moiroux
  */
 public final class McpHeaderDecoder {
-
-	private static final String BASE64_PREFIX = "=?base64?";
-
-	private static final String BASE64_SUFFIX = "?=";
 
 	private McpHeaderDecoder() {
 	}
@@ -55,9 +52,10 @@ public final class McpHeaderDecoder {
 	 */
 	@Nullable
 	public static String decodeValue(String raw) {
-		if (raw.length() >= BASE64_PREFIX.length() + BASE64_SUFFIX.length() && raw.startsWith(BASE64_PREFIX)
-				&& raw.endsWith(BASE64_SUFFIX)) {
-			String encoded = raw.substring(BASE64_PREFIX.length(), raw.length() - BASE64_SUFFIX.length());
+		if (raw.length() >= Headers.BASE64_VALUE_PREFIX.length() + Headers.BASE64_VALUE_SUFFIX.length()
+				&& raw.startsWith(Headers.BASE64_VALUE_PREFIX) && raw.endsWith(Headers.BASE64_VALUE_SUFFIX)) {
+			String encoded = raw.substring(Headers.BASE64_VALUE_PREFIX.length(),
+					raw.length() - Headers.BASE64_VALUE_SUFFIX.length());
 			byte[] bytes;
 			try {
 				bytes = Base64.getDecoder().decode(encoded);

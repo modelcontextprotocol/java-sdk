@@ -24,6 +24,7 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.modern.McpSchema;
+import io.modelcontextprotocol.modern.McpStdio;
 import io.modelcontextprotocol.modern.server.McpParamHeaders;
 import io.modelcontextprotocol.modern.server.McpRequestManager;
 import io.modelcontextprotocol.modern.server.McpTransportResponse;
@@ -48,8 +49,6 @@ import reactor.core.scheduler.Schedulers;
 public class StdioMcpTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(StdioMcpTransport.class);
-
-	private static final int DEFAULT_INPUT_MAX_SIZE = 16 * 1024 * 1024;
 
 	// Stdio has no headers, so Mcp-Param-* headers are never mirrored and the tools
 	// feature skips their validation.
@@ -90,7 +89,7 @@ public class StdioMcpTransport {
 
 	public StdioMcpTransport(McpRequestManager requestManager, McpJsonMapper jsonMapper, InputStream in,
 			OutputStream out) {
-		this(requestManager, jsonMapper, in, out, DEFAULT_INPUT_MAX_SIZE);
+		this(requestManager, jsonMapper, in, out, McpStdio.DEFAULT_INPUT_MAX_SIZE);
 	}
 
 	/**
@@ -159,7 +158,7 @@ public class StdioMcpTransport {
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(this.in, StandardCharsets.UTF_8))) {
 			String line;
 			// Checked after each read: a line that arrives once closing is dropped.
-			while ((line = readLine(reader)) != null && !this.closing.get()) {
+			while ((line = McpStdio.readLine(reader, this.inputMaxSize)) != null && !this.closing.get()) {
 				if (line.isBlank()) {
 					continue;
 				}
@@ -183,33 +182,6 @@ public class StdioMcpTransport {
 		finally {
 			this.closeGracefully().subscribe();
 		}
-	}
-
-	// BufferedReader#readLine buffers a line of any length; a peer that never sends a
-	// newline would exhaust the heap. Terminators are the same: \n, \r or \r\n. Peeking
-	// past a \r would block until the client's next message, so \r\n reads as a line
-	// followed by a blank one, which the read loop skips.
-	private String readLine(BufferedReader reader) throws IOException {
-		StringBuilder line = new StringBuilder();
-		boolean tooLong = false;
-		int c;
-		while ((c = reader.read()) != -1 && c != '\n' && c != '\r') {
-			if (tooLong) {
-				continue;
-			}
-			if (line.length() == this.inputMaxSize) {
-				tooLong = true;
-				line = new StringBuilder();
-				continue;
-			}
-			line.append((char) c);
-		}
-		if (tooLong) {
-			logger.warn("Dropping inbound message longer than {} characters", this.inputMaxSize);
-			// Blank, so the read loop skips it and keeps serving.
-			return "";
-		}
-		return c == -1 && line.isEmpty() ? null : line.toString();
 	}
 
 	private void handleLine(String line) {
@@ -249,7 +221,7 @@ public class StdioMcpTransport {
 			return;
 		}
 		Object requestId = params.get("requestId");
-		InFlight entry = this.inFlight.remove(keyOf(requestId));
+		InFlight entry = this.inFlight.remove(McpStdio.idKey(requestId));
 		if (entry != null) {
 			logger.debug("Request {} cancelled by the client: {}", requestId, params.get("reason"));
 			entry.cancelled().set(true);
@@ -258,7 +230,7 @@ public class StdioMcpTransport {
 	}
 
 	private void dispatch(JSONRPCRequest request) {
-		Object key = keyOf(request.id());
+		Object key = McpStdio.idKey(request.id());
 		// Registered before subscribing: a request that completes synchronously removes
 		// its own entry in doFinally, which must not run before the put.
 		InFlight entry = new InFlight(Disposables.swap(), new AtomicBoolean());
@@ -315,13 +287,6 @@ public class StdioMcpTransport {
 		return Flux.just(((McpTransportResponse.Error) response).response());
 	}
 
-	// Request ids are strings or integers, but a cancellation may reference one as any
-	// number: 1, 1L and 1.0 must find the same entry, while 1.5 and "1" stay distinct.
-	private static Object keyOf(Object id) {
-		return id instanceof Number number && number.doubleValue() == number.longValue() ? (Object) number.longValue()
-				: id;
-	}
-
 	private void emit(JSONRPCMessage message) {
 		emit(message, null);
 	}
@@ -346,12 +311,7 @@ public class StdioMcpTransport {
 
 	private void writeLine(JSONRPCMessage message) {
 		try {
-			// JSON escapes line breaks inside strings, so raw ones are only whitespace,
-			// e.g. from a pretty-printing mapper, and would split the message.
-			String json = this.jsonMapper.writeValueAsString(message).replace("\n", "").replace("\r", "");
-			// A single write, so nothing else writing to the stream can land between the
-			// message and its newline.
-			this.out.write((json + '\n').getBytes(StandardCharsets.UTF_8));
+			this.out.write(McpStdio.encodeLine(this.jsonMapper, message));
 			this.out.flush();
 		}
 		catch (IOException | RuntimeException e) {

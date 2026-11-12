@@ -12,6 +12,7 @@ import io.modelcontextprotocol.modern.McpSchema.CompleteResult;
 import io.modelcontextprotocol.modern.McpSchema.InputRequired;
 import io.modelcontextprotocol.modern.McpSchema.Result;
 import io.modelcontextprotocol.modern.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.modern.McpSchema.SubscriptionFilter;
 import reactor.core.publisher.Mono;
 
 /**
@@ -65,6 +66,20 @@ public interface McpFeature {
 	 */
 	default Mono<CompleteResult> complete(McpRequestContext ctx, CompleteRequest request) {
 		return Mono.error(new UnsupportedOperationException(getClass().getName() + " does not complete"));
+	}
+
+	/**
+	 * The part of a {@code subscriptions/listen} filter this feature agrees to honour:
+	 * fields it defines, such as an extension's, taken from {@code requested} as they are
+	 * or narrowed. The server acknowledges them next to the core fields it honours
+	 * itself, and the feature then publishes the matching {@code ServerChange}s. Default:
+	 * none.
+	 * @throws McpException to reject the request, for example because the client didn't
+	 * declare the extension that defines a requested field; it is answered with its error
+	 * and no stream opens
+	 */
+	default SubscriptionFilter honouredSubscriptions(McpRequestContext ctx, SubscriptionFilter requested) {
+		return SubscriptionFilter.EMPTY;
 	}
 
 }

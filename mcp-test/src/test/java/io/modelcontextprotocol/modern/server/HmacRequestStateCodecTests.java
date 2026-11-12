@@ -53,7 +53,7 @@ class HmacRequestStateCodecTests {
 		String sealed = codec.seal(ctx, "state");
 		String tampered = "x" + sealed.substring(1);
 
-		assertThat(codec.open(ctx, tampered)).isEmpty();
+		assertThat(codec.open(ctx, tampered)).isNull();
 	}
 
 	@Test
@@ -64,7 +64,7 @@ class HmacRequestStateCodecTests {
 		String sealed = codec.seal(ctx, "state");
 		String tampered = sealed.substring(0, sealed.length() - 1) + (sealed.endsWith("A") ? "B" : "A");
 
-		assertThat(codec.open(ctx, tampered)).isEmpty();
+		assertThat(codec.open(ctx, tampered)).isNull();
 	}
 
 	@Test
@@ -96,7 +96,7 @@ class HmacRequestStateCodecTests {
 		String sealed = codec.seal(ctx, "state");
 
 		now.set(start.plus(Duration.ofMinutes(2)));
-		assertThat(codec.open(ctx, sealed)).isEmpty();
+		assertThat(codec.open(ctx, sealed)).isNull();
 	}
 
 	@Test
@@ -111,7 +111,7 @@ class HmacRequestStateCodecTests {
 		McpTransportContext bob = McpTransportContext.create(Map.of("user", "bob"));
 		String sealed = codec.seal(ctx("tools/call", "echo", alice), "state");
 
-		assertThat(codec.open(ctx("tools/call", "echo", bob), sealed)).isEmpty();
+		assertThat(codec.open(ctx("tools/call", "echo", bob), sealed)).isNull();
 	}
 
 	@Test
@@ -120,7 +120,7 @@ class HmacRequestStateCodecTests {
 		HmacRequestStateCodec codec = codec(clock);
 		String sealed = codec.seal(ctx("tools/call", "echo", McpTransportContext.EMPTY), "state");
 
-		assertThat(codec.open(ctx("resources/read", "echo", McpTransportContext.EMPTY), sealed)).isEmpty();
+		assertThat(codec.open(ctx("resources/read", "echo", McpTransportContext.EMPTY), sealed)).isNull();
 	}
 
 	@Test
@@ -129,7 +129,7 @@ class HmacRequestStateCodecTests {
 		HmacRequestStateCodec codec = codec(clock);
 		String sealed = codec.seal(ctx("tools/call", "echo", McpTransportContext.EMPTY), "state");
 
-		assertThat(codec.open(ctx("tools/call", "other-tool", McpTransportContext.EMPTY), sealed)).isEmpty();
+		assertThat(codec.open(ctx("tools/call", "other-tool", McpTransportContext.EMPTY), sealed)).isNull();
 	}
 
 }

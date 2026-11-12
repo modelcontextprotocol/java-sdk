@@ -6,7 +6,9 @@ package io.modelcontextprotocol.modern;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -18,6 +20,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonValue;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
@@ -1358,33 +1361,101 @@ public final class McpSchema {
 
 	/**
 	 * One server-requested input, keyed by a server-assigned name inside
-	 * {@link InputRequiredResult#inputRequests()}. {@code params} is one of
-	 * {@link ElicitFormRequest}, {@link ElicitUrlRequest}, {@link CreateMessageRequest}
-	 * or a bare "list roots" marker (an empty object).
+	 * {@link InputRequiredResult#inputRequests()}, told apart by {@link #method()}. A
+	 * method this SDK doesn't know is read as an {@link UnknownInputRequest}.
+	 */
+	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "method",
+			visible = true, defaultImpl = UnknownInputRequest.class)
+	@JsonSubTypes({ @JsonSubTypes.Type(value = ElicitInputRequest.class, name = METHOD_ELICITATION_CREATE),
+			@JsonSubTypes.Type(value = CreateMessageInputRequest.class, name = METHOD_SAMPLING_CREATE_MESSAGE),
+			@JsonSubTypes.Type(value = ListRootsInputRequest.class, name = METHOD_ROOTS_LIST) })
+	public sealed interface InputRequest
+			permits ElicitInputRequest, CreateMessageInputRequest, ListRootsInputRequest, UnknownInputRequest {
+
+		@JsonProperty("method")
+		String method();
+
+		static InputRequest elicit(ElicitFormRequest request) {
+			return new ElicitInputRequest(request);
+		}
+
+		static InputRequest elicitUrl(String message, String url) {
+			return new ElicitInputRequest(new ElicitUrlRequest(message, url, null));
+		}
+
+		static InputRequest createMessage(CreateMessageRequest request) {
+			return new CreateMessageInputRequest(request);
+		}
+
+		static InputRequest listRoots() {
+			return new ListRootsInputRequest();
+		}
+
+	}
+
+	/**
+	 * An {@code elicitation/create} input request.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record InputRequest(@JsonProperty("method") String method, @JsonProperty("params") Object params) {
+	public record ElicitInputRequest(@JsonProperty("params") ElicitRequest params) implements InputRequest {
 
-		public InputRequest {
+		public ElicitInputRequest {
+			Assert.notNull(params, "params must not be null");
+		}
+
+		@Override
+		public String method() {
+			return METHOD_ELICITATION_CREATE;
+		}
+
+	}
+
+	/**
+	 * A {@code sampling/createMessage} input request.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CreateMessageInputRequest(
+			@JsonProperty("params") CreateMessageRequest params) implements InputRequest {
+
+		public CreateMessageInputRequest {
+			Assert.notNull(params, "params must not be null");
+		}
+
+		@Override
+		public String method() {
+			return METHOD_SAMPLING_CREATE_MESSAGE;
+		}
+
+	}
+
+	/**
+	 * A {@code roots/list} input request, which has no params.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ListRootsInputRequest() implements InputRequest {
+
+		@Override
+		public String method() {
+			return METHOD_ROOTS_LIST;
+		}
+
+	}
+
+	/**
+	 * An input request of a method this SDK doesn't know, with its params as received.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record UnknownInputRequest(@JsonProperty("method") String method,
+			@JsonProperty("params") Map<String, Object> params) implements InputRequest {
+
+		public UnknownInputRequest {
 			Assert.hasText(method, "method must not be empty");
 		}
 
-		public static InputRequest elicit(ElicitFormRequest request) {
-			return new InputRequest(McpSchema.METHOD_ELICITATION_CREATE, request);
-		}
-
-		public static InputRequest elicitUrl(String message, String url) {
-			return new InputRequest(McpSchema.METHOD_ELICITATION_CREATE, new ElicitUrlRequest(message, url, null));
-		}
-
-		public static InputRequest createMessage(CreateMessageRequest request) {
-			return new InputRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, request);
-		}
-
-		public static InputRequest listRoots() {
-			return new InputRequest(McpSchema.METHOD_ROOTS_LIST, Map.of());
-		}
 	}
 
 	/**
@@ -1397,7 +1468,7 @@ public final class McpSchema {
 	public record ElicitUrlRequest( // @formatter:off
 		@JsonProperty("message") String message,
 		@JsonProperty("url") String url,
-		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements ElicitRequest { // @formatter:on
 
 		public static final String MODE = "url";
 
@@ -1488,34 +1559,183 @@ public final class McpSchema {
 	// ---------------------------
 
 	/**
-	 * The set of change notifications a client opts into via
-	 * {@code subscriptions/listen}.
+	 * The notifications of a {@code subscriptions/listen} stream: on the request, those
+	 * the client opts in to; on the acknowledgment, the part the server agreed to honour.
+	 * <p>
+	 * The filter is an open JSON object. Besides the core fields, an extension may define
+	 * fields of its own, such as the Tasks extension's {@code taskIds}, which travel and
+	 * compare like the core ones. A field that is absent, or {@code null}, isn't
+	 * requested. Immutable.
 	 */
-	@JsonInclude(JsonInclude.Include.NON_ABSENT)
-	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record SubscriptionFilter( // @formatter:off
-		@JsonProperty("toolsListChanged") Boolean toolsListChanged,
-		@JsonProperty("promptsListChanged") Boolean promptsListChanged,
-		@JsonProperty("resourcesListChanged") Boolean resourcesListChanged,
-		@JsonProperty("resourceSubscriptions") List<String> resourceSubscriptions) { // @formatter:on
+	public static final class SubscriptionFilter {
 
-		public static final SubscriptionFilter EMPTY = new SubscriptionFilter(null, null, null, null);
+		/** Receive {@code notifications/tools/list_changed}; a boolean. */
+		public static final String TOOLS_LIST_CHANGED = "toolsListChanged";
+
+		/** Receive {@code notifications/prompts/list_changed}; a boolean. */
+		public static final String PROMPTS_LIST_CHANGED = "promptsListChanged";
+
+		/** Receive {@code notifications/resources/list_changed}; a boolean. */
+		public static final String RESOURCES_LIST_CHANGED = "resourcesListChanged";
+
+		/**
+		 * Receive {@code notifications/resources/updated} for these resource URIs; a list
+		 * of strings.
+		 */
+		public static final String RESOURCE_SUBSCRIPTIONS = "resourceSubscriptions";
+
+		public static final SubscriptionFilter EMPTY = new SubscriptionFilter(Map.of());
+
+		private final Map<String, Object> fields;
+
+		private SubscriptionFilter(Map<String, Object> fields) {
+			this.fields = fields;
+		}
+
+		/**
+		 * A filter with {@code fields}, keyed by their wire names, with JSON values
+		 * (booleans, numbers, strings, lists and maps). Fields whose value is
+		 * {@code null} are left out.
+		 */
+		@JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+		public static SubscriptionFilter of(Map<String, ?> fields) {
+			if (fields == null || fields.isEmpty()) {
+				return EMPTY;
+			}
+			Map<String, Object> copy = new LinkedHashMap<>();
+			fields.forEach((field, value) -> {
+				Assert.hasText(field, "field must not be empty");
+				if (value != null) {
+					copy.put(field, frozen(value));
+				}
+			});
+			return copy.isEmpty() ? EMPTY : new SubscriptionFilter(Collections.unmodifiableMap(copy));
+		}
+
+		/**
+		 * The fields, as they travel on the wire.
+		 */
+		@JsonValue
+		public Map<String, Object> fields() {
+			return this.fields;
+		}
+
+		/**
+		 * The value of {@code field}, or {@code null} if it isn't requested.
+		 */
+		public Object get(String field) {
+			return this.fields.get(field);
+		}
+
+		/**
+		 * This filter with {@code field} set to {@code value}, or without it when
+		 * {@code value} is {@code null}.
+		 */
+		public SubscriptionFilter with(String field, Object value) {
+			Assert.hasText(field, "field must not be empty");
+			Map<String, Object> copy = new LinkedHashMap<>(this.fields);
+			if (value == null) {
+				copy.remove(field);
+			}
+			else {
+				copy.put(field, value);
+			}
+			return of(copy);
+		}
+
+		public boolean isEmpty() {
+			return this.fields.isEmpty();
+		}
 
 		public boolean wantsToolsListChanged() {
-			return Boolean.TRUE.equals(this.toolsListChanged);
+			return Boolean.TRUE.equals(get(TOOLS_LIST_CHANGED));
 		}
 
 		public boolean wantsPromptsListChanged() {
-			return Boolean.TRUE.equals(this.promptsListChanged);
+			return Boolean.TRUE.equals(get(PROMPTS_LIST_CHANGED));
 		}
 
 		public boolean wantsResourcesListChanged() {
-			return Boolean.TRUE.equals(this.resourcesListChanged);
+			return Boolean.TRUE.equals(get(RESOURCES_LIST_CHANGED));
 		}
 
+		/**
+		 * The URIs of {@link #RESOURCE_SUBSCRIPTIONS}; empty when the field is absent or
+		 * isn't a list, and without elements that aren't strings.
+		 */
 		public List<String> resourceSubscriptionsOrEmpty() {
-			return this.resourceSubscriptions == null ? List.of() : this.resourceSubscriptions;
+			if (!(get(RESOURCE_SUBSCRIPTIONS) instanceof List<?> uris)) {
+				return List.of();
+			}
+			return uris.stream().filter(String.class::isInstance).map(String.class::cast).toList();
 		}
+
+		/**
+		 * The parts of this filter that {@code honoured} lacks, in the shape of the
+		 * filter: a flag set to {@code true} that {@code honoured} doesn't set to
+		 * {@code true}, the elements of a list that its list lacks, and any other value
+		 * it has differently. Empty when {@code honoured} covers the whole filter.
+		 */
+		public SubscriptionFilter missingFrom(SubscriptionFilter honoured) {
+			Assert.notNull(honoured, "honoured must not be null");
+			Map<String, Object> missing = new LinkedHashMap<>();
+			this.fields.forEach((field, value) -> {
+				Object agreed = honoured.get(field);
+				if (value instanceof Boolean flag) {
+					if (flag && !Boolean.TRUE.equals(agreed)) {
+						missing.put(field, true);
+					}
+				}
+				else if (value instanceof List<?> elements) {
+					List<?> agreedElements = agreed instanceof List<?> list ? list : List.of();
+					List<Object> lacking = elements.stream()
+						.filter(element -> !agreedElements.contains(element))
+						.map(Object.class::cast)
+						.toList();
+					if (!lacking.isEmpty()) {
+						missing.put(field, lacking);
+					}
+				}
+				else if (!value.equals(agreed)) {
+					missing.put(field, value);
+				}
+			});
+			return of(missing);
+		}
+
+		private static Object frozen(Object value) {
+			if (value instanceof Map<?, ?> map) {
+				Map<String, Object> copy = new LinkedHashMap<>();
+				map.forEach((key, nested) -> {
+					if (nested != null) {
+						copy.put(String.valueOf(key), frozen(nested));
+					}
+				});
+				return Collections.unmodifiableMap(copy);
+			}
+			if (value instanceof List<?> list) {
+				List<Object> copy = new ArrayList<>(list.size());
+				list.forEach(element -> copy.add(element == null ? null : frozen(element)));
+				return Collections.unmodifiableList(copy);
+			}
+			return value;
+		}
+
+		@Override
+		public boolean equals(Object other) {
+			return other instanceof SubscriptionFilter filter && this.fields.equals(filter.fields);
+		}
+
+		@Override
+		public int hashCode() {
+			return this.fields.hashCode();
+		}
+
+		@Override
+		public String toString() {
+			return "SubscriptionFilter" + this.fields;
+		}
+
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -2893,7 +3113,7 @@ public final class McpSchema {
 	public record ElicitFormRequest( // @formatter:off
 		@JsonProperty("message") String message,
 		@JsonProperty("requestedSchema") Map<String, Object> requestedSchema,
-		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements ElicitRequest { // @formatter:on
 
 		public static final String MODE = "form";
 
@@ -2908,9 +3128,13 @@ public final class McpSchema {
 		}
 
 		@JsonCreator
-		static ElicitFormRequest fromJson(@JsonProperty("message") String message,
+		static ElicitFormRequest fromJson(@JsonProperty("mode") String mode, @JsonProperty("message") String message,
 				@JsonProperty("requestedSchema") Map<String, Object> requestedSchema,
 				@JsonProperty("_meta") Map<String, Object> meta) {
+			// Also read for requests of a mode this SDK doesn't know, which aren't forms.
+			if (mode != null && !MODE.equals(mode)) {
+				throw new IllegalArgumentException("Unknown elicitation mode '" + mode + "'");
+			}
 			if (message == null || requestedSchema == null) {
 				List<String> missing = new ArrayList<>();
 				if (message == null) {
@@ -2953,6 +3177,281 @@ public final class McpSchema {
 
 			public ElicitFormRequest build() {
 				return new ElicitFormRequest(message, requestedSchema, meta);
+			}
+
+		}
+	}
+
+	/**
+	 * The params of an {@code elicitation/create} input request: an
+	 * {@link ElicitFormRequest} or an {@link ElicitUrlRequest}, told apart by
+	 * {@link #mode()}; a request without a mode is a form.
+	 */
+	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "mode",
+			visible = true, defaultImpl = ElicitFormRequest.class)
+	@JsonSubTypes({ @JsonSubTypes.Type(value = ElicitFormRequest.class, name = ElicitFormRequest.MODE),
+			@JsonSubTypes.Type(value = ElicitUrlRequest.class, name = ElicitUrlRequest.MODE) })
+	public sealed interface ElicitRequest permits ElicitFormRequest, ElicitUrlRequest {
+
+		String mode();
+
+		String message();
+
+		Map<String, Object> meta();
+
+	}
+
+	/**
+	 * The client's answer to an {@code elicitation/create} input request. {@code content}
+	 * carries the submitted form data, and only when the user accepted a form-mode
+	 * request.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ElicitResult( // @formatter:off
+		@JsonProperty("action") Action action,
+		@JsonProperty("content") Map<String, Object> content) { // @formatter:on
+
+		public ElicitResult {
+			Assert.notNull(action, "action must not be null");
+		}
+
+		@JsonCreator
+		static ElicitResult fromJson(@JsonProperty("action") Action action,
+				@JsonProperty("content") Map<String, Object> content) {
+			if (action == null) {
+				logger.warn("ElicitResult: missing required field 'action' during deserialization, using 'cancel'");
+				action = Action.CANCEL;
+			}
+			return new ElicitResult(action, content);
+		}
+
+		/** The user submitted the form, or consented to open the URL. */
+		public static ElicitResult accept(Map<String, Object> content) {
+			return new ElicitResult(Action.ACCEPT, content);
+		}
+
+		/** The user explicitly declined. */
+		public static ElicitResult decline() {
+			return new ElicitResult(Action.DECLINE, null);
+		}
+
+		/** The user dismissed the request without choosing. */
+		public static ElicitResult cancel() {
+			return new ElicitResult(Action.CANCEL, null);
+		}
+
+		public static Builder builder(Action action) {
+			return new Builder(action);
+		}
+
+		/** What the user did with the request. */
+		public enum Action {
+
+			@JsonProperty("accept")
+			ACCEPT, @JsonProperty("decline")
+			DECLINE, @JsonProperty("cancel")
+			CANCEL
+
+		}
+
+		public static final class Builder {
+
+			private final Action action;
+
+			private Map<String, Object> content;
+
+			private Builder(Action action) {
+				Assert.notNull(action, "action must not be null");
+				this.action = action;
+			}
+
+			public Builder content(Map<String, Object> content) {
+				this.content = content;
+				return this;
+			}
+
+			public ElicitResult build() {
+				return new ElicitResult(action, content);
+			}
+
+		}
+	}
+
+	/**
+	 * The client's answer to a {@code sampling/createMessage} input request: the message
+	 * the model generated. Sampling is deprecated by this revision.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CreateMessageResult( // @formatter:off
+		@JsonProperty("role") Role role,
+		@JsonProperty("content") Content content,
+		@JsonProperty("model") String model,
+		@JsonProperty("stopReason") String stopReason,
+		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+
+		/** The model ended its turn. */
+		public static final String STOP_REASON_END_TURN = "endTurn";
+
+		/** A stop sequence was encountered. */
+		public static final String STOP_REASON_STOP_SEQUENCE = "stopSequence";
+
+		/** The token limit was reached. */
+		public static final String STOP_REASON_MAX_TOKENS = "maxTokens";
+
+		public CreateMessageResult {
+			Assert.notNull(role, "role must not be null");
+			Assert.notNull(content, "content must not be null");
+			Assert.notNull(model, "model must not be null");
+		}
+
+		@JsonCreator
+		static CreateMessageResult fromJson(@JsonProperty("role") Role role, @JsonProperty("content") Content content,
+				@JsonProperty("model") String model, @JsonProperty("stopReason") String stopReason,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (role == null || content == null || model == null) {
+				List<String> missing = new ArrayList<>();
+				if (role == null) {
+					missing.add("role -> 'assistant'");
+					role = Role.ASSISTANT;
+				}
+				if (content == null) {
+					missing.add("content -> ''");
+					content = TextContent.builder("").build();
+				}
+				if (model == null) {
+					missing.add("model -> ''");
+					model = "";
+				}
+				logger.warn("CreateMessageResult: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new CreateMessageResult(role, content, model, stopReason, meta);
+		}
+
+		public static Builder builder(Role role, Content content, String model) {
+			return new Builder(role, content, model);
+		}
+
+		public static final class Builder {
+
+			private final Role role;
+
+			private final Content content;
+
+			private final String model;
+
+			private String stopReason;
+
+			private Map<String, Object> meta;
+
+			private Builder(Role role, Content content, String model) {
+				Assert.notNull(role, "role must not be null");
+				Assert.notNull(content, "content must not be null");
+				Assert.hasText(model, "model must not be empty");
+				this.role = role;
+				this.content = content;
+				this.model = model;
+			}
+
+			public Builder stopReason(String stopReason) {
+				this.stopReason = stopReason;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public CreateMessageResult build() {
+				return new CreateMessageResult(role, content, model, stopReason, meta);
+			}
+
+		}
+	}
+
+	/**
+	 * The client's answer to a {@code roots/list} input request. Roots are deprecated by
+	 * this revision.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ListRootsResult(@JsonProperty("roots") List<Root> roots) {
+
+		public ListRootsResult {
+			Assert.notNull(roots, "roots must not be null");
+		}
+
+		@JsonCreator
+		static ListRootsResult fromJson(@JsonProperty("roots") List<Root> roots) {
+			if (roots == null) {
+				logger.warn("ListRootsResult: missing required field 'roots' during deserialization, using []");
+				roots = List.of();
+			}
+			return new ListRootsResult(roots);
+		}
+
+		public static ListRootsResult of(List<Root> roots) {
+			return new ListRootsResult(roots);
+		}
+	}
+
+	/**
+	 * A directory or file the server may operate on. Its {@code uri} starts with
+	 * {@code file://}.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record Root( // @formatter:off
+		@JsonProperty("uri") String uri,
+		@JsonProperty("name") String name,
+		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+
+		public Root {
+			Assert.notNull(uri, "uri must not be null");
+		}
+
+		@JsonCreator
+		static Root fromJson(@JsonProperty("uri") String uri, @JsonProperty("name") String name,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (uri == null) {
+				logger.warn("Root: missing required field 'uri' during deserialization, using ''");
+				uri = "";
+			}
+			return new Root(uri, name, meta);
+		}
+
+		public static Builder builder(String uri) {
+			return new Builder(uri);
+		}
+
+		public static final class Builder {
+
+			private final String uri;
+
+			private String name;
+
+			private Map<String, Object> meta;
+
+			private Builder(String uri) {
+				Assert.hasText(uri, "uri must not be empty");
+				this.uri = uri;
+			}
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public Root build() {
+				return new Root(uri, name, meta);
 			}
 
 		}

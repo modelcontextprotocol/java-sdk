@@ -9,6 +9,7 @@ Last validated: **2026-10-02** against conformance suite
 ## Summary
 
 **Modern Server Tests (2026-07-28 requirements):** 37/37 required scenarios passed (`server-servlet-modern`)
+**Modern Client Tests (2026-07-28):** 8/8 non-auth client scenarios passed, 62/62 checks (`client-modern`)
 **Server Tests (active suite):** 73/73 checks passed (31 scenarios, 100%)
 **Server Tests (SEP-1613 `json-schema-2020-12`):** 5/5 checks passed (SEP-2106 checks skipped — post-2025-11-25 spec additions)
 **Client Tests:** 3/4 scenarios passed; `sse-retry` fails (tracked in `conformance-baseline.yml`)
@@ -43,6 +44,31 @@ in the anchor release (`0.2.0-alpha.10`) as `not_scored`. Pending scenarios are 
   `if`/`then`/`else` and `$anchor` checks), `http-header-validation` (14/14),
   `http-custom-header-server-validation` (10/10, SEP-2243 custom headers, against the `test_x_mcp_header` tool)
 - **Failing — tasks extension (`tasks-*`, SEP-2663):** not implemented
+
+## Modern Client Test Results (2026-07-28)
+
+The `client-modern` module drives `io.modelcontextprotocol.modern.client.McpSyncClient` over
+`HttpClientMcpTransport`. Last validated on **2026-11-05** with `--spec-version 2026-07-28`.
+
+### Passing (8/8 scenarios, 62/62 checks)
+
+- **tools_call (2/2):** tool discovery and invocation
+- **request-metadata (6/6, SEP-2575):** `_meta` with version, capabilities and client info on every
+  request, `MCP-Protocol-Version` matching `_meta`, retry after `-32022`
+- **sep-2322-client-request-state (5/5, SEP-2322):** `requestState` echoed byte for byte and omitted
+  when absent, a new JSON-RPC id per retry, no MRTR state on other requests, missing `resultType` as
+  `complete`
+- **http-standard-headers (9/9, SEP-2243):** `Mcp-Method` and `Mcp-Name` on tools, resources and prompts
+- **http-custom-headers (18/18, SEP-2243):** `Mcp-Param-*` mirroring, Base64 encoding of unsafe values,
+  omitted `null` arguments
+- **http-invalid-tool-headers (12/12, SEP-2243):** tools with invalid `x-mcp-header` annotations left out,
+  valid tools kept
+- **json-schema-ref-no-deref (1/1, SEP-2106)** and **json-schema-2020-12-preservation (9/9, SEP-1613)**
+
+### Not covered
+
+- **auth/\*:** the modern client has no OAuth support of its own; authorization plugs in through
+  `McpHttpRequestCustomizer` and `McpHttpAuthorizationErrorHandler`.
 
 ## Server Test Results
 

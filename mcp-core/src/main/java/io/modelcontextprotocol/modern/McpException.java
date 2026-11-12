@@ -11,9 +11,11 @@ import io.modelcontextprotocol.modern.McpSchema.MissingRequiredClientCapabilityD
 import io.modelcontextprotocol.util.Assert;
 
 /**
- * A request failure answered with its JSON-RPC {@link #error() error}, sent to the client
- * as given. Any other exception thrown by a handler is answered with an internal error
- * that reveals nothing.
+ * A request failure answered with its JSON-RPC {@link #error() error}.
+ * <p>
+ * On the server, it is sent to the client as given. Any other exception thrown by a
+ * handler is answered with an internal error that reveals nothing. On the client, it
+ * carries the error the server answered a request with.
  *
  * @author Dariusz Jędrzejczyk
  */

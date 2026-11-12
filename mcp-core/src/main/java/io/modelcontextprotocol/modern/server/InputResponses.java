@@ -5,10 +5,10 @@
 package io.modelcontextprotocol.modern.server;
 
 import java.util.Map;
-import java.util.Optional;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.modern.McpException;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Reads a typed value out of the raw {@code inputResponses} map a retried
@@ -23,19 +23,19 @@ public final class InputResponses {
 	}
 
 	/**
-	 * @return the response for {@code key} converted to {@code type}, or empty if there
-	 * is no such response
+	 * @return the response for {@code key} converted to {@code type}, or {@code null} if
+	 * there is no such response
 	 * @throws McpException {@code -32602} if the response cannot be converted to
 	 * {@code type}
 	 */
-	public static <T> Optional<T> get(Map<String, Object> inputResponses, String key, Class<T> type,
+	@Nullable public static <T> T get(@Nullable Map<String, Object> inputResponses, String key, Class<T> type,
 			McpJsonMapper jsonMapper) {
 		Object raw = inputResponses == null ? null : inputResponses.get(key);
 		if (raw == null) {
-			return Optional.empty();
+			return null;
 		}
 		try {
-			return Optional.of(jsonMapper.convertValue(raw, type));
+			return jsonMapper.convertValue(raw, type);
 		}
 		catch (RuntimeException ex) {
 			// The mapper's message describes the payload, so it is not passed to the

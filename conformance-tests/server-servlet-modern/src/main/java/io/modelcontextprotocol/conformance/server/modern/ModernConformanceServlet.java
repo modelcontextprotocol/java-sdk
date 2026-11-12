@@ -235,15 +235,13 @@ public class ModernConformanceServlet {
 	 * there is no response or it was not accepted.
 	 */
 	private static Map<String, Object> acceptedContent(Map<String, Object> inputResponses, String key) {
-		return InputResponses.get(inputResponses, key, ElicitResponse.class, JSON)
-			.filter(response -> "accept".equals(response.action()))
-			.map(ElicitResponse::content)
-			.orElse(null);
+		ElicitResponse response = InputResponses.get(inputResponses, key, ElicitResponse.class, JSON);
+		return response != null && "accept".equals(response.action()) ? response.content() : null;
 	}
 
 	@SuppressWarnings("unchecked")
 	private static Map<String, Object> responseObject(Map<String, Object> inputResponses, String key) {
-		return InputResponses.get(inputResponses, key, Map.class, JSON).orElse(null);
+		return InputResponses.get(inputResponses, key, Map.class, JSON);
 	}
 
 	@FunctionalInterface

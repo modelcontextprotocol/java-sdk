@@ -38,13 +38,14 @@ import reactor.core.publisher.Mono;
  *
  * <p>
  * Defines Flux operators for processing Server-Sent Events (SSE), aggregate responses,
- * and bodiless responses.
+ * and bodiless responses. For internal use only: the public members are shared by the
+ * SDK's HTTP client transports.
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  * @author Daniel Garnier-Moiroux
  */
-class ResponseBodyHandlers {
+public final class ResponseBodyHandlers {
 
 	/**
 	 * Bytes of SSE field framing a single line may carry on top of the message payload:
@@ -61,6 +62,9 @@ class ResponseBodyHandlers {
 	private static final String DEFAULT_EVENT_TYPE = "message";
 
 	record SseEvent(String id, String event, String data) {
+	}
+
+	private ResponseBodyHandlers() {
 	}
 
 	/**
@@ -94,7 +98,7 @@ class ResponseBodyHandlers {
 	 * @param publisher the response body
 	 * @param maxSize the maximum number of bytes read for a single inbound message
 	 */
-	static Flux<String> decodeLines(Publisher<List<ByteBuffer>> publisher, int maxSize) {
+	public static Flux<String> decodeLines(Publisher<List<ByteBuffer>> publisher, int maxSize) {
 		return Flux.defer(() -> {
 			Utf8LineDecoder dec = new Utf8LineDecoder(plusFramingOverhead(maxSize));
 			return JdkFlowAdapter.flowPublisherToFlux(publisher)
@@ -119,6 +123,21 @@ class ResponseBodyHandlers {
 	}
 
 	/**
+	 * Decodes an SSE response body into the data of its events of type {@code eventType},
+	 * skipping events whose data is empty. Lines and events are bounded as by
+	 * {@link #decodeLines} and {@link #decodeSseResponse}.
+	 * @param publisher the response body
+	 * @param maxSize the maximum number of bytes that may accumulate for a single SSE
+	 * event
+	 * @param eventType the type of the events to keep
+	 */
+	public static Flux<String> decodeSseData(Publisher<List<ByteBuffer>> publisher, int maxSize, String eventType) {
+		return decodeSseResponse(decodeLines(publisher, maxSize), maxSize)
+			.filter(event -> eventType.equals(event.event()) && !event.data().isEmpty())
+			.map(SseEvent::data);
+	}
+
+	/**
 	 * Collects all byte-buffer chunks from the publisher into a single UTF-8 decoded
 	 * string, bounding how much memory it may occupy. A peer sending a body larger than
 	 * {@code maxSize} has its response aborted instead of forcing the transport to buffer
@@ -126,7 +145,7 @@ class ResponseBodyHandlers {
 	 * @param publisher the response body
 	 * @param maxSize the maximum number of bytes read for the response body
 	 */
-	static Mono<String> decodeAggregateResponse(Publisher<List<ByteBuffer>> publisher, int maxSize) {
+	public static Mono<String> decodeAggregateResponse(Publisher<List<ByteBuffer>> publisher, int maxSize) {
 		return boundTotalBytes(publisher, maxSize).collectList().map(buffers -> {
 			int totalSize = buffers.stream().mapToInt(ByteBuffer::remaining).sum();
 			ByteBuffer combined = ByteBuffer.allocate(totalSize);
@@ -190,17 +209,25 @@ class ResponseBodyHandlers {
 	 * whose content is of no further interest.
 	 * @param body the response body
 	 */
-	static <T> Flux<T> cancel(Publisher<List<ByteBuffer>> body) {
+	public static <T> Flux<T> cancel(Publisher<List<ByteBuffer>> body) {
 		return Flux.defer(() -> {
 			cancelBody(body);
 			return Flux.empty();
 		});
 	}
 
-	static Mono<HttpResponse<Publisher<List<ByteBuffer>>>> sendAsync(HttpClient httpClient, HttpRequest request) {
+	/**
+	 * Sends the request with the body exposed as a publisher. Cancelling the returned
+	 * {@code Mono} aborts the exchange, and a response that is discarded has its body
+	 * cancelled, which releases the connection.
+	 * @param httpClient the client to send with
+	 * @param request the request
+	 */
+	public static Mono<HttpResponse<Publisher<List<ByteBuffer>>>> sendAsync(HttpClient httpClient,
+			HttpRequest request) {
 		// Not Mono.fromFuture: cancelling aborts the exchange, and the HttpClient then
 		// fails the future with a CompletionException wrapping a CancellationException,
-		// which fromFuture reports as a dropped error. Only this method cna cancel the
+		// which fromFuture reports as a dropped error. Only this method can cancel the
 		// future, so that failure is ignored here. Replace with a plain fromFuture,
 		// keeping
 		// the doOnDiscard, once https://github.com/reactor/reactor-core/issues/4415 is

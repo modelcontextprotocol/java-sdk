@@ -107,6 +107,45 @@ jobs:
             --spec-version 2025-11-25 \
             --expected-failures ./conformance-tests/conformance-baseline.yml
 
+  modern-client:
+    name: Modern Client Conformance (2026-07-28)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        scenario:
+        - tools_call
+        - request-metadata
+        - sep-2322-client-request-state
+        - http-standard-headers
+        - http-custom-headers
+        - http-invalid-tool-headers
+        - json-schema-ref-no-deref
+        - json-schema-2020-12-preservation
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build client
+        run: ./mvnw clean install -DskipTests
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run conformance test
+        run: |
+          npx --yes "$CONFORMANCE" client \
+            --command 'java -jar conformance-tests/client-modern/target/client-modern-*-SNAPSHOT.jar' \
+            --scenario ${{ matrix.scenario }} \
+            --spec-version 2026-07-28
+
   auth:
     name: Auth Conformance
     runs-on: ubuntu-latest

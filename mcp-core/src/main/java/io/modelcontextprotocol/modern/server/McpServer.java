@@ -10,7 +10,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -191,12 +190,12 @@ public final class McpServer implements McpRequestManager {
 			if (!(requestState instanceof String sealed)) {
 				return invalidParams(id, "requestState must be a string");
 			}
-			Optional<String> opened = this.requestStateCodec.open(ctx, sealed);
-			if (opened.isEmpty()) {
+			String opened = this.requestStateCodec.open(ctx, sealed);
+			if (opened == null) {
 				return invalidParams(id, "Invalid or expired requestState");
 			}
 			params = new LinkedHashMap<>(paramsMap);
-			params.put("requestState", opened.get());
+			params.put("requestState", opened);
 		}
 		return feature.handle(ctx, params)
 			.map(response -> toTransportResponse(ctx, response))
@@ -479,7 +478,7 @@ public final class McpServer implements McpRequestManager {
 			// advertises the final capabilities.
 			SubscriptionsFeature subscriptionsFeature = null;
 			if (this.changePublisher != null) {
-				subscriptionsFeature = new SubscriptionsFeature(this.changePublisher, mapper,
+				subscriptionsFeature = new SubscriptionsFeature(this.changePublisher, mapper, allFeatures,
 						capabilitiesBuilder.hasTools(), capabilitiesBuilder.hasPrompts(),
 						capabilitiesBuilder.hasResources(), capabilitiesBuilder.hasResourcesSubscribe());
 				subscriptionsFeature.capabilities(capabilitiesBuilder);
