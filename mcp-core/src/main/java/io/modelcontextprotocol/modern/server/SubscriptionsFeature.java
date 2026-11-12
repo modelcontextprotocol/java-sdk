@@ -131,19 +131,29 @@ final class SubscriptionsFeature implements McpFeature {
 	}
 
 	private Mono<Result> listen(McpRequestContext ctx, SubscriptionFilter honoured, McpAsyncNotifier notifier) {
+		// To avoid race conditions in test harnesses, need to ensure that:
+		// 1. Changes are subscribed to BEFORE the ack
+		// 2. But the ACK goes before any notification
+		//
+		// Achieve this by:
+		// 1. Merging changes + ack
+		// 2. Forcing ack to be sent first in the changes
+		// 3. Caching the "send ack" so that it only ever goes out once
 		Map<String, Object> subscriptionMeta = Map.of(MetaKeys.SUBSCRIPTION_ID, ctx.requestId());
-		Mono<Void> ack = notifier.notify(McpSchema.METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED,
-				new SubscriptionsAcknowledgedParams(honoured, subscriptionMeta));
+		Mono<Void> ack = notifier
+			.notify(McpSchema.METHOD_NOTIFICATION_SUBSCRIPTIONS_ACKNOWLEDGED,
+					new SubscriptionsAcknowledgedParams(honoured, subscriptionMeta))
+			.cache();
 
 		Flux<Void> forwardChanges = this.publisher.changes()
 			.filter(change -> change.isHonouredBy(honoured))
 			.takeUntilOther(this.shutdown.asMono())
 			.concatMap(change -> {
 				Map<String, Object> params = params(change, subscriptionMeta);
-				return params == null ? Mono.empty() : notifier.notify(change.method(), params);
+				return params == null ? Mono.empty() : ack.then(notifier.notify(change.method(), params));
 			});
 
-		return ack.thenMany(forwardChanges)
+		return Flux.merge(forwardChanges, ack)
 			.then(Mono.fromSupplier(() -> (Result) SubscriptionsListenResult.forSubscription(ctx.requestId())));
 	}
 
