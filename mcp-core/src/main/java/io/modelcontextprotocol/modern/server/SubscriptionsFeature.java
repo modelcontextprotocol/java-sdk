@@ -34,7 +34,8 @@ import reactor.core.publisher.Sinks;
  * requested filter, then forwards the changes from a {@link McpChangePublisher} that the
  * honoured filter covers. The core fields are honoured for the primitives the server has;
  * other features honour the fields they define through
- * {@link McpFeature#honouredSubscriptions}.
+ * {@link McpFeature#honouredSubscriptions}. A {@link SubscriptionRestriction} then
+ * narrows the result per request.
  *
  * @author Dariusz Jędrzejczyk
  */
@@ -55,6 +56,8 @@ final class SubscriptionsFeature implements McpFeature {
 
 	private final List<McpFeature> features;
 
+	private final SubscriptionRestriction restriction;
+
 	private final boolean hasTools;
 
 	private final boolean hasPrompts;
@@ -67,13 +70,17 @@ final class SubscriptionsFeature implements McpFeature {
 
 	/**
 	 * @param features the server's other features, asked for the fields they honour
+	 * @param restriction narrows what the server and its features honour, per request
 	 */
 	SubscriptionsFeature(McpChangePublisher publisher, McpJsonMapper jsonMapper, List<McpFeature> features,
-			boolean hasTools, boolean hasPrompts, boolean hasResources, boolean hasResourcesSubscribe) {
+			SubscriptionRestriction restriction, boolean hasTools, boolean hasPrompts, boolean hasResources,
+			boolean hasResourcesSubscribe) {
 		Assert.notNull(publisher, "publisher must not be null");
+		Assert.notNull(restriction, "restriction must not be null");
 		this.publisher = publisher;
 		this.jsonMapper = jsonMapper;
 		this.features = List.copyOf(features);
+		this.restriction = restriction;
 		this.hasTools = hasTools;
 		this.hasPrompts = hasPrompts;
 		this.hasResources = hasResources;
@@ -114,7 +121,8 @@ final class SubscriptionsFeature implements McpFeature {
 		catch (McpException ex) {
 			return Mono.error(ex);
 		}
-		return Mono.just(McpAsyncResponse.streaming(notifier -> listen(ctx, honoured, notifier)));
+		return restricted(ctx, requested, honoured)
+			.map(agreed -> McpAsyncResponse.streaming(notifier -> listen(ctx, agreed, notifier)));
 	}
 
 	@Override
@@ -187,6 +195,54 @@ final class SubscriptionsFeature implements McpFeature {
 			});
 		}
 		return SubscriptionFilter.of(honoured);
+	}
+
+	/**
+	 * What the restriction leaves of {@code honoured}. Deferred so that a restriction
+	 * throwing instead of returning an error {@code Mono} still rejects the request. Not
+	 * called when nothing is honoured: it could only narrow to nothing, and may do costly
+	 * work such as a permission lookup.
+	 */
+	private Mono<SubscriptionFilter> restricted(McpRequestContext ctx, SubscriptionFilter requested,
+			SubscriptionFilter honoured) {
+		if (honoured.isEmpty()) {
+			return Mono.just(SubscriptionFilter.EMPTY);
+		}
+		return Mono.defer(() -> this.restriction.restrict(ctx, requested, honoured))
+			.defaultIfEmpty(SubscriptionFilter.EMPTY)
+			.map(restricted -> intersection(honoured, restricted));
+	}
+
+	/**
+	 * The part of {@code restricted} that {@code honoured} covers: the restriction may
+	 * only narrow, so that the stream never acknowledges a notification the client didn't
+	 * request or that the server can't deliver. A list keeps the elements of
+	 * {@code honoured}'s list that {@code restricted}'s list contains, and any other
+	 * value, flags included, is kept if {@code restricted} has the same value.
+	 */
+	private static SubscriptionFilter intersection(SubscriptionFilter honoured, SubscriptionFilter restricted) {
+		if (honoured == restricted) {
+			return restricted;
+		}
+		SubscriptionFilter widened = restricted.missingFrom(honoured);
+		if (!widened.isEmpty()) {
+			logger.warn("Ignoring subscriptions the restriction added beyond what the server honours: {}", widened);
+		}
+		Map<String, Object> kept = new LinkedHashMap<>();
+		honoured.fields().forEach((field, value) -> {
+			Object agreed = restricted.get(field);
+			if (value instanceof List<?> elements) {
+				List<?> agreedElements = agreed instanceof List<?> list ? list : List.of();
+				List<?> both = elements.stream().filter(agreedElements::contains).toList();
+				if (!both.isEmpty()) {
+					kept.put(field, both);
+				}
+			}
+			else if (value.equals(agreed)) {
+				kept.put(field, value);
+			}
+		});
+		return SubscriptionFilter.of(kept);
 	}
 
 	/**

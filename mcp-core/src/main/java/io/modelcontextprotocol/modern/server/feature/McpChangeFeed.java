@@ -12,6 +12,11 @@ import reactor.core.publisher.Sinks;
 /**
  * An {@link McpChangeBroadcaster} and the {@link McpChangePublisher} its changes reach. A
  * change broadcast while no listen stream is active is dropped.
+ * <p>
+ * Changes are typically consumed in an
+ * {@link io.modelcontextprotocol.modern.server.McpServer}, and broadcast to clients. They
+ * are filtered by client request and further restricted through
+ * {@link io.modelcontextprotocol.modern.server.SubscriptionRestriction}.
  *
  * @author Dariusz Jędrzejczyk
  */
