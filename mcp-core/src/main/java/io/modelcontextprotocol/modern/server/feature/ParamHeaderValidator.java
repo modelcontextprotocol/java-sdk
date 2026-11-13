@@ -12,7 +12,8 @@ import java.util.regex.Pattern;
 
 import io.modelcontextprotocol.modern.ToolParamHeaderAnnotations.Annotation;
 import io.modelcontextprotocol.modern.ToolParamHeaderAnnotations.Type;
-import io.modelcontextprotocol.modern.server.McpParamHeaders;
+import io.modelcontextprotocol.modern.server.McpHeader;
+import io.modelcontextprotocol.modern.server.McpHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,8 +47,7 @@ final class ParamHeaderValidator {
 	 * @param headers the request's headers
 	 * @return {@link Valid}, or {@link Invalid} with the first failure
 	 */
-	static Result validate(List<Annotation> annotations, Map<String, Object> callToolArguments,
-			McpParamHeaders headers) {
+	static Result validate(List<Annotation> annotations, Map<String, Object> callToolArguments, McpHeaders headers) {
 		for (Annotation annotation : annotations) {
 			Object argument = resolve(callToolArguments, annotation.path());
 			String problem = check(annotation, argument, headers);
@@ -61,8 +61,9 @@ final class ParamHeaderValidator {
 	}
 
 	// null if the header agrees with the argument.
-	private static String check(Annotation annotation, Object argument, McpParamHeaders headers) {
-		boolean present = headers.contains(annotation.name());
+	private static String check(Annotation annotation, Object argument, McpHeaders headers) {
+		McpHeader header = headers.param(annotation.name());
+		boolean present = header != null;
 		String mismatch = header(annotation) + " header does not match argument '" + annotation.argument() + "'";
 		if (argument == null) {
 			return present
@@ -77,10 +78,10 @@ final class ParamHeaderValidator {
 		if (!present) {
 			return "Missing required header: " + header(annotation);
 		}
-		if (headers.isMalformed(annotation.name())) {
+		if (header.isMalformed()) {
 			return header(annotation) + " header is malformed";
 		}
-		return matches(annotation.type(), argument, headers.value(annotation.name())) ? null : mismatch;
+		return matches(annotation.type(), argument, header.value()) ? null : mismatch;
 	}
 
 	private static Object resolve(Map<String, Object> arguments, List<String> path) {
@@ -125,15 +126,15 @@ final class ParamHeaderValidator {
 	}
 
 	private static String header(Annotation annotation) {
-		return McpParamHeaders.HEADER_PREFIX + annotation.name();
+		return McpHeaders.PARAM_PREFIX + annotation.name();
 	}
 
-	private static String describe(McpParamHeaders headers, String name) {
-		if (headers.isMalformed(name)) {
-			return "<malformed>";
+	private static String describe(McpHeaders headers, String name) {
+		McpHeader header = headers.param(name);
+		if (header == null) {
+			return "<absent>";
 		}
-		String value = headers.value(name);
-		return (value != null) ? value : "<absent>";
+		return header.isMalformed() ? "<malformed>" : header.value();
 	}
 
 	/**

@@ -31,7 +31,7 @@ import io.modelcontextprotocol.modern.McpHttp.MediaTypes;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.MetaKeys;
-import io.modelcontextprotocol.modern.server.McpParamHeaders;
+import io.modelcontextprotocol.modern.server.McpHeaders;
 import io.modelcontextprotocol.modern.server.McpRequestManager;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.McpTransportResponse;
@@ -251,7 +251,7 @@ public class HttpServletMcpTransport extends HttpServlet {
 		if (McpSchema.METHOD_TOOLS_CALL.equals(jsonRpcRequest.method())) {
 			// Added after the user's extractor ran, so this entry always wins.
 			var mcpParamHeaders = McpHeaderDecoder.paramHeaders(headerAccessor(request));
-			transportContext = transportContext.putAll(Map.of(McpParamHeaders.TRANSPORT_CONTEXT_KEY, mcpParamHeaders));
+			transportContext = transportContext.putAll(Map.of(McpHeaders.TRANSPORT_CONTEXT_KEY, mcpParamHeaders));
 		}
 
 		boolean listen = McpSchema.METHOD_SUBSCRIPTIONS_LISTEN.equals(jsonRpcRequest.method());

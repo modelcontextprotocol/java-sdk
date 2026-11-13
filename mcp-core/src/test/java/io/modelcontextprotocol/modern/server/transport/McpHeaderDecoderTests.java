@@ -9,7 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import io.modelcontextprotocol.modern.server.McpParamHeaders;
+import io.modelcontextprotocol.modern.server.McpHeaders;
 import io.modelcontextprotocol.server.transport.HeaderAccessor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -88,59 +88,54 @@ class McpHeaderDecoderTests {
 	}
 
 	@Test
-	void paramHeadersSelectsMcpParamHeadersIgnoringThePrefixCase() {
-		McpParamHeaders headers = McpHeaderDecoder.paramHeaders(headers("Mcp-Param-Region", "eu", "MCP-PARAM-Tenant",
-				"acme", "mcp-param-zone", "a", "Mcp-Name", "echo", "X-Param-Other", "x"));
+	void paramHeadersSelectsMcpHeadersIgnoringThePrefixCase() {
+		McpHeaders headers = McpHeaderDecoder.paramHeaders(headers("Mcp-Param-Region", "eu", "MCP-PARAM-Tenant", "acme",
+				"mcp-param-zone", "a", "Mcp-Name", "echo", "X-Param-Other", "x"));
 
-		assertThat(headers.value("region")).isEqualTo("eu");
-		assertThat(headers.value("tenant")).isEqualTo("acme");
-		assertThat(headers.value("zone")).isEqualTo("a");
-		assertThat(headers.contains("name")).isFalse();
-		assertThat(headers.contains("other")).isFalse();
+		assertThat(headers.param("region").value()).isEqualTo("eu");
+		assertThat(headers.param("tenant").value()).isEqualTo("acme");
+		assertThat(headers.param("zone").value()).isEqualTo("a");
+		assertThat(headers.param("name")).isNull();
+		assertThat(headers.param("other")).isNull();
 	}
 
 	@Test
 	void paramHeaderNamesAreLookedUpIgnoringCase() {
-		McpParamHeaders headers = McpHeaderDecoder.paramHeaders(headers("Mcp-Param-Region", "eu"));
+		McpHeaders headers = McpHeaderDecoder.paramHeaders(headers("Mcp-Param-Region", "eu"));
 
-		assertThat(headers.value("Region")).isEqualTo("eu");
-		assertThat(headers.value("REGION")).isEqualTo("eu");
-		assertThat(headers.contains("rEgIoN")).isTrue();
+		assertThat(headers.param("Region").value()).isEqualTo("eu");
+		assertThat(headers.param("REGION").value()).isEqualTo("eu");
+		assertThat(headers.param("rEgIoN")).isNotNull();
 	}
 
 	@Test
 	void paramHeaderValuesAreDecoded() {
-		McpParamHeaders headers = McpHeaderDecoder.paramHeaders(headers("Mcp-Param-Greeting", "=?base64?SGVsbG8=?="));
+		McpHeaders headers = McpHeaderDecoder.paramHeaders(headers("Mcp-Param-Greeting", "=?base64?SGVsbG8=?="));
 
-		assertThat(headers.value("greeting")).isEqualTo("Hello");
+		assertThat(headers.param("greeting").value()).isEqualTo("Hello");
 	}
 
 	@Test
 	void malformedParamHeaderValueIsMarkedMalformed() {
-		McpParamHeaders headers = McpHeaderDecoder.paramHeaders(headers("Mcp-Param-Greeting", "=?base64?SGVsbG8?="));
+		McpHeaders headers = McpHeaderDecoder.paramHeaders(headers("Mcp-Param-Greeting", "=?base64?SGVsbG8?="));
 
-		assertThat(headers.isMalformed("greeting")).isTrue();
-		assertThat(headers.value("greeting")).isNull();
+		assertThat(headers.param("greeting").isMalformed()).isTrue();
 	}
 
 	@Test
 	void paramHeaderWithSeveralValuesIsMarkedMalformed() {
-		McpParamHeaders headers = McpHeaderDecoder
-			.paramHeaders(headers("Mcp-Param-Region", "eu", "Mcp-Param-Region", "eu"));
+		McpHeaders headers = McpHeaderDecoder.paramHeaders(headers("Mcp-Param-Region", "eu", "Mcp-Param-Region", "eu"));
 
-		assertThat(headers.isMalformed("region")).isTrue();
-		assertThat(headers.value("region")).isNull();
+		assertThat(headers.param("region").isMalformed()).isTrue();
 	}
 
 	@Test
 	void paramHeadersDifferingOnlyInNameCaseAreMarkedMalformed() {
 		// Containers usually fold these into one name with two values, but an accessor
 		// may also report them as two names.
-		McpParamHeaders headers = McpHeaderDecoder
-			.paramHeaders(headers("Mcp-Param-Region", "eu", "mcp-param-region", "us"));
+		McpHeaders headers = McpHeaderDecoder.paramHeaders(headers("Mcp-Param-Region", "eu", "mcp-param-region", "us"));
 
-		assertThat(headers.isMalformed("region")).isTrue();
-		assertThat(headers.value("region")).isNull();
+		assertThat(headers.param("region").isMalformed()).isTrue();
 	}
 
 	@Test
@@ -160,17 +155,16 @@ class McpHeaderDecoderTests {
 			}
 		};
 
-		McpParamHeaders headers = McpHeaderDecoder.paramHeaders(caseSensitive);
+		McpHeaders headers = McpHeaderDecoder.paramHeaders(caseSensitive);
 
-		assertThat(headers.isMalformed("region")).isTrue();
-		assertThat(headers.value("region")).isNull();
+		assertThat(headers.param("region").isMalformed()).isTrue();
 	}
 
 	@Test
-	void paramHeadersAreEmptyWithoutMcpParamHeaders() {
-		McpParamHeaders headers = McpHeaderDecoder.paramHeaders(headers("Mcp-Name", "echo"));
+	void paramHeadersAreEmptyWithoutMcpHeaders() {
+		McpHeaders headers = McpHeaderDecoder.paramHeaders(headers("Mcp-Name", "echo"));
 
-		assertThat(headers.contains("name")).isFalse();
+		assertThat(headers.param("name")).isNull();
 	}
 
 	/**

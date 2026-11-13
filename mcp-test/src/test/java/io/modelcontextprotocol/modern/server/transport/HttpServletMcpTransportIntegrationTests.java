@@ -38,7 +38,7 @@ import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
-import io.modelcontextprotocol.modern.server.McpParamHeaders;
+import io.modelcontextprotocol.modern.server.McpHeaders;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncToolRepository;
 import io.modelcontextprotocol.modern.server.feature.McpChangePublisher;
@@ -152,8 +152,7 @@ class HttpServletMcpTransportIntegrationTests {
 			.keepAliveInterval(Duration.ofMillis(100))
 			.errorStatus(QUOTA_EXCEEDED, 429)
 			.contextExtractor(request -> request.getHeader(FORGE_NOT_MIRRORED) != null
-					? McpTransportContext
-						.create(Map.of(McpParamHeaders.TRANSPORT_CONTEXT_KEY, McpParamHeaders.NOT_MIRRORED))
+					? McpTransportContext.create(Map.of(McpHeaders.TRANSPORT_CONTEXT_KEY, McpHeaders.NOT_MIRRORED))
 					: McpTransportContext.EMPTY)
 			.httpHeaderValidator(DefaultServerTransportSecurityValidator.builder()
 				.allowedOrigin("http://localhost:*")

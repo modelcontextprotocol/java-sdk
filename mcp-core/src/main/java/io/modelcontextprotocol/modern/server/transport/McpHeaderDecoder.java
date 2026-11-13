@@ -18,7 +18,7 @@ import java.util.Map;
 import java.util.Set;
 
 import io.modelcontextprotocol.modern.McpHttp.Headers;
-import io.modelcontextprotocol.modern.server.McpParamHeaders;
+import io.modelcontextprotocol.modern.server.McpHeaders;
 import io.modelcontextprotocol.server.transport.HeaderAccessor;
 import org.jspecify.annotations.Nullable;
 
@@ -102,29 +102,23 @@ public final class McpHeaderDecoder {
 	 * @param headers the request headers
 	 * @return the decoded headers
 	 */
-	public static McpParamHeaders paramHeaders(HeaderAccessor headers) {
+	public static McpHeaders paramHeaders(HeaderAccessor headers) {
 		// The accessor may be case-sensitive, so values are gathered under every name
 		// that differs only in case.
 		Map<String, Set<String>> names = new LinkedHashMap<>();
 		for (String name : headers.getHeaderNames()) {
-			if (name.regionMatches(true, 0, McpParamHeaders.HEADER_PREFIX, 0, McpParamHeaders.HEADER_PREFIX.length())) {
+			if (name.regionMatches(true, 0, McpHeaders.PARAM_PREFIX, 0, McpHeaders.PARAM_PREFIX.length())) {
 				names.computeIfAbsent(name.toLowerCase(Locale.ROOT), k -> new LinkedHashSet<>()).add(name);
 			}
 		}
-		McpParamHeaders.Builder builder = McpParamHeaders.builder();
+		McpHeaders.Builder builder = McpHeaders.builder();
 		for (Set<String> variants : names.values()) {
-			String paramName = variants.iterator().next().substring(McpParamHeaders.HEADER_PREFIX.length());
+			String paramName = variants.iterator().next().substring(McpHeaders.PARAM_PREFIX.length());
 			List<String> values = new ArrayList<>();
 			for (String name : variants) {
 				values.addAll(headers.getHeader(name));
 			}
-			String decoded = values.size() == 1 ? decodeValue(values.get(0)) : null;
-			if (decoded != null) {
-				builder.value(paramName, decoded);
-			}
-			else {
-				builder.malformed(paramName);
-			}
+			builder.param(paramName, values.size() == 1 ? decodeValue(values.get(0)) : null);
 		}
 		return builder.build();
 	}
