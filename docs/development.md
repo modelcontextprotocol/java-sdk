@@ -51,14 +51,17 @@ The built site will be output to the `site/` directory.
 
 ```
 docs/
-├── index.md            # Overview page
+├── index.md            # Home page
+├── overview.md         # Architecture and modules
 ├── quickstart.md       # Quickstart guide
-├── client.md           # MCP Client documentation
-├── server.md           # MCP Server documentation
-├── contributing.md     # Contributing guide
+├── client-modern.md    # MCP Client, modern (2026-07-28)
+├── server-modern.md    # MCP Server, modern (2026-07-28)
+├── client.md           # MCP Client, legacy (2025-11-25 and earlier)
+├── server.md           # MCP Server, legacy (2025-11-25 and earlier)
+├── contribute.md       # Contributing guide
 ├── development.md      # This page
-├── images/             # Images and diagrams
-└── stylesheets/        # Custom CSS
+├── blog/               # Blog posts
+└── images/             # Images and diagrams
 mkdocs.yml              # MkDocs configuration
 ```
 

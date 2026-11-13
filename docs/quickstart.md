@@ -128,6 +128,8 @@ This is all a client needs. It includes the modern and the legacy client and ser
 
 With the `spring-ai-bom` or the Spring AI starters (`spring-ai-starter-mcp-server-webflux`, `spring-ai-starter-mcp-server-webmvc`, `spring-ai-starter-mcp-client-webflux`), no explicit version is needed.
 
+For the modern client and server, Spring AI 2.1+ provides Boot starters and Spring transports; see [MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html) and [MCP 2026-07-28 Servers](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-modern-server-boot-starter-docs.html).
+
 ## Your First Client
 
 The SDK has two clients, one for each generation of the protocol; see [Modern or Legacy?](overview.md#modern-or-legacy) to choose. Both examples list the tools of a server at `http://localhost:8080/mcp` and call one of them.

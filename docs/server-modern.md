@@ -8,7 +8,7 @@ description: Build a stateless MCP server for the 2026-07-28 specification revis
 !!! note
     The modern server is available since 2.2.0. Its API, in the `io.modelcontextprotocol.modern` packages,
     may change in minor releases until 3.0, and [some parts of the revision](#not-yet-supported) are not
-    implemented. For production servers that talk to today's clients, use the [legacy server](server.md).
+    implemented. For clients that speak earlier revisions, use the [legacy server](server.md).
     To call a modern server from Java, see the [modern client](client-modern.md).
 
 ## Overview
@@ -260,6 +260,11 @@ closing the transport.
 STDIO has no headers and no `contextExtractor`: handlers always see a transport context without user entries,
 so anything that reads identity from `transportContext()`, such as a `requestState`
 [principal binding](#securing-requeststate), has nothing to read.
+
+### Spring
+
+Spring WebMVC and WebFlux transports for the modern server, and a Boot starter that configures it, are part
+of Spring AI 2.1+, not of this SDK. See [MCP 2026-07-28 Servers](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-modern-server-boot-starter-docs.html) in the Spring AI reference.
 
 ### HTTP Security
 
@@ -948,7 +953,6 @@ record TaskChanged(String taskId) implements ServerChange {
 
 - Tasks.
 - Logging, which the 2026-07-28 revision deprecates. The modern server never sends log messages.
-- Spring WebMVC and WebFlux transports. Spring AI's transports target the legacy server.
 
 For a larger working example, see the
 [modern conformance server](https://github.com/modelcontextprotocol/java-sdk/tree/main/conformance-tests/server-servlet-modern),

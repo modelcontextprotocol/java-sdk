@@ -359,7 +359,7 @@ var capabilities = ServerCapabilities.builder()
 
 ### Tool Specification
 
-The Model Context Protocol allows servers to [expose tools](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/tools/) that can be invoked by language models.
+The Model Context Protocol allows servers to [expose tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) that can be invoked by language models.
 The Java SDK allows implementing Tool Specifications with their handler functions.
 Tools enable AI models to perform calculations, access external APIs, query databases, and manipulate files.
 
@@ -681,7 +681,7 @@ var resourceTemplateSpec = new McpServerFeatures.SyncResourceTemplateSpecificati
 
 ### Prompt Specification
 
-As part of the [Prompting capabilities](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/prompts/), MCP provides a standardized way for servers to expose prompt templates to clients.
+As part of the [Prompting capabilities](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts), MCP provides a standardized way for servers to expose prompt templates to clients.
 The Prompt Specification is a structured template for AI model interactions that enables consistent message formatting, parameter substitution, context injection, response formatting, and instruction templating.
 
 === "Sync"
@@ -846,7 +846,7 @@ Completions can be registered for both `PromptReference` and `ResourceReference`
 
 ### Using Sampling from a Server
 
-To use [Sampling capabilities](https://spec.modelcontextprotocol.io/specification/2024-11-05/client/sampling/), connect to a client that supports sampling.
+To use [Sampling capabilities](https://modelcontextprotocol.io/specification/2025-11-25/client/sampling), connect to a client that supports sampling.
 No special server configuration is needed, but verify client sampling support before making requests.
 Learn about [client sampling support](client.md#sampling-support).
 

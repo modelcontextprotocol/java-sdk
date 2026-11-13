@@ -46,6 +46,7 @@ Both implementations share the following:
 !!! tip "Spring applications"
     Spring WebFlux and WebMVC transports for the legacy client and server are part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ and are not shipped by this SDK.
     Use the [MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html) and the [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) from Spring AI.
+    For the modern client and server, Spring AI 2.1+ provides Boot starters and Spring transports; see [MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html) and [MCP 2026-07-28 Servers](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-modern-server-boot-starter-docs.html).
     Also consider the [MCP Annotations](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-annotations-overview.html) and [MCP Security](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-security.html).
 
 ## Getting Started

@@ -116,6 +116,7 @@ The SDK is organized into modules to separate concerns and allow adopters to bri
     A minimal adopter may depend only on `mcp` (core + Jackson 3).
 
     Spring-based applications that use the legacy client or server should use the `mcp-spring-webflux` or `mcp-spring-webmvc` artifacts from [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`), which are no longer part of this SDK.
+    For the modern client and server, Spring AI 2.1+ provides Boot starters and Spring transports; see [MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html) and [MCP 2026-07-28 Servers](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-modern-server-boot-starter-docs.html).
 
 ## Next Steps
 

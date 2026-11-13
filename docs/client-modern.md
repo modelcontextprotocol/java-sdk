@@ -194,6 +194,12 @@ is closed, every open call fails with `McpResponseLostException`.
 `StdioMcpClientTransport.builder(InputStream, OutputStream)` runs over streams that are already connected,
 such as a socket's.
 
+### Spring
+
+Spring Boot integration for the modern client is part of Spring AI 2.1+, not of this SDK. Its MCP Client Boot
+Starter configures modern connections and exposes their tools to Spring AI as tool callbacks. See
+[MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html) in the Spring AI reference.
+
 ### Custom Transports
 
 Other transports implement `McpClientTransport`. Its single method, `exchange(McpTransportRequest)`, sends one
@@ -739,7 +745,6 @@ Failures outside those two types:
 - Servers of earlier revisions. Use the [legacy client](client.md) for those.
 - Obtaining OAuth tokens. Add tokens with a request customizer, as shown in
   [Identity and Authorization](#identity-and-authorization).
-- Spring WebClient transport.
 
 For a larger working example, see the
 [modern conformance client](https://github.com/modelcontextprotocol/java-sdk/tree/main/conformance-tests/client-modern),
