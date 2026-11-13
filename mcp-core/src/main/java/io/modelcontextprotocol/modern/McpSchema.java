@@ -105,6 +105,13 @@ public final class McpSchema {
 
 		public static final String CLIENT_INFO = "io.modelcontextprotocol/clientInfo";
 
+		/**
+		 * @deprecated Logging is deprecated as of MCP protocol version 2026-07-28
+		 * (SEP-2577) and may be removed from a protocol revision released on or after
+		 * 2027-07-28. Servers should log to stderr (stdio transport) or use OpenTelemetry
+		 * instead.
+		 */
+		@Deprecated
 		public static final String LOG_LEVEL = "io.modelcontextprotocol/logLevel";
 
 		public static final String SERVER_INFO = "io.modelcontextprotocol/serverInfo";
@@ -333,11 +340,25 @@ public final class McpSchema {
 				return this;
 			}
 
+			/**
+			 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28
+			 * (SEP-2577) and may be removed from a protocol revision released on or after
+			 * 2027-07-28. Pass directories or files to servers via tool parameters,
+			 * resource URIs, or server configuration instead.
+			 */
+			@Deprecated
 			public Builder roots() {
 				this.roots = new Roots();
 				return this;
 			}
 
+			/**
+			 * @deprecated Sampling is deprecated as of MCP protocol version 2026-07-28
+			 * (SEP-2577) and may be removed from a protocol revision released on or after
+			 * 2027-07-28. Servers should integrate directly with LLM provider APIs
+			 * instead.
+			 */
+			@Deprecated
 			public Builder sampling() {
 				this.sampling = new Sampling();
 				return this;
@@ -1526,11 +1547,25 @@ public final class McpSchema {
 				return this;
 			}
 
+			/**
+			 * @deprecated Sampling is deprecated as of MCP protocol version 2026-07-28
+			 * (SEP-2577) and may be removed from a protocol revision released on or after
+			 * 2027-07-28. Servers should integrate directly with LLM provider APIs
+			 * instead.
+			 */
+			@Deprecated
 			public Builder createMessage(String key, CreateMessageRequest request) {
 				this.inputRequests.put(key, InputRequest.createMessage(request));
 				return this;
 			}
 
+			/**
+			 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28
+			 * (SEP-2577) and may be removed from a protocol revision released on or after
+			 * 2027-07-28. Pass directories or files to servers via tool parameters,
+			 * resource URIs, or server configuration instead.
+			 */
+			@Deprecated
 			public Builder listRoots(String key) {
 				this.inputRequests.put(key, InputRequest.listRoots());
 				return this;
