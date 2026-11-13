@@ -15,8 +15,8 @@ import reactor.core.publisher.Mono;
  * block, {@link #handle} when it must not. Neither completes with an error.
  * <p>
  * For {@code tools/call}, the transport context must map
- * {@link McpParamHeaders#TRANSPORT_CONTEXT_KEY} to the request's {@code Mcp-Param-{Name}}
- * headers, or to {@link McpParamHeaders#NOT_MIRRORED} for a transport without headers.
+ * {@link McpHeaders#TRANSPORT_CONTEXT_KEY} to the request's {@code Mcp-Param-{Name}}
+ * headers, or to {@link McpHeaders#NOT_MIRRORED} for a transport without headers.
  *
  * @author Dariusz Jędrzejczyk
  */

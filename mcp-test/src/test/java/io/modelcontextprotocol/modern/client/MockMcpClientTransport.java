@@ -17,7 +17,7 @@ import io.modelcontextprotocol.modern.JsonRpc.JSONRPCMessage;
 import io.modelcontextprotocol.modern.JsonRpc.JSONRPCRequest;
 import io.modelcontextprotocol.modern.client.transport.McpClientTransport;
 import io.modelcontextprotocol.modern.client.transport.McpTransportRequest;
-import io.modelcontextprotocol.modern.server.McpParamHeaders;
+import io.modelcontextprotocol.modern.server.McpHeaders;
 import io.modelcontextprotocol.modern.server.McpRequestManager;
 import io.modelcontextprotocol.modern.server.McpTransportResponse;
 import reactor.core.publisher.Flux;
@@ -50,13 +50,13 @@ final class MockMcpClientTransport implements McpClientTransport {
 		return request.withRoundTimeout(Flux.deferContextual(ctx -> {
 			this.requests.add(request);
 			McpTransportContext context = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
-			McpParamHeaders paramHeaders = McpParamHeaders.NOT_MIRRORED;
+			McpHeaders paramHeaders = McpHeaders.NOT_MIRRORED;
 			if (this.mirrorsToolParams) {
-				McpParamHeaders.Builder builder = McpParamHeaders.builder();
-				request.paramHeaders().forEach(builder::value);
+				McpHeaders.Builder builder = McpHeaders.builder();
+				request.paramHeaders().forEach(builder::param);
 				paramHeaders = builder.build();
 			}
-			context = context.putAll(Map.of(McpParamHeaders.TRANSPORT_CONTEXT_KEY, paramHeaders));
+			context = context.putAll(Map.of(McpHeaders.TRANSPORT_CONTEXT_KEY, paramHeaders));
 			JSONRPCRequest received = (JSONRPCRequest) overTheWire(request.message());
 			return this.server.handle(context, received).flatMapMany(response -> {
 				if (response instanceof McpTransportResponse.Result result) {

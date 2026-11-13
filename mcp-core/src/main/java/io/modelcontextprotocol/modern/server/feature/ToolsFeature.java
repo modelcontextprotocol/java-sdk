@@ -32,7 +32,7 @@ import io.modelcontextprotocol.modern.ToolParamHeaderAnnotations;
 import io.modelcontextprotocol.modern.ToolParamHeaderAnnotations.InvalidAnnotation;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
 import io.modelcontextprotocol.modern.server.McpFeature;
-import io.modelcontextprotocol.modern.server.McpParamHeaders;
+import io.modelcontextprotocol.modern.server.McpHeaders;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
@@ -134,8 +134,8 @@ public final class ToolsFeature implements McpFeature {
 	}
 
 	private static void validateParamHeaders(McpRequestContext ctx, Tool tool, Map<String, Object> arguments) {
-		Object headers = ctx.transportContext().get(McpParamHeaders.TRANSPORT_CONTEXT_KEY);
-		if (headers == McpParamHeaders.NOT_MIRRORED) {
+		Object headers = ctx.transportContext().get(McpHeaders.TRANSPORT_CONTEXT_KEY);
+		if (headers == McpHeaders.NOT_MIRRORED) {
 			return;
 		}
 		// Parsed on every call, without caching, because repositories are user code and
@@ -153,12 +153,12 @@ public final class ToolsFeature implements McpFeature {
 		}
 		// Failing rather than skipping, so a transport that forgets the headers can't
 		// silently disable validation.
-		if (!(headers instanceof McpParamHeaders paramHeaders)) {
-			logger
-				.warn("Cannot validate Mcp-Param headers for tool '{}': transport context key '{}' is {}. The transport "
-						+ "must map it to an McpParamHeaders, or to McpParamHeaders.NOT_MIRRORED if it has no headers",
-						tool.name(), McpParamHeaders.TRANSPORT_CONTEXT_KEY,
-						(headers == null) ? "missing" : "a " + headers.getClass().getName());
+		if (!(headers instanceof McpHeaders paramHeaders)) {
+			logger.warn(
+					"Cannot validate Mcp-Param headers for tool '{}': transport context key '{}' is {}. The transport "
+							+ "must map it to an McpHeaders, or to McpHeaders.NOT_MIRRORED if it has no headers",
+					tool.name(), McpHeaders.TRANSPORT_CONTEXT_KEY,
+					(headers == null) ? "missing" : "a " + headers.getClass().getName());
 			throw new McpException(ErrorCodes.INTERNAL_ERROR, "Internal error");
 		}
 		ParamHeaderValidator.Result result = ParamHeaderValidator.validate(annotations.valid(), arguments,

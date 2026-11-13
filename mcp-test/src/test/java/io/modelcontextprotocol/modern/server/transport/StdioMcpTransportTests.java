@@ -43,7 +43,7 @@ import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
 import io.modelcontextprotocol.modern.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
-import io.modelcontextprotocol.modern.server.McpParamHeaders;
+import io.modelcontextprotocol.modern.server.McpHeaders;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpRequestManager;
 import io.modelcontextprotocol.modern.server.McpServer;
@@ -590,10 +590,8 @@ class StdioMcpTransportTests {
 		send("tools/call", 1, Map.of("_meta", meta(), "name", "region"));
 		assertThatJson(readLineWithTimeout()).isEqualTo(emptyResult(1));
 
-		assertThat(requestContext.get().get(McpParamHeaders.TRANSPORT_CONTEXT_KEY))
-			.isSameAs(McpParamHeaders.NOT_MIRRORED);
-		assertThat(notificationContext.get().get(McpParamHeaders.TRANSPORT_CONTEXT_KEY))
-			.isSameAs(McpParamHeaders.NOT_MIRRORED);
+		assertThat(requestContext.get().get(McpHeaders.TRANSPORT_CONTEXT_KEY)).isSameAs(McpHeaders.NOT_MIRRORED);
+		assertThat(notificationContext.get().get(McpHeaders.TRANSPORT_CONTEXT_KEY)).isSameAs(McpHeaders.NOT_MIRRORED);
 	}
 
 	@Test
