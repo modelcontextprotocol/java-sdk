@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://modelcontextprotocol.github.io/java-sdk/2.2.0-SNAPSHOT/client/">
       
       
-        <link rel="prev" href="../quickstart/">
+        <link rel="prev" href="../server-modern/">
       
       
         <link rel="next" href="../server/">
@@ -350,6 +350,8 @@
       
         
       
+        
+      
     
     
     
@@ -458,14 +460,137 @@
                 
   
   
-    
-  
   
   
     
     
       
         
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_3" id="__nav_1_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modern (2026-07-28)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Modern (2026-07-28)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../client-modern/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../server-modern/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
       
         
       
@@ -487,17 +612,17 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_1_3" id="__nav_1_3_label" tabindex="">
+          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
             
   
   
   <span class="md-ellipsis">
     
   
-    MCP Components
+    Legacy (2025-11-25 and earlier)
   
 
     
@@ -508,12 +633,12 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_3_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_1_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1_4">
             <span class="md-nav__icon md-icon"></span>
             
   
-    MCP Components
+    Legacy (2025-11-25 and earlier)
   
 
           </label>
@@ -620,10 +745,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#sse-http-legacy" class="md-nav__link">
+  <a href="#sse-http-deprecated" class="md-nav__link">
     <span class="md-ellipsis">
       
-        SSE HTTP (Legacy)
+        SSE HTTP (Deprecated)
       
     </span>
   </a>
@@ -888,34 +1013,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../server-modern/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    MCP Server (2026-07-28, Preview)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -1140,10 +1237,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#sse-http-legacy" class="md-nav__link">
+  <a href="#sse-http-deprecated" class="md-nav__link">
     <span class="md-ellipsis">
       
-        SSE HTTP (Legacy)
+        SSE HTTP (Deprecated)
       
     </span>
   </a>
@@ -1418,7 +1515,7 @@
         <a href="./" class="md-path__link">
           
   <span class="md-ellipsis">
-    MCP Components
+    Legacy (2025-11-25 and earlier)
   </span>
 
         </a>
@@ -1455,8 +1552,14 @@
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>The core <code>io.modelcontextprotocol.sdk:mcp</code> module provides STDIO, SSE, and Streamable HTTP client transport implementations without requiring external web frameworks.</p>
-<p>The Spring-specific WebFlux transport (<code>mcp-spring-webflux</code>) is now part of <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>) and is no longer shipped by this SDK.
-See the <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html">MCP Client Boot Starter</a> documentation for Spring-based client setup.</p>
+<p>The Spring-specific WebFlux transport (<code>mcp-spring-webflux</code>) is now part of <a href="https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>) and is no longer shipped by this SDK.
+See the <a href="https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html">MCP Client Boot Starter</a> documentation for Spring-based client setup.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">2026-07-28 specification</p>
+<p>This page covers the legacy client, which implements the 2025-11-25 specification and earlier revisions.
+A client for the stateless 2026-07-28 revision is also available; see
+<a href="../client-modern/">MCP Client (2026-07-28)</a>.</p>
 </div>
 <p>The client provides both synchronous and asynchronous APIs for flexibility in different application contexts.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Sync API</label><label for="__tabbed_1_2">Async API</label></div>
@@ -1594,7 +1697,7 @@ See the <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp
 </ul>
 </div>
 <div class="tabbed-block">
-<p>Creates Streamable HTTP WebClient-based client transport. Requires the <code>mcp-spring-webflux</code> dependency from <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>):</p>
+<p>Creates Streamable HTTP WebClient-based client transport. Requires the <code>mcp-spring-webflux</code> dependency from <a href="https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>):</p>
 <div class="highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">McpTransport</span><span class="w"> </span><span class="n">transport</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">WebFluxSseClientTransport</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">WebClient</span><span class="p">.</span><span class="na">builder</span><span class="p">().</span><span class="na">baseUrl</span><span class="p">(</span><span class="s">"http://your-mcp-server"</span><span class="p">))</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
@@ -1602,7 +1705,7 @@ See the <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp
 </div>
 </div>
 </div>
-<h3 id="sse-http-legacy">SSE HTTP (Legacy)<a class="headerlink" href="#sse-http-legacy" title="Permanent link">&para;</a></h3>
+<h3 id="sse-http-deprecated">SSE HTTP (Deprecated)<a class="headerlink" href="#sse-http-deprecated" title="Permanent link">&para;</a></h3>
 <div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">SSE HttpClient</label><label for="__tabbed_3_2">SSE WebClient (external)</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
@@ -1611,7 +1714,7 @@ See the <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp
 </span></code></pre></div>
 </div>
 <div class="tabbed-block">
-<p>Creates WebFlux-based SSE client transport. Requires the <code>mcp-spring-webflux</code> dependency from <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>):</p>
+<p>Creates WebFlux-based SSE client transport. Requires the <code>mcp-spring-webflux</code> dependency from <a href="https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>):</p>
 <div class="highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">WebClient</span><span class="p">.</span><span class="na">Builder</span><span class="w"> </span><span class="n">webClientBuilder</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">WebClient</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span><span class="p">.</span><span class="na">baseUrl</span><span class="p">(</span><span class="s">"http://your-mcp-server"</span><span class="p">);</span>
 </span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">McpTransport</span><span class="w"> </span><span class="n">transport</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">WebFluxSseClientTransport</span><span class="p">(</span><span class="n">webClientBuilder</span><span class="p">);</span>

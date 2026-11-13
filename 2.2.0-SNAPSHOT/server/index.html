@@ -16,7 +16,7 @@
         <link rel="prev" href="../client/">
       
       
-        <link rel="next" href="../server-modern/">
+        <link rel="next" href="../contribute/">
       
       
         
@@ -350,6 +350,8 @@
       
         
       
+        
+      
     
     
     
@@ -458,14 +460,137 @@
                 
   
   
-    
-  
   
   
     
     
       
         
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_3" id="__nav_1_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modern (2026-07-28)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Modern (2026-07-28)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../client-modern/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../server-modern/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
       
         
       
@@ -487,17 +612,17 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_1_3" id="__nav_1_3_label" tabindex="">
+          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
             
   
   
   <span class="md-ellipsis">
     
   
-    MCP Components
+    Legacy (2025-11-25 and earlier)
   
 
     
@@ -508,12 +633,12 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_3_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_1_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1_4">
             <span class="md-nav__icon md-icon"></span>
             
   
-    MCP Components
+    Legacy (2025-11-25 and earlier)
   
 
           </label>
@@ -676,10 +801,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#sse-http-legacy" class="md-nav__link">
+  <a href="#sse-http-deprecated" class="md-nav__link">
     <span class="md-ellipsis">
       
-        SSE HTTP (Legacy)
+        SSE HTTP (Deprecated)
       
     </span>
   </a>
@@ -984,34 +1109,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../server-modern/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    MCP Server (2026-07-28, Preview)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -1264,10 +1361,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#sse-http-legacy" class="md-nav__link">
+  <a href="#sse-http-deprecated" class="md-nav__link">
     <span class="md-ellipsis">
       
-        SSE HTTP (Legacy)
+        SSE HTTP (Deprecated)
       
     </span>
   </a>
@@ -1610,7 +1707,7 @@
         <a href="../client/" class="md-path__link">
           
   <span class="md-ellipsis">
-    MCP Components
+    Legacy (2025-11-25 and earlier)
   </span>
 
         </a>
@@ -1648,13 +1745,13 @@
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>The core <code>io.modelcontextprotocol.sdk:mcp</code> module provides STDIO, SSE, and Streamable HTTP server transport implementations without requiring external web frameworks.</p>
-<p>Spring-specific transport implementations (<code>mcp-spring-webflux</code>, <code>mcp-spring-webmvc</code>) are now part of <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>) and are no longer shipped by this SDK.
-See the <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html">MCP Server Boot Starter</a> documentation for Spring-based server setup.</p>
+<p>Spring-specific transport implementations (<code>mcp-spring-webflux</code>, <code>mcp-spring-webmvc</code>) are now part of <a href="https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>) and are no longer shipped by this SDK.
+See the <a href="https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html">MCP Server Boot Starter</a> documentation for Spring-based server setup.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">2026-07-28 specification</p>
-<p>This page covers the classic server, which implements the 2025-11-25 specification and earlier revisions.
-A stateless server for the 2026-07-28 revision is available as a preview; see
+<p>This page covers the legacy server, which implements the 2025-11-25 specification and earlier revisions.
+A stateless server for the 2026-07-28 revision is also available; see
 <a href="../server-modern/">MCP Server (2026-07-28)</a>.</p>
 </div>
 <p>The server supports both synchronous and asynchronous APIs, allowing for flexible integration in different application contexts.</p>
@@ -1788,7 +1885,7 @@ The SDK includes several built-in transport provider implementations:</p>
 </ul>
 </div>
 <div class="tabbed-block">
-<p>Creates WebFlux-based Streamable HTTP server transport. Requires the <code>mcp-spring-webflux</code> dependency from <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>):</p>
+<p>Creates WebFlux-based Streamable HTTP server transport. Requires the <code>mcp-spring-webflux</code> dependency from <a href="https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>):</p>
 <div class="highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nd">@Configuration</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="kd">class</span> <span class="nc">McpConfig</span><span class="w"> </span><span class="p">{</span>
 </span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nd">@Bean</span>
@@ -1815,7 +1912,7 @@ The SDK includes several built-in transport provider implementations:</p>
 </ul>
 </div>
 <div class="tabbed-block">
-<p>Creates WebMvc-based Streamable HTTP server transport. Requires the <code>mcp-spring-webmvc</code> dependency from <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>):</p>
+<p>Creates WebMvc-based Streamable HTTP server transport. Requires the <code>mcp-spring-webmvc</code> dependency from <a href="https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>):</p>
 <div class="highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nd">@Configuration</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nd">@EnableWebMvc</span>
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="kd">class</span> <span class="nc">McpConfig</span><span class="w"> </span><span class="p">{</span>
@@ -1837,7 +1934,7 @@ The SDK includes several built-in transport provider implementations:</p>
 </div>
 </div>
 </div>
-<h3 id="sse-http-legacy">SSE HTTP (Legacy)<a class="headerlink" href="#sse-http-legacy" title="Permanent link">&para;</a></h3>
+<h3 id="sse-http-deprecated">SSE HTTP (Deprecated)<a class="headerlink" href="#sse-http-deprecated" title="Permanent link">&para;</a></h3>
 <div class="tabbed-set tabbed-alternate" data-tabs="3:3"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><input id="__tabbed_3_3" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">SSE Servlet</label><label for="__tabbed_3_2">SSE WebFlux (external)</label><label for="__tabbed_3_3">SSE WebMvc (external)</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
@@ -1877,7 +1974,7 @@ To use it with a Spring Web application, you can register it as a Servlet bean:<
 </ul>
 </div>
 <div class="tabbed-block">
-<p>Creates WebFlux-based SSE server transport. Requires the <code>mcp-spring-webflux</code> dependency from <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>):</p>
+<p>Creates WebFlux-based SSE server transport. Requires the <code>mcp-spring-webflux</code> dependency from <a href="https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>):</p>
 <div class="highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nd">@Configuration</span>
 </span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="kd">class</span> <span class="nc">McpConfig</span><span class="w"> </span><span class="p">{</span>
 </span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="nd">@Bean</span>
@@ -1900,7 +1997,7 @@ To use it with a Spring Web application, you can register it as a Servlet bean:<
 </ul>
 </div>
 <div class="tabbed-block">
-<p>Creates WebMvc-based SSE server transport. Requires the <code>mcp-spring-webmvc</code> dependency from <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>):</p>
+<p>Creates WebMvc-based SSE server transport. Requires the <code>mcp-spring-webmvc</code> dependency from <a href="https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html">Spring AI</a> 2.0+ (group <code>org.springframework.ai</code>):</p>
 <div class="highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nd">@Configuration</span>
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="nd">@EnableWebMvc</span>
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="kd">class</span> <span class="nc">McpConfig</span><span class="w"> </span><span class="p">{</span>
@@ -1953,7 +2050,7 @@ To use it with a Spring Web application, you can register it as a Servlet bean:<
 </span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
 </span></code></pre></div>
 <h3 id="tool-specification">Tool Specification<a class="headerlink" href="#tool-specification" title="Permanent link">&para;</a></h3>
-<p>The Model Context Protocol allows servers to <a href="https://spec.modelcontextprotocol.io/specification/2024-11-05/server/tools/">expose tools</a> that can be invoked by language models.
+<p>The Model Context Protocol allows servers to <a href="https://modelcontextprotocol.io/specification/2025-11-25/server/tools">expose tools</a> that can be invoked by language models.
 The Java SDK allows implementing Tool Specifications with their handler functions.
 Tools enable AI models to perform calculations, access external APIs, query databases, and manipulate files.</p>
 <p>The recommended approach is to use the builder pattern and <code>CallToolRequest</code> as the handler parameter:</p>
@@ -2236,7 +2333,7 @@ Resources provide context to AI models by exposing data such as: File contents, 
 </span><span id="__span-28-11"><a id="__codelineno-28-11" name="__codelineno-28-11" href="#__codelineno-28-11"></a><span class="p">);</span>
 </span></code></pre></div>
 <h3 id="prompt-specification">Prompt Specification<a class="headerlink" href="#prompt-specification" title="Permanent link">&para;</a></h3>
-<p>As part of the <a href="https://spec.modelcontextprotocol.io/specification/2024-11-05/server/prompts/">Prompting capabilities</a>, MCP provides a standardized way for servers to expose prompt templates to clients.
+<p>As part of the <a href="https://modelcontextprotocol.io/specification/2025-11-25/server/prompts">Prompting capabilities</a>, MCP provides a standardized way for servers to expose prompt templates to clients.
 The Prompt Specification is a structured template for AI model interactions that enables consistent message formatting, parameter substitution, context injection, response formatting, and instruction templating.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Sync</label><label for="__tabbed_8_2">Async</label></div>
 <div class="tabbed-content">
@@ -2391,7 +2488,7 @@ The first argument is <code>McpSyncServerExchange</code>/<code>McpAsyncServerExc
 </div>
 </div>
 <h3 id="using-sampling-from-a-server">Using Sampling from a Server<a class="headerlink" href="#using-sampling-from-a-server" title="Permanent link">&para;</a></h3>
-<p>To use <a href="https://spec.modelcontextprotocol.io/specification/2024-11-05/client/sampling/">Sampling capabilities</a>, connect to a client that supports sampling.
+<p>To use <a href="https://modelcontextprotocol.io/specification/2025-11-25/client/sampling">Sampling capabilities</a>, connect to a client that supports sampling.
 No special server configuration is needed, but verify client sampling support before making requests.
 Learn about <a href="../client/#sampling-support">client sampling support</a>.</p>
 <p>Once connected to a compatible client, the server can request language model generations:</p>
