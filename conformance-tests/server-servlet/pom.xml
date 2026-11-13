@@ -6,7 +6,7 @@
 	<parent>
 		<groupId>io.modelcontextprotocol.sdk</groupId>
 		<artifactId>conformance-tests</artifactId>
-		<version>2.2.0</version>
+		<version>2.2.1-SNAPSHOT</version>
 	</parent>
 	<artifactId>server-servlet</artifactId>
 	<packaging>jar</packaging>
@@ -29,12 +29,12 @@
 		<dependency>
 			<groupId>io.modelcontextprotocol.sdk</groupId>
 			<artifactId>mcp-core</artifactId>
-			<version>2.2.0</version>
+			<version>2.2.1-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>io.modelcontextprotocol.sdk</groupId>
 			<artifactId>mcp-json-jackson3</artifactId>
-			<version>2.2.0</version>
+			<version>2.2.1-SNAPSHOT</version>
 		</dependency>
 
 		<dependency>
