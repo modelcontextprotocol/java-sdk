@@ -6,6 +6,7 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.slf4j.Logger;
@@ -19,6 +20,7 @@ import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * A synchronous client implementation for the Model Context Protocol (MCP) that wraps an
@@ -421,6 +423,20 @@ public class McpSyncClient implements AutoCloseable {
 
 	public GetPromptResult getPrompt(GetPromptRequest getPromptRequest) {
 		return withProvidedContext(this.delegate.getPrompt(getPromptRequest)).block();
+	}
+
+	/**
+	 * Registers an additional consumer for logging messages received from the server.
+	 * <p>
+	 * Unlike {@link McpClient.SyncSpec#loggingConsumer(Consumer)}, this can be called
+	 * after the client has been built, so a consumer may be registered only once
+	 * {@link #getServerCapabilities()} reports that the server supports logging.
+	 * @param loggingConsumer the consumer that receives logging messages
+	 */
+	public void addLoggingConsumer(Consumer<McpSchema.LoggingMessageNotification> loggingConsumer) {
+		Assert.notNull(loggingConsumer, "Logging consumer must not be null");
+		this.delegate.addLoggingConsumer(
+				l -> Mono.<Void>fromRunnable(() -> loggingConsumer.accept(l)).subscribeOn(Schedulers.boundedElastic()));
 	}
 
 	/**
