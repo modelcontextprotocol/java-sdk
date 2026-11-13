@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
  * @author Surbhi Bansal
  * @author Anurag Pant
  * @author Dariusz Jędrzejczyk
+ * @author Taewoong Kim
  */
 public final class McpSchema {
 
@@ -306,9 +307,10 @@ public final class McpSchema {
 	 * A response to a request (successful, or error).
 	 *
 	 * @param jsonrpc The JSON-RPC version (must be "2.0")
-	 * @param id The request identifier that this response corresponds to
-	 * @param result The result of the successful request; null if error
-	 * @param error Error information if the request failed; null if has result
+	 * @param id The request identifier that this response corresponds to. May be null for
+	 * an error response when the request identifier could not be determined.
+	 * @param result The result of the successful request. Null if error
+	 * @param error Error information if the request failed. Null if has result
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -320,10 +322,10 @@ public final class McpSchema {
 
 		public JSONRPCResponse {
 			Assert.hasText(jsonrpc, "jsonrpc must not be empty");
-			Assert.notNull(id, "MCP responses MUST include an ID - null IDs are not allowed");
-			Assert.isTrue(id instanceof String || id instanceof Integer || id instanceof Long,
-					"MCP responses MUST have an ID that is either a string or integer");
 			Assert.isTrue((result != null) ^ (error != null), "MCP responses MUST either have a result or error");
+			Assert.isTrue(id != null || error != null, "MCP result responses MUST include an ID");
+			Assert.isTrue(id == null || id instanceof String || id instanceof Integer || id instanceof Long,
+					"MCP responses MUST have an ID that is either a string or integer");
 		}
 
 		public static JSONRPCResponse result(Object id, Object result) {

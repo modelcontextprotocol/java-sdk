@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * @author Christian Tzolov
  * @author Anurag Pant
+ * @author Taewoong Kim
  */
 public class McpSchemaTests {
 
@@ -324,6 +325,58 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(json("""
 					{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid request"}}"""));
+	}
+
+	@Test
+	void jsonRpcErrorResponseWithoutIdOmitsIdOnWire() throws Exception {
+		McpSchema.JSONRPCResponse.JSONRPCError error = new McpSchema.JSONRPCResponse.JSONRPCError(
+				McpSchema.ErrorCodes.INVALID_REQUEST, "Invalid request");
+		McpSchema.JSONRPCResponse response = McpSchema.JSONRPCResponse.error(null, error);
+
+		String value = JSON_MAPPER.writeValueAsString(response);
+
+		assertThatJson(value).isEqualTo("""
+				{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request"}}
+				""");
+	}
+
+	@Test
+	void jsonRpcErrorResponseWithoutIdDeserializes() throws Exception {
+		McpSchema.JSONRPCResponse response = JSON_MAPPER.readValue("""
+				{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request"}}
+				""", McpSchema.JSONRPCResponse.class);
+
+		assertThat(response.id()).isNull();
+		assertThat(response.result()).isNull();
+		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INVALID_REQUEST);
+	}
+
+	@Test
+	void jsonRpcErrorResponseWithoutIdIgnoresUnknownFields() throws Exception {
+		McpSchema.JSONRPCResponse response = JSON_MAPPER.readValue("""
+				{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request"},"futureField":true}
+				""", McpSchema.JSONRPCResponse.class);
+
+		assertThat(response.id()).isNull();
+		assertThat(response.error().message()).isEqualTo("Invalid request");
+	}
+
+	@Test
+	void jsonRpcResultResponseRequiresId() {
+		assertThatThrownBy(() -> McpSchema.JSONRPCResponse.result(null, Map.of()))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> JSON_MAPPER.readValue("""
+				{"jsonrpc":"2.0","result":{}}
+				""", McpSchema.JSONRPCResponse.class)).isInstanceOf(IOException.class);
+	}
+
+	@Test
+	void jsonRpcErrorResponseRejectsNonIntegralId() {
+		McpSchema.JSONRPCResponse.JSONRPCError error = new McpSchema.JSONRPCResponse.JSONRPCError(
+				McpSchema.ErrorCodes.INVALID_REQUEST, "Invalid request");
+
+		assertThatThrownBy(() -> McpSchema.JSONRPCResponse.error(1.5, error))
+			.isInstanceOf(IllegalArgumentException.class);
 	}
 
 	// Initialization Tests
