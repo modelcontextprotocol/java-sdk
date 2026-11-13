@@ -71,6 +71,7 @@
 		<toxiproxy.version>2.0.5</toxiproxy.version>
 
 		<slf4j-api.version>2.0.20</slf4j-api.version>
+		<jspecify.version>1.0.0</jspecify.version>
 		<logback.version>1.6.6</logback.version>
 		<jackson-annotations.version>2.22</jackson-annotations.version>
 		<jackson2.version>2.22.4</jackson2.version>

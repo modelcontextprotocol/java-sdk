@@ -13,7 +13,7 @@ import java.util.Set;
 
 import io.modelcontextprotocol.modern.McpHttp;
 import io.modelcontextprotocol.util.Assert;
-import reactor.util.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code Mcp-Param-{Name}} headers of a {@code tools/call} request, which a client
@@ -90,8 +90,7 @@ public final class McpParamHeaders {
 	 * @param name the {@code {Name}} part of {@code Mcp-Param-{Name}}, in any case
 	 * @return the decoded value, or {@code null} if the header is absent or malformed
 	 */
-	@Nullable
-	public String value(String name) {
+	@Nullable public String value(String name) {
 		return this.values.get(normalize(name));
 	}
 
