@@ -63,7 +63,7 @@ Add the `mcp` module, which bundles `mcp-core` with Jackson 3.x JSON serializati
     }
     ```
 
-This is all a client needs. It includes the classic and the modern client and server, with their STDIO and HTTP transports, and requires no web framework.
+This is all a client needs. It includes the modern and the legacy client and server, with their STDIO and HTTP transports, and requires no web framework.
 
 !!! note "HTTP servers"
     The HTTP server transports are built on the Servlet API, which the SDK does not bring in. Run them in a Servlet container, such as Tomcat or Jetty, with async support enabled.
@@ -96,7 +96,7 @@ This is all a client needs. It includes the classic and the modern client and se
 
 **Your own JSON implementation.** Depend on `mcp-core` alone and provide the JSON binding yourself.
 
-**Spring applications.** Spring WebFlux and WebMVC transports for the classic client and server are part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`), not of this SDK:
+**Spring applications.** Spring WebFlux and WebMVC transports for the legacy client and server are part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`), not of this SDK:
 
 === "Maven"
 
@@ -130,9 +130,35 @@ With the `spring-ai-bom` or the Spring AI starters (`spring-ai-starter-mcp-serve
 
 ## Your First Client
 
-The SDK has two clients, one for each generation of the protocol; see [Classic or Modern?](overview.md#classic-or-modern) to choose. Both examples list the tools of a server at `http://localhost:8080/mcp` and call one of them.
+The SDK has two clients, one for each generation of the protocol; see [Modern or Legacy?](overview.md#modern-or-legacy) to choose. Both examples list the tools of a server at `http://localhost:8080/mcp` and call one of them.
 
-=== "Classic"
+=== "Modern"
+
+    For servers of the 2026-07-28 specification. There is nothing to initialize and nothing to close on the client:
+
+    ```java
+    import java.util.Map;
+
+    import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
+    import io.modelcontextprotocol.modern.client.McpClient;
+    import io.modelcontextprotocol.modern.client.McpSyncClient;
+    import io.modelcontextprotocol.modern.client.transport.HttpClientMcpTransport;
+
+    McpSyncClient client = McpClient.sync(
+            HttpClientMcpTransport.builder("http://localhost:8080/mcp").build())
+        .build();
+
+    client.listTools().list().tools().forEach(tool -> System.out.println(tool.name()));
+
+    CallToolResult result = client.tool("echo")
+        .arguments(Map.of("text", "Hello"))
+        .call();
+    System.out.println(result.content());
+    ```
+
+    Continue with the [MCP Client (2026-07-28)](client-modern.md) guide.
+
+=== "Legacy"
 
     For servers of the 2025-11-25 specification and earlier. The client sets up a session with `initialize()`:
 
@@ -162,33 +188,7 @@ The SDK has two clients, one for each generation of the protocol; see [Classic o
 
     Continue with the [MCP Client](client.md) guide.
 
-=== "Modern"
-
-    For servers of the 2026-07-28 specification. There is nothing to initialize and nothing to close on the client:
-
-    ```java
-    import java.util.Map;
-
-    import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
-    import io.modelcontextprotocol.modern.client.McpClient;
-    import io.modelcontextprotocol.modern.client.McpSyncClient;
-    import io.modelcontextprotocol.modern.client.transport.HttpClientMcpTransport;
-
-    McpSyncClient client = McpClient.sync(
-            HttpClientMcpTransport.builder("http://localhost:8080/mcp").build())
-        .build();
-
-    client.listTools().list().tools().forEach(tool -> System.out.println(tool.name()));
-
-    CallToolResult result = client.tool("echo")
-        .arguments(Map.of("text", "Hello"))
-        .call();
-    System.out.println(result.content());
-    ```
-
-    Continue with the [MCP Client (2026-07-28)](client-modern.md) guide.
-
-To build the server side, see the [MCP Server](server.md) guide for the classic server and the [Quick Start](server-modern.md#quick-start) of the modern server guide, which serves the `echo` tool the modern example calls.
+To build the server side, see the [Quick Start](server-modern.md#quick-start) of the modern server guide, which serves the `echo` tool the modern example calls, and the [MCP Server](server.md) guide for the legacy server.
 
 ## Available Dependencies
 
@@ -197,9 +197,9 @@ The BOM manages the following modules, all in the group `io.modelcontextprotocol
 | Module | Purpose |
 |--------|---------|
 | `mcp` | Convenience bundle that combines `mcp-core` with `mcp-json-jackson3`. |
-| `mcp-core` | The classic and modern clients and servers, with the STDIO, JDK HttpClient and Servlet transports. JSON binding is pluggable. |
+| `mcp-core` | The modern and legacy clients and servers, with the STDIO, JDK HttpClient and Servlet transports. JSON binding is pluggable. |
 | `mcp-json-jackson3` | Jackson 3.x JSON serialization (included in `mcp`). |
 | `mcp-json-jackson2` | Jackson 2.x JSON serialization, for projects that need Jackson 2.x. |
 | `mcp-test` | Testing utilities and support for MCP-based applications. |
 
-The Spring transports, `mcp-spring-webflux` and `mcp-spring-webmvc`, are published by [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ in the group `org.springframework.ai`.
+The Spring transports, `mcp-spring-webflux` and `mcp-spring-webmvc`, are published by [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ in the group `org.springframework.ai`.

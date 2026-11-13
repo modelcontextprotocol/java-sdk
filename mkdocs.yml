@@ -42,12 +42,12 @@ nav:
   - Documentation:
     - Overview: overview.md
     - Quickstart: quickstart.md
-    - Classic (2025-11-25 and earlier):
-      - MCP Client: client.md
-      - MCP Server: server.md
     - Modern (2026-07-28):
       - MCP Client: client-modern.md
       - MCP Server: server-modern.md
+    - Legacy (2025-11-25 and earlier):
+      - MCP Client: client.md
+      - MCP Server: server.md
   - Contributing:
     - Contributing Guide: contribute.md
     - Documentation: development.md

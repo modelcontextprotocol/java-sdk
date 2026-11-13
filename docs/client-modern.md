@@ -8,13 +8,13 @@ description: Call stateless MCP servers of the 2026-07-28 specification revision
 !!! note
     The modern client is available since 2.2.0. Its API, in the `io.modelcontextprotocol.modern` packages,
     may change in minor releases until 3.0, and [some parts of the revision](#not-yet-supported) are not
-    implemented. For servers of earlier revisions, use the [classic client](client.md).
+    implemented. For servers of earlier revisions, use the [legacy client](client.md).
 
 ## Overview
 
 The modern client talks to servers of the stateless
 [2026-07-28 MCP specification revision](https://modelcontextprotocol.io/specification/2026-07-28).
-It lives in `io.modelcontextprotocol.modern.client`, next to the classic client, and shares no types with it:
+It lives in `io.modelcontextprotocol.modern.client`, next to the legacy client, and shares no types with it:
 it has its own `McpClient`, its own `McpSchema`, and its own transports. Both ship in `mcp-core`, so no extra
 dependency is needed.
 
@@ -33,50 +33,78 @@ version and the client's capabilities in its `_meta`. The modern client is built
 - **The protocol details are handled for you.** The client adds the `_meta` block, negotiates the protocol
   version, answers the server's input requests, and sets the `Mcp-*` headers.
 
-### Classic or modern?
+### Modern or legacy?
 
-| | [Classic client](client.md) | Modern client |
+| | Modern client | [Legacy client](client.md) |
 |---|---|---|
-| Package | `io.modelcontextprotocol.client` | `io.modelcontextprotocol.modern.client` |
-| Spec revision | 2025-11-25 and earlier | 2026-07-28 |
-| Startup | `initialize()` handshake | None |
-| Sessions | Yes | No |
-| Elicitation | Server-to-client request | Input request answered in a retry of the call |
-| Sampling, roots | Supported | Not supported |
-| Logging | Supported | Not supported (deprecated by the revision) |
+| Package | `io.modelcontextprotocol.modern.client` | `io.modelcontextprotocol.client` |
+| Spec revision | 2026-07-28 | 2025-11-25 and earlier |
+| Startup | None | `initialize()` handshake |
+| Sessions | No | Yes |
+| Elicitation | Input request answered in a retry of the call | Server-to-client request |
+| Sampling, roots | Not supported | Supported |
+| Logging | Not supported (deprecated by the revision) | Supported |
 
 The modern client only speaks the 2026-07-28 protocol version. It cannot call servers that expect an
 `initialize` handshake.
 
 ## Quick Start
 
-A synchronous client that lists the server's tools and calls one over HTTP:
+A client that lists the server's tools and calls one over HTTP:
 
-```java
-import java.util.Map;
+=== "Sync"
 
-import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
-import io.modelcontextprotocol.modern.McpSchema.Implementation;
-import io.modelcontextprotocol.modern.McpSchema.Tool;
-import io.modelcontextprotocol.modern.client.McpClient;
-import io.modelcontextprotocol.modern.client.McpSyncClient;
-import io.modelcontextprotocol.modern.client.transport.HttpClientMcpTransport;
+    ```java
+    import java.util.Map;
 
-HttpClientMcpTransport transport = HttpClientMcpTransport.builder("http://localhost:8080/mcp").build();
+    import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
+    import io.modelcontextprotocol.modern.McpSchema.Implementation;
+    import io.modelcontextprotocol.modern.McpSchema.Tool;
+    import io.modelcontextprotocol.modern.client.McpClient;
+    import io.modelcontextprotocol.modern.client.McpSyncClient;
+    import io.modelcontextprotocol.modern.client.transport.HttpClientMcpTransport;
 
-McpSyncClient client = McpClient.sync(transport)
-    .clientInfo(Implementation.builder("my-client", "1.0.0").build())
-    .build();
+    HttpClientMcpTransport transport = HttpClientMcpTransport.builder("http://localhost:8080/mcp").build();
 
-for (Tool tool : client.listTools().list().tools()) {
-    System.out.println(tool.name());
-}
+    McpSyncClient client = McpClient.sync(transport)
+        .clientInfo(Implementation.builder("my-client", "1.0.0").build())
+        .build();
 
-CallToolResult result = client.tool("echo")
-    .arguments(Map.of("text", "Hello"))
-    .call();
-System.out.println(result.content());
-```
+    for (Tool tool : client.listTools().list().tools()) {
+        System.out.println(tool.name());
+    }
+
+    CallToolResult result = client.tool("echo")
+        .arguments(Map.of("text", "Hello"))
+        .call();
+    System.out.println(result.content());
+    ```
+
+=== "Async"
+
+    ```java
+    import java.util.Map;
+
+    import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
+    import io.modelcontextprotocol.modern.McpSchema.Implementation;
+    import io.modelcontextprotocol.modern.client.McpAsyncClient;
+    import io.modelcontextprotocol.modern.client.McpClient;
+    import io.modelcontextprotocol.modern.client.transport.HttpClientMcpTransport;
+
+    HttpClientMcpTransport transport = HttpClientMcpTransport.builder("http://localhost:8080/mcp").build();
+
+    McpAsyncClient client = McpClient.async(transport)
+        .clientInfo(Implementation.builder("my-client", "1.0.0").build())
+        .build();
+
+    CallToolResult result = client.listTools().list()
+        .doOnNext(tools -> tools.tools().forEach(tool -> System.out.println(tool.name())))
+        .then(client.tool("echo")
+            .arguments(Map.of("text", "Hello"))
+            .call())
+        .block(); // block() only to keep the example short
+    System.out.println(result.content());
+    ```
 
 Clients are immutable and thread-safe. There is nothing to start and nothing to close on the client.
 
@@ -127,19 +155,37 @@ HttpClientMcpTransport transport = HttpClientMcpTransport.builder("https://examp
 `StdioMcpClientTransport` runs the server as a process and exchanges newline-delimited JSON-RPC over its
 standard streams.
 
-```java
-import io.modelcontextprotocol.client.transport.ServerParameters;
-import io.modelcontextprotocol.modern.client.transport.StdioMcpClientTransport;
+=== "Sync"
 
-ServerParameters params = ServerParameters.builder("java")
-    .args("-jar", "my-mcp-server.jar")
-    .build();
+    ```java
+    import io.modelcontextprotocol.client.transport.ServerParameters;
+    import io.modelcontextprotocol.modern.client.transport.StdioMcpClientTransport;
 
-try (StdioMcpClientTransport transport = StdioMcpClientTransport.builder(params).start()) {
-    McpSyncClient client = McpClient.sync(transport).build();
-    // use the client
-}
-```
+    ServerParameters params = ServerParameters.builder("java")
+        .args("-jar", "my-mcp-server.jar")
+        .build();
+
+    try (StdioMcpClientTransport transport = StdioMcpClientTransport.builder(params).start()) {
+        McpSyncClient client = McpClient.sync(transport).build();
+        // use the client
+    }
+    ```
+
+=== "Async"
+
+    ```java
+    import io.modelcontextprotocol.client.transport.ServerParameters;
+    import io.modelcontextprotocol.modern.client.transport.StdioMcpClientTransport;
+
+    ServerParameters params = ServerParameters.builder("java")
+        .args("-jar", "my-mcp-server.jar")
+        .build();
+
+    try (StdioMcpClientTransport transport = StdioMcpClientTransport.builder(params).start()) {
+        McpAsyncClient client = McpClient.async(transport).build();
+        // use the client
+    }
+    ```
 
 `start()` spawns the process. Clients never start or close the transport they are given, so one process can
 serve several clients; close the transport once they are done. When the server's output ends or the transport
@@ -168,20 +214,41 @@ handler receive.
 - **Async** calls return a `Mono` (or a `Flux` for listen streams). Nothing is sent before subscription.
   Handlers return a `Mono` and must not block.
 
-```java
-McpAsyncClient client = McpClient.async(transport).build();
+=== "Sync"
 
-client.tool("echo")
-    .arguments(Map.of("text", "Hello"))
-    .call()
-    .subscribe(result -> System.out.println(result.content()));
-```
+    ```java
+    McpSyncClient client = McpClient.sync(transport).build();
 
-The examples on this page use the sync client unless they say otherwise.
+    CallToolResult result = client.tool("echo")
+        .arguments(Map.of("text", "Hello"))
+        .call();
+    System.out.println(result.content());
+    ```
+
+=== "Async"
+
+    ```java
+    McpAsyncClient client = McpClient.async(transport).build();
+
+    client.tool("echo")
+        .arguments(Map.of("text", "Hello"))
+        .call()
+        .subscribe(result -> System.out.println(result.content()));
+    ```
+
+The examples on this page have a Sync and an Async tab. Choosing one switches all of them.
 
 ## Calling the Server
 
-| Operation | Spec | Terminal |
+Every operation takes two steps:
+
+1. A method on the client starts the request. It sends nothing yet; it returns a request spec, on which you
+   set arguments and [per-call settings](#per-call-settings).
+2. A final method on the spec sends the request and returns the result (in the async client, a `Mono` of it).
+
+In `client.tool("echo").arguments(args).call()`, `tool("echo")` starts the request and `call()` sends it.
+
+| Operation | Start the request | Send it |
 |---|---|---|
 | Call a tool | `client.tool(name)` or `client.tool(Tool)` | `call()` |
 | Read a resource | `client.resource(uri)` | `read()` |
@@ -189,19 +256,35 @@ The examples on this page use the sync client unless they say otherwise.
 | Complete an argument | `client.completion(ref, argument, value)` | `complete()` |
 | List one page | `client.tools()`, `prompts()`, `resources()`, `resourceTemplates()` | `list()` |
 | List all tools | `client.listTools()` | `list()` |
-| Discover the server | | `client.discover()` |
+| Discover the server | `client.discover()` | Sent right away; there is nothing to configure |
 | Listen for changes | `client.listen()` | `open(listener)` (sync), `events()` (async) |
 
-```java
-ReadResourceResult resource = client.resource("file:///config.json").read();
+=== "Sync"
 
-GetPromptResult prompt = client.prompt("greeting")
-    .arguments(Map.of("name", "Ada"))
-    .get();
+    ```java
+    ReadResourceResult resource = client.resource("file:///config.json").read();
 
-CompleteResult completion = client.completion(new PromptReference("greeting"), "name", "A").complete();
-List<String> suggestions = completion.completion().values();
-```
+    GetPromptResult prompt = client.prompt("greeting")
+        .arguments(Map.of("name", "Ada"))
+        .get();
+
+    CompleteResult completion = client.completion(new PromptReference("greeting"), "name", "A").complete();
+    List<String> suggestions = completion.completion().values();
+    ```
+
+=== "Async"
+
+    ```java
+    Mono<ReadResourceResult> resource = client.resource("file:///config.json").read();
+
+    Mono<GetPromptResult> prompt = client.prompt("greeting")
+        .arguments(Map.of("name", "Ada"))
+        .get();
+
+    Mono<List<String>> suggestions = client.completion(new PromptReference("greeting"), "name", "A")
+        .complete()
+        .map(completion -> completion.completion().values());
+    ```
 
 A tool failure the model should see is not an exception. It is a `CallToolResult` whose `isError()` is `true`.
 
@@ -209,14 +292,27 @@ A tool failure the model should see is not an exception. It is a `CallToolResult
 
 A spec starts from the client's settings. Each setter replaces one of them for that call only:
 
-```java
-CallToolResult result = client.tool("generate_report")
-    .arguments(Map.of("year", 2026))
-    .roundTimeout(Duration.ofMinutes(5))
-    .progress(progress -> System.out.println(progress.message()))
-    .meta(Map.of("com.example/traceId", traceId))
-    .call();
-```
+=== "Sync"
+
+    ```java
+    CallToolResult result = client.tool("generate_report")
+        .arguments(Map.of("year", 2026))
+        .roundTimeout(Duration.ofMinutes(5))
+        .progress(progress -> System.out.println(progress.message()))
+        .meta(Map.of("com.example/traceId", traceId))
+        .call();
+    ```
+
+=== "Async"
+
+    ```java
+    Mono<CallToolResult> result = client.tool("generate_report")
+        .arguments(Map.of("year", 2026))
+        .roundTimeout(Duration.ofMinutes(5))
+        .progress(progress -> Mono.fromRunnable(() -> System.out.println(progress.message())))
+        .meta(Map.of("com.example/traceId", traceId))
+        .call();
+    ```
 
 `meta(...)` adds entries to the request's `_meta`. It rejects `progressToken` and keys starting with
 `io.modelcontextprotocol/`, which the client sets itself.
@@ -225,15 +321,26 @@ CallToolResult result = client.tool("generate_report")
 
 The list specs return one page. Pass the previous page's `nextCursor()` to read the next one:
 
-```java
-String cursor = null;
-do {
-    ListResourcesResult page = client.resources().cursor(cursor).list();
-    page.resources().forEach(resource -> System.out.println(resource.uri()));
-    cursor = page.nextCursor();
-}
-while (cursor != null);
-```
+=== "Sync"
+
+    ```java
+    String cursor = null;
+    do {
+        ListResourcesResult page = client.resources().cursor(cursor).list();
+        page.resources().forEach(resource -> System.out.println(resource.uri()));
+        cursor = page.nextCursor();
+    }
+    while (cursor != null);
+    ```
+
+=== "Async"
+
+    ```java
+    Flux<Resource> resources = client.resources().list()
+        .expand(page -> page.nextCursor() == null ? Mono.empty()
+                : client.resources().cursor(page.nextCursor()).list())
+        .flatMapIterable(ListResourcesResult::resources);
+    ```
 
 For tools, `client.listTools().list()` reads all pages and returns them as one result.
 
@@ -254,11 +361,22 @@ it without asking the server again.
 `client.discover()` returns the server's supported versions, capabilities and instructions. The result is kept
 for its `ttlMs`.
 
-```java
-DiscoverResult server = client.discover();
-ServerCapabilities capabilities = server.capabilities();
-Object serverInfo = server.meta() != null ? server.meta().get(McpSchema.MetaKeys.SERVER_INFO) : null;
-```
+=== "Sync"
+
+    ```java
+    DiscoverResult server = client.discover();
+    ServerCapabilities capabilities = server.capabilities();
+    Object serverInfo = server.meta() != null ? server.meta().get(McpSchema.MetaKeys.SERVER_INFO) : null;
+    ```
+
+=== "Async"
+
+    ```java
+    client.discover().subscribe(server -> {
+        ServerCapabilities capabilities = server.capabilities();
+        Object serverInfo = server.meta() != null ? server.meta().get(McpSchema.MetaKeys.SERVER_INFO) : null;
+    });
+    ```
 
 The server's name and version are not a field of the result. Servers send them in `_meta`, under
 `io.modelcontextprotocol/serverInfo`, as an untyped map. A server may leave `_meta` out, so check for `null`.
@@ -305,18 +423,32 @@ sequenceDiagram
 
 The application makes one call and gets one result. The rounds in between are the client's job.
 
-```java
-McpSyncClient client = McpClient.sync(transport)
-    .formElicitation(request -> {
-        String name = askUser(request.message(), request.requestedSchema());
-        return name != null ? ElicitResult.accept(Map.of("name", name)) : ElicitResult.decline();
-    })
-    .urlElicitation(request -> {
-        boolean opened = askConsentAndOpenBrowser(request.message(), request.url());
-        return opened ? ElicitResult.accept(Map.of()) : ElicitResult.decline();
-    })
-    .build();
-```
+=== "Sync"
+
+    ```java
+    McpSyncClient client = McpClient.sync(transport)
+        .formElicitation(request -> {
+            String name = askUser(request.message(), request.requestedSchema());
+            return name != null ? ElicitResult.accept(Map.of("name", name)) : ElicitResult.decline();
+        })
+        .urlElicitation(request -> {
+            boolean opened = askConsentAndOpenBrowser(request.message(), request.url());
+            return opened ? ElicitResult.accept(Map.of()) : ElicitResult.decline();
+        })
+        .build();
+    ```
+
+=== "Async"
+
+    ```java
+    McpAsyncClient client = McpClient.async(transport)
+        .formElicitation(request -> askUser(request.message(), request.requestedSchema())
+            .map(name -> ElicitResult.accept(Map.of("name", name)))
+            .defaultIfEmpty(ElicitResult.decline()))
+        .urlElicitation(request -> askConsentAndOpenBrowser(request.message(), request.url())
+            .map(opened -> opened ? ElicitResult.accept(Map.of()) : ElicitResult.decline()))
+        .build();
+    ```
 
 - **Form mode.** The handler receives an `ElicitFormRequest` with a message and a JSON schema, and returns
   the user's answer.
@@ -340,20 +472,41 @@ A call answers input requests at most `maxInputRounds` times (10 by default) and
 the final result or an `InputRequiredResult`. Use them to pause a call, for example until a user answers in a
 later HTTP request, and continue it with `inputResponses(...)` and `requestState(...)`:
 
-```java
-McpSyncClient.ToolSpec deploy = client.tool("deploy").arguments(Map.of("env", "prod"));
+=== "Sync"
 
-CallToolOutcome outcome = deploy.callOnce();
-if (outcome instanceof InputRequiredResult inputRequired) {
-    Map<String, Object> responses = new LinkedHashMap<>();
-    inputRequired.inputRequests().forEach((key, request) -> responses.put(key, answer(request)));
+    ```java
+    McpSyncClient.ToolSpec deploy = client.tool("deploy").arguments(Map.of("env", "prod"));
 
-    CallToolResult result = deploy
-        .inputResponses(responses)
-        .requestState(inputRequired.requestState())
-        .call();
-}
-```
+    CallToolOutcome outcome = deploy.callOnce();
+    if (outcome instanceof InputRequiredResult inputRequired) {
+        Map<String, Object> responses = new LinkedHashMap<>();
+        inputRequired.inputRequests().forEach((key, request) -> responses.put(key, answer(request)));
+
+        CallToolResult result = deploy
+            .inputResponses(responses)
+            .requestState(inputRequired.requestState())
+            .call();
+    }
+    ```
+
+=== "Async"
+
+    ```java
+    McpAsyncClient.ToolSpec deploy = client.tool("deploy").arguments(Map.of("env", "prod"));
+
+    Mono<CallToolResult> result = deploy.callOnce().flatMap(outcome -> {
+        if (outcome instanceof InputRequiredResult inputRequired) {
+            Map<String, Object> responses = new LinkedHashMap<>();
+            inputRequired.inputRequests().forEach((key, request) -> responses.put(key, answer(request)));
+
+            return deploy
+                .inputResponses(responses)
+                .requestState(inputRequired.requestState())
+                .call();
+        }
+        return Mono.just((CallToolResult) outcome);
+    });
+    ```
 
 Key the answers as the server keyed its requests, and send `requestState` back as it was received.
 
@@ -362,11 +515,22 @@ Key the answers as the server keyed its requests, and send `requestState` back a
 A progress listener receives the `notifications/progress` of a call. Set one for every call on the builder,
 or for one call on its spec:
 
-```java
-McpSyncClient client = McpClient.sync(transport)
-    .progress(progress -> System.out.println(progress.progress() + " / " + progress.total()))
-    .build();
-```
+=== "Sync"
+
+    ```java
+    McpSyncClient client = McpClient.sync(transport)
+        .progress(progress -> System.out.println(progress.progress() + " / " + progress.total()))
+        .build();
+    ```
+
+=== "Async"
+
+    ```java
+    McpAsyncClient client = McpClient.async(transport)
+        .progress(progress -> Mono.fromRunnable(
+                () -> System.out.println(progress.progress() + " / " + progress.total())))
+        .build();
+    ```
 
 - The client asks the server for progress only while a listener is in effect.
 - A listener receives the notifications of a call one at a time and in order.
@@ -471,18 +635,32 @@ flowchart LR
         .contextWrite(ctx -> ctx.put(McpTransportContext.KEY, McpTransportContext.create(Map.of("user", user))));
     ```
 
-**2. Use it in the transport's hooks.**
+**2. Use it in the transport's hooks.** A hook may block (wrapped with `fromSync`) or return a `Mono`. Either kind works with both clients.
 
-```java
-HttpClientMcpTransport transport = HttpClientMcpTransport.builder("https://example.com/mcp")
-    .requestCustomizer(McpHttpRequestCustomizer.fromSync((request, headers, context) ->
-        headers.set("Authorization", "Bearer " + tokens.accessToken(context.get("user")))))
-    .authorizationErrorHandler(McpHttpAuthorizationErrorHandler.fromSync((request, response, context) -> {
-        tokens.refresh(context.get("user"));
-        return true; // send the request again
-    }))
-    .build();
-```
+=== "Sync"
+
+    ```java
+    HttpClientMcpTransport transport = HttpClientMcpTransport.builder("https://example.com/mcp")
+        .requestCustomizer(McpHttpRequestCustomizer.fromSync((request, headers, context) ->
+            headers.set("Authorization", "Bearer " + tokens.accessToken(context.get("user")))))
+        .authorizationErrorHandler(McpHttpAuthorizationErrorHandler.fromSync((request, response, context) -> {
+            tokens.refresh(context.get("user"));
+            return true; // send the request again
+        }))
+        .build();
+    ```
+
+=== "Async"
+
+    ```java
+    HttpClientMcpTransport transport = HttpClientMcpTransport.builder("https://example.com/mcp")
+        .requestCustomizer((request, headers, context) -> tokens.accessToken(context.get("user"))
+            .doOnNext(token -> headers.set("Authorization", "Bearer " + token))
+            .then())
+        .authorizationErrorHandler((request, response, context) -> tokens.refresh(context.get("user"))
+            .thenReturn(true)) // send the request again
+        .build();
+    ```
 
 - **Request customizers** run before every attempt, including the retry after an authorization error, so a
   refreshed token is picked up.
@@ -558,7 +736,7 @@ Failures outside those two types:
 - Sampling and roots input requests. The client declares neither capability.
 - Logging, which the 2026-07-28 revision deprecates.
 - Extensions, including Tasks.
-- Servers of earlier revisions. Use the [classic client](client.md) for those.
+- Servers of earlier revisions. Use the [legacy client](client.md) for those.
 - Obtaining OAuth tokens. Add tokens with a request customizer, as shown in
   [Identity and Authorization](#identity-and-authorization).
 - Spring WebClient transport.

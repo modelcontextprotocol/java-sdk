@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 800" width="960" height="800" role="img"
      aria-labelledby="title desc" font-family="'Open Sans', Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif">
-  <title id="title">Classic Java MCP client architecture</title>
+  <title id="title">Legacy Java MCP client architecture</title>
   <desc id="desc">A Java application on your computer talks to AI models and holds one Java MCP client per
     server, each with its own session. Two clients reach remote MCP servers over Streamable HTTP or SSE. Three
     clients reach local MCP servers over STDIO: one that searches the internet, one for local folders and one

@@ -19,11 +19,11 @@ The MCP Client is a key component in the Model Context Protocol (MCP) architectu
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides STDIO, SSE, and Streamable HTTP client transport implementations without requiring external web frameworks.
 
-    The Spring-specific WebFlux transport (`mcp-spring-webflux`) is now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and is no longer shipped by this SDK.
-    See the [MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html) documentation for Spring-based client setup.
+    The Spring-specific WebFlux transport (`mcp-spring-webflux`) is now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and is no longer shipped by this SDK.
+    See the [MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html) documentation for Spring-based client setup.
 
 !!! note "2026-07-28 specification"
-    This page covers the classic client, which implements the 2025-11-25 specification and earlier revisions.
+    This page covers the legacy client, which implements the 2025-11-25 specification and earlier revisions.
     A client for the stateless 2026-07-28 revision is also available; see
     [MCP Client (2026-07-28)](client-modern.md).
 
@@ -173,7 +173,7 @@ McpTransport transport = new StdioClientTransport(params, McpJsonDefaults.getMap
 
 === "Streamable WebClient (external)"
 
-    Creates Streamable HTTP WebClient-based client transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    Creates Streamable HTTP WebClient-based client transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     McpTransport transport = WebFluxSseClientTransport
@@ -181,7 +181,7 @@ McpTransport transport = new StdioClientTransport(params, McpJsonDefaults.getMap
         .build();
     ```
 
-### SSE HTTP (Legacy)
+### SSE HTTP (Deprecated)
 
 === "SSE HttpClient"
 
@@ -192,7 +192,7 @@ McpTransport transport = new StdioClientTransport(params, McpJsonDefaults.getMap
     ```
 === "SSE WebClient (external)"
 
-    Creates WebFlux-based SSE client transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    Creates WebFlux-based SSE client transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     WebClient.Builder webClientBuilder = WebClient.builder()

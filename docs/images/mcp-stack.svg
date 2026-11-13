@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" width="720" height="360" role="img"
      aria-labelledby="title desc" font-family="Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif">
-  <title id="title">MCP stack of the classic client and server</title>
+  <title id="title">MCP stack of the legacy client and server</title>
   <desc id="desc">On the client side, your application calls McpClient, which works through an McpSession on
     top of a client transport. On the server side, a server transport feeds an McpSession, on top of which
     McpServer serves the tools, resources and prompts you registered. The two sessions are set up with an

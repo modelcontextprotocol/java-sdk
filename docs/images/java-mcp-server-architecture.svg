@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" width="900" height="520" role="img"
      aria-labelledby="title desc" font-family="'Open Sans', Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif">
-  <title id="title">Classic Java MCP server architecture</title>
+  <title id="title">Legacy Java MCP server architecture</title>
   <desc id="desc">Over Streamable HTTP or SSE, MCP clients in any language connect to one server process. The
     Java MCP server runs in a web container, keeps one session per client, and serves the tools, resources and
     prompts you registered, backed by databases and backend applications. Over STDIO, a client process starts
