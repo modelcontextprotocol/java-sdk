@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 300" width="720" height="300" role="img"
+     aria-labelledby="title desc" font-family="Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+  <title id="title">MCP stack for the 2026-07-28 revision</title>
+  <desc id="desc">On the client side, your application calls McpClient, which sends each request through a
+    client transport. On the server side, a server transport hands each request to McpServer, which calls your
+    repositories. Both sides communicate over Streamable HTTP or STDIO. There is no session layer.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#999999"/>
+    </marker>
+  </defs>
+
+  <!-- Client side -->
+  <rect x="40" y="20" width="260" height="60" fill="#ffffff" stroke="#999999" stroke-dasharray="5 4"/>
+  <text x="170" y="47" text-anchor="middle" font-size="17" fill="#777777">Your application</text>
+  <text x="170" y="66" text-anchor="middle" font-size="12" fill="#999999">calls tools, resources, prompts</text>
+
+  <rect x="40" y="80" width="260" height="60" fill="#ffffff" stroke="#999999"/>
+  <text x="170" y="107" text-anchor="middle" font-size="17" font-weight="500" fill="#666666">McpClient</text>
+  <text x="170" y="126" text-anchor="middle" font-size="12" fill="#999999">sync or async, one per user</text>
+
+  <rect x="40" y="140" width="260" height="66" fill="#999999" stroke="#999999"/>
+  <text x="170" y="169" text-anchor="middle" font-size="17" fill="#ffffff">Client transport</text>
+  <text x="170" y="189" text-anchor="middle" font-size="12" fill="#ffffff">JDK HttpClient or STDIO</text>
+
+  <!-- Server side -->
+  <rect x="420" y="20" width="260" height="60" fill="#ffffff" stroke="#999999" stroke-dasharray="5 4"/>
+  <text x="550" y="47" text-anchor="middle" font-size="17" fill="#777777">Your repositories</text>
+  <text x="550" y="66" text-anchor="middle" font-size="12" fill="#999999">tools, resources, prompts</text>
+
+  <rect x="420" y="80" width="260" height="60" fill="#ffffff" stroke="#999999"/>
+  <text x="550" y="107" text-anchor="middle" font-size="17" font-weight="500" fill="#666666">McpServer</text>
+  <text x="550" y="126" text-anchor="middle" font-size="12" fill="#999999">features dispatch by method</text>
+
+  <rect x="420" y="140" width="260" height="66" fill="#999999" stroke="#999999"/>
+  <text x="550" y="169" text-anchor="middle" font-size="17" fill="#ffffff">Server transport</text>
+  <text x="550" y="189" text-anchor="middle" font-size="12" fill="#ffffff">Servlet or STDIO</text>
+
+  <!-- Each request stands alone -->
+  <text x="360" y="96" text-anchor="middle" font-size="12" fill="#777777">request + _meta</text>
+  <line x1="310" y1="104" x2="410" y2="104" stroke="#999999" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="410" y1="118" x2="310" y2="118" stroke="#999999" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="360" y="135" text-anchor="middle" font-size="12" fill="#777777">result or stream</text>
+
+  <!-- Wire -->
+  <path d="M 40 218 H 680 V 254 Q 680 278 656 278 H 64 Q 40 278 40 254 Z" fill="#999999"/>
+  <text x="360" y="254" text-anchor="middle" font-size="17" fill="#ffffff">Streamable HTTP  |  STDIO</text>
+</svg>

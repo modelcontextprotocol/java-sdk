@@ -5,17 +5,17 @@ description: Build a stateless MCP server for the 2026-07-28 specification revis
 
 # MCP Server (2026-07-28)
 
-!!! warning "Preview"
-    The modern server is a **preview** in 2.2.0. Its API, in the `io.modelcontextprotocol.modern` packages,
-    may change in minor releases until 3.0. There is no modern client yet, and
-    [some parts of the revision](#not-yet-supported) are not implemented. For production servers that
-    talk to today's clients, use the [classic server](server.md).
+!!! note
+    The modern server is available since 2.2.0. Its API, in the `io.modelcontextprotocol.modern` packages,
+    may change in minor releases until 3.0, and [some parts of the revision](#not-yet-supported) are not
+    implemented. For clients that speak earlier revisions, use the [legacy server](server.md).
+    To call a modern server from Java, see the [modern client](client-modern.md).
 
 ## Overview
 
 The modern server implements the stateless
 [2026-07-28 MCP specification revision](https://modelcontextprotocol.io/specification/2026-07-28).
-It lives in `io.modelcontextprotocol.modern.server`, next to the classic server, and shares no types with it:
+It lives in `io.modelcontextprotocol.modern.server`, next to the legacy server, and shares no types with it:
 it has its own `McpServer`, its own `McpSchema`, and its own transports. Both ship in `mcp-core`, so no extra
 dependency is needed.
 
@@ -34,81 +34,140 @@ server is built around that:
 - **Stream only when needed.** A handler returns a single result (sent as `application/json`) or a streaming
   body that can send progress before the result (sent as an SSE stream).
 
-### Classic or modern?
+### Modern or legacy?
 
-| | [Classic server](server.md) | Modern server |
+| | Modern server | [Legacy server](server.md) |
 |---|---|---|
-| Package | `io.modelcontextprotocol.server` | `io.modelcontextprotocol.modern.server` |
-| Spec revision | 2025-11-25 and earlier | 2026-07-28 |
-| Sessions | Yes (except the stateless transport) | No |
-| Primitives | Registered specifications | Repositories you implement |
-| Server-to-client requests | Sampling, elicitation, roots, ping | Replaced by `InputRequiredResult` |
-| Logging | Supported | Not supported (deprecated by the revision) |
-| Status | Stable | Preview |
+| Package | `io.modelcontextprotocol.modern.server` | `io.modelcontextprotocol.server` |
+| Spec revision | 2026-07-28 | 2025-11-25 and earlier |
+| Sessions | No | Yes (except the stateless transport) |
+| Primitives | Repositories you implement | Registered specifications |
+| Server-to-client requests | Replaced by `InputRequiredResult` | Sampling, elicitation, roots, ping |
+| Logging | Not supported (deprecated by the revision) | Supported |
 
 By default the modern server only accepts the 2026-07-28 protocol version; change the set with
 `supportedVersions(...)` on the builder. A request declaring another version gets an
 `Unsupported protocol version` error listing the versions the server supports. Clients that start with an
-`initialize` handshake are not supported; serve those with the classic server.
+`initialize` handshake are not supported; serve those with the legacy server.
 
 ## Quick Start
 
 A server with one tool, served over HTTP:
 
-```java
-import java.util.List;
-import java.util.Map;
+=== "Sync"
 
-import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
-import io.modelcontextprotocol.modern.McpSchema.Implementation;
-import io.modelcontextprotocol.modern.McpSchema.TextContent;
-import io.modelcontextprotocol.modern.McpSchema.Tool;
-import io.modelcontextprotocol.modern.server.McpRequestContext;
-import io.modelcontextprotocol.modern.server.McpServer;
-import io.modelcontextprotocol.modern.server.McpSyncResponse;
-import io.modelcontextprotocol.modern.server.feature.McpSyncTool;
-import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
-import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
-import io.modelcontextprotocol.modern.server.feature.ToolsPage;
-import io.modelcontextprotocol.modern.server.transport.HttpServletMcpTransport;
+    ```java
+    import java.util.List;
+    import java.util.Map;
 
-class EchoTools implements McpSyncToolRepository {
+    import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
+    import io.modelcontextprotocol.modern.McpSchema.Implementation;
+    import io.modelcontextprotocol.modern.McpSchema.TextContent;
+    import io.modelcontextprotocol.modern.McpSchema.Tool;
+    import io.modelcontextprotocol.modern.server.McpRequestContext;
+    import io.modelcontextprotocol.modern.server.McpServer;
+    import io.modelcontextprotocol.modern.server.McpSyncResponse;
+    import io.modelcontextprotocol.modern.server.feature.McpSyncTool;
+    import io.modelcontextprotocol.modern.server.feature.McpSyncToolRepository;
+    import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
+    import io.modelcontextprotocol.modern.server.feature.ToolsPage;
+    import io.modelcontextprotocol.modern.server.transport.HttpServletMcpTransport;
 
-    private final McpSyncTool echo = McpSyncTool.of(
-            Tool.builder("echo", Map.of(
-                    "type", "object",
-                    "properties", Map.of("text", Map.of("type", "string")),
-                    "required", List.of("text")))
-                .description("Echoes the given text")
-                .build(),
-            (ctx, request) -> McpSyncResponse.result(CallToolResult.builder()
-                .addContent(TextContent.builder((String) request.arguments().get("text")).build())
-                .build()));
+    class EchoTools implements McpSyncToolRepository {
 
-    @Override
-    public ToolsPage list(McpRequestContext ctx, String cursor) {
-        return ToolsPage.of(List.of(this.echo.definition()));
+        private final McpSyncTool echo = McpSyncTool.of(
+                Tool.builder("echo", Map.of(
+                        "type", "object",
+                        "properties", Map.of("text", Map.of("type", "string")),
+                        "required", List.of("text")))
+                    .description("Echoes the given text")
+                    .build(),
+                (ctx, request) -> McpSyncResponse.result(CallToolResult.builder()
+                    .addContent(TextContent.builder((String) request.arguments().get("text")).build())
+                    .build()));
+
+        @Override
+        public ToolsPage list(McpRequestContext ctx, String cursor) {
+            return ToolsPage.of(List.of(this.echo.definition()));
+        }
+
+        @Override
+        public McpSyncTool find(McpRequestContext ctx, String name) {
+            return "echo".equals(name) ? this.echo : null;
+        }
+
     }
 
-    @Override
-    public McpSyncTool find(McpRequestContext ctx, String name) {
-        return "echo".equals(name) ? this.echo : null;
+    McpServer server = McpServer.builder()
+        .serverInfo(Implementation.builder("echo-server", "1.0.0").build())
+        .feature(ToolsFeature.ofSync(new EchoTools()))
+        .build();
+
+    HttpServletMcpTransport transport = HttpServletMcpTransport.builder(server)
+        .endpoint("/mcp")
+        .build();
+
+    // Register `transport` as a servlet in your container, mapped to /mcp,
+    // with async support enabled.
+    ```
+
+=== "Async"
+
+    ```java
+    import java.util.List;
+    import java.util.Map;
+
+    import io.modelcontextprotocol.modern.McpSchema.CallToolResult;
+    import io.modelcontextprotocol.modern.McpSchema.Implementation;
+    import io.modelcontextprotocol.modern.McpSchema.TextContent;
+    import io.modelcontextprotocol.modern.McpSchema.Tool;
+    import io.modelcontextprotocol.modern.server.McpAsyncResponse;
+    import io.modelcontextprotocol.modern.server.McpRequestContext;
+    import io.modelcontextprotocol.modern.server.McpServer;
+    import io.modelcontextprotocol.modern.server.feature.McpAsyncTool;
+    import io.modelcontextprotocol.modern.server.feature.McpAsyncToolRepository;
+    import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
+    import io.modelcontextprotocol.modern.server.feature.ToolsPage;
+    import io.modelcontextprotocol.modern.server.transport.HttpServletMcpTransport;
+    import reactor.core.publisher.Mono;
+
+    class EchoTools implements McpAsyncToolRepository {
+
+        private final McpAsyncTool echo = McpAsyncTool.of(
+                Tool.builder("echo", Map.of(
+                        "type", "object",
+                        "properties", Map.of("text", Map.of("type", "string")),
+                        "required", List.of("text")))
+                    .description("Echoes the given text")
+                    .build(),
+                (ctx, request) -> Mono.just(McpAsyncResponse.result(CallToolResult.builder()
+                    .addContent(TextContent.builder((String) request.arguments().get("text")).build())
+                    .build())));
+
+        @Override
+        public Mono<ToolsPage> list(McpRequestContext ctx, String cursor) {
+            return Mono.just(ToolsPage.of(List.of(this.echo.definition())));
+        }
+
+        @Override
+        public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
+            return "echo".equals(name) ? Mono.just(this.echo) : Mono.empty();
+        }
+
     }
 
-}
+    McpServer server = McpServer.builder()
+        .serverInfo(Implementation.builder("echo-server", "1.0.0").build())
+        .feature(ToolsFeature.ofAsync(new EchoTools()))
+        .build();
 
-McpServer server = McpServer.builder()
-    .serverInfo(Implementation.builder("echo-server", "1.0.0").build())
-    .feature(ToolsFeature.ofSync(new EchoTools()))
-    .build();
+    HttpServletMcpTransport transport = HttpServletMcpTransport.builder(server)
+        .endpoint("/mcp")
+        .build();
 
-HttpServletMcpTransport transport = HttpServletMcpTransport.builder(server)
-    .endpoint("/mcp")
-    .build();
-
-// Register `transport` as a servlet in your container, mapped to /mcp,
-// with async support enabled.
-```
+    // Register `transport` as a servlet in your container, mapped to /mcp,
+    // with async support enabled.
+    ```
 
 `McpServer` is immutable and stateless. `build()` collects the capabilities of the registered features and
 serves `server/discover` from them. There is nothing to start; on shutdown, `server.closeGracefully()` ends
@@ -202,6 +261,11 @@ STDIO has no headers and no `contextExtractor`: handlers always see a transport 
 so anything that reads identity from `transportContext()`, such as a `requestState`
 [principal binding](#securing-requeststate), has nothing to read.
 
+### Spring
+
+Spring WebMVC and WebFlux transports for the modern server, and a Boot starter that configures it, are part
+of Spring AI 2.1+, not of this SDK. See [MCP 2026-07-28 Servers](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-modern-server-boot-starter-docs.html) in the Spring AI reference.
+
 ### HTTP Security
 
 Authentication and authorization belong in servlet filters in front of `HttpServletMcpTransport`, including
@@ -231,6 +295,18 @@ provides one feature per primitive, each backed by a **repository** you implemen
 | `ResourcesFeature` | `resources/list`, `resources/templates/list`, `resources/read` | `McpSyncResourceRepository` | `McpAsyncResourceRepository` |
 | `PromptsFeature` | `prompts/list`, `prompts/get` | `McpSyncPromptRepository` | `McpAsyncPromptRepository` |
 
+Each request passes from the transport to the server, which hands it to the feature that serves its method.
+The feature calls your repository:
+
+```mermaid
+flowchart LR
+    C["MCP client"] --> T["Transport<br/>Servlet or STDIO"]
+    T --> S["McpServer<br/>dispatches by method"]
+    S --> TF["ToolsFeature"] --> TR["Your tool repository"]
+    S --> RF["ResourcesFeature"] --> RR["Your resource repository"]
+    S --> PF["PromptsFeature"] --> PR["Your prompt repository"]
+```
+
 Create a feature with `ofSync(repository)` or `ofAsync(repository)`. Register only the features you need; the
 server advertises a capability only when its feature is registered. `completion/complete` has no feature of its
 own: the prompts and resources features answer it for their own references, see [Completions](#completions).
@@ -245,34 +321,62 @@ To paginate, return a page with a `nextCursor`, for example `new ToolsPage(tools
 
 ### Tools
 
-A repository lists tool definitions and finds a tool by name. `find` returns an `McpSyncTool`, which pairs a
+A repository lists tool definitions and finds a tool by name. `find` returns an `McpSyncTool` (an
+`McpAsyncTool` in an async repository), which pairs a
 `Tool` definition with its handler, or `null` if there is no such tool (the client then gets an
 `Unknown tool` error).
 
-```java
-McpSyncTool weather = McpSyncTool.of(
-        Tool.builder("get_weather", jsonMapper, """
-                {
-                  "type": "object",
-                  "properties": { "city": { "type": "string" } },
-                  "required": ["city"]
-                }
-                """)
-            .outputSchema(jsonMapper, """
-                {
-                  "type": "object",
-                  "properties": { "temperature": { "type": "number" } },
-                  "required": ["temperature"]
-                }
-                """)
-            .build(),
-        (ctx, request) -> {
-            double temperature = weatherService.temperature((String) request.arguments().get("city"));
-            return McpSyncResponse.result(CallToolResult.builder()
-                .structuredContent(Map.of("temperature", temperature))
-                .build());
-        });
-```
+=== "Sync"
+
+    ```java
+    McpSyncTool weather = McpSyncTool.of(
+            Tool.builder("get_weather", jsonMapper, """
+                    {
+                      "type": "object",
+                      "properties": { "city": { "type": "string" } },
+                      "required": ["city"]
+                    }
+                    """)
+                .outputSchema(jsonMapper, """
+                    {
+                      "type": "object",
+                      "properties": { "temperature": { "type": "number" } },
+                      "required": ["temperature"]
+                    }
+                    """)
+                .build(),
+            (ctx, request) -> {
+                double temperature = weatherService.temperature((String) request.arguments().get("city"));
+                return McpSyncResponse.result(CallToolResult.builder()
+                    .structuredContent(Map.of("temperature", temperature))
+                    .build());
+            });
+    ```
+
+=== "Async"
+
+    ```java
+    McpAsyncTool weather = McpAsyncTool.of(
+            Tool.builder("get_weather", jsonMapper, """
+                    {
+                      "type": "object",
+                      "properties": { "city": { "type": "string" } },
+                      "required": ["city"]
+                    }
+                    """)
+                .outputSchema(jsonMapper, """
+                    {
+                      "type": "object",
+                      "properties": { "temperature": { "type": "number" } },
+                      "required": ["temperature"]
+                    }
+                    """)
+                .build(),
+            (ctx, request) -> weatherService.temperature((String) request.arguments().get("city"))
+                .map(temperature -> McpAsyncResponse.result(CallToolResult.builder()
+                    .structuredContent(Map.of("temperature", temperature))
+                    .build())));
+    ```
 
 The tools feature validates both directions:
 
@@ -291,41 +395,79 @@ A resource repository lists resources and, optionally, resource templates, and f
 `find` returns an `McpSyncResource` holding the read handler, or `null` if the URI is unknown. Templates are
 not matched for you: `find` receives every URI and decides what it serves.
 
-```java
-class FileResources implements McpSyncResourceRepository {
+=== "Sync"
 
-    @Override
-    public ResourcesPage list(McpRequestContext ctx, String cursor) {
-        return ResourcesPage.of(List.of(
-                Resource.builder("file:///config.json", "Configuration")
-                    .mimeType("application/json")
-                    .build()));
-    }
+    ```java
+    class FileResources implements McpSyncResourceRepository {
 
-    @Override
-    public ResourceTemplatesPage listTemplates(McpRequestContext ctx, String cursor) {
-        return ResourceTemplatesPage.of(List.of(
-                ResourceTemplate.builder("file:///logs/{date}", "Daily log").build()));
-    }
-
-    @Override
-    public McpSyncResource find(McpRequestContext ctx, String uri) {
-        String content = files.read(uri); // null if the URI is unknown
-        if (content == null) {
-            return null;
+        @Override
+        public ResourcesPage list(McpRequestContext ctx, String cursor) {
+            return ResourcesPage.of(List.of(
+                    Resource.builder("file:///config.json", "Configuration")
+                        .mimeType("application/json")
+                        .build()));
         }
-        return McpSyncResource.of((c, request) -> McpSyncResponse.result(ReadResourceResult
-            .builder(List.of(TextResourceContents.builder(uri, content).build()))
-            .build()));
-    }
 
-    @Override
-    public boolean supportsSubscribe() {
-        return true; // see Change Notifications
-    }
+        @Override
+        public ResourceTemplatesPage listTemplates(McpRequestContext ctx, String cursor) {
+            return ResourceTemplatesPage.of(List.of(
+                    ResourceTemplate.builder("file:///logs/{date}", "Daily log").build()));
+        }
 
-}
-```
+        @Override
+        public McpSyncResource find(McpRequestContext ctx, String uri) {
+            String content = files.read(uri); // null if the URI is unknown
+            if (content == null) {
+                return null;
+            }
+            return McpSyncResource.of((c, request) -> McpSyncResponse.result(ReadResourceResult
+                .builder(List.of(TextResourceContents.builder(uri, content).build()))
+                .build()));
+        }
+
+        @Override
+        public boolean supportsSubscribe() {
+            return true; // see Change Notifications
+        }
+
+    }
+    ```
+
+=== "Async"
+
+    ```java
+    class FileResources implements McpAsyncResourceRepository {
+
+        @Override
+        public Mono<ResourcesPage> list(McpRequestContext ctx, String cursor) {
+            return Mono.just(ResourcesPage.of(List.of(
+                    Resource.builder("file:///config.json", "Configuration")
+                        .mimeType("application/json")
+                        .build())));
+        }
+
+        @Override
+        public Mono<ResourceTemplatesPage> listTemplates(McpRequestContext ctx, String cursor) {
+            return Mono.just(ResourceTemplatesPage.of(List.of(
+                    ResourceTemplate.builder("file:///logs/{date}", "Daily log").build())));
+        }
+
+        @Override
+        public Mono<McpAsyncResource> find(McpRequestContext ctx, String uri) {
+            // files.read(uri) is empty if the URI is unknown
+            return files.read(uri)
+                .map(content -> McpAsyncResource.of((c, request) -> Mono.just(McpAsyncResponse.result(ReadResourceResult
+                    .builder(List.of(TextResourceContents.builder(uri, content).build()))
+                    .build()))));
+        }
+
+        @Override
+        public boolean supportsSubscribe() {
+            return true; // see Change Notifications
+        }
+
+    }
+    ```
 
 `listTemplates`, `findTemplate`, `supportsSubscribe` and `supportsCompletion` have defaults: no templates, no
 subscriptions and no completion. `findTemplate` is only needed to [complete](#completions) template variables.
@@ -339,47 +481,92 @@ A prompt repository lists `Prompt` definitions and finds an `McpSyncPrompt` by n
 with a handler returning a `GetPromptResult`. Required prompt arguments declared in the definition are
 checked before the handler runs; a missing one is answered with an invalid-params error.
 
-```java
-McpSyncPrompt review = McpSyncPrompt.of(
-        Prompt.builder("code_review")
-            .description("Review a piece of code")
-            .arguments(List.of(PromptArgument.builder("code").required(true).build()))
-            .build(),
-        (ctx, request) -> McpSyncResponse.result(GetPromptResult
-            .builder(List.of(PromptMessage
-                .builder(Role.USER, TextContent.builder("Please review:\n" + request.arguments().get("code")).build())
-                .build()))
-            .build()));
-```
+=== "Sync"
+
+    ```java
+    McpSyncPrompt review = McpSyncPrompt.of(
+            Prompt.builder("code_review")
+                .description("Review a piece of code")
+                .arguments(List.of(PromptArgument.builder("code").required(true).build()))
+                .build(),
+            (ctx, request) -> McpSyncResponse.result(GetPromptResult
+                .builder(List.of(PromptMessage
+                    .builder(Role.USER, TextContent.builder("Please review:\n" + request.arguments().get("code")).build())
+                    .build()))
+                .build()));
+    ```
+
+=== "Async"
+
+    ```java
+    McpAsyncPrompt review = McpAsyncPrompt.of(
+            Prompt.builder("code_review")
+                .description("Review a piece of code")
+                .arguments(List.of(PromptArgument.builder("code").required(true).build()))
+                .build(),
+            (ctx, request) -> Mono.just(McpAsyncResponse.result(GetPromptResult
+                .builder(List.of(PromptMessage
+                    .builder(Role.USER, TextContent.builder("Please review:\n" + request.arguments().get("code")).build())
+                    .build()))
+                .build())));
+    ```
 
 ### Completions
 
 Completion suggests values for a prompt argument or a resource template variable. The completion handler
 belongs to the prompt or template it completes:
 
-```java
-McpSyncPrompt review = McpSyncPrompt.of(definition, handler)
-    .withCompletionHandler((ctx, request) -> CompleteResult.of(new CompleteResult.Completion(
-            languages.stream().filter(l -> l.startsWith(request.argument().value())).toList())));
+=== "Sync"
 
-McpSyncResourceTemplate logs = McpSyncResourceTemplate.of(ResourceTemplate.builder("file:///logs/{date}", "Daily log").build())
-    .withCompletionHandler((ctx, request) -> CompleteResult.of(new CompleteResult.Completion(logDates())));
-```
+    ```java
+    McpSyncPrompt review = McpSyncPrompt.of(definition, handler)
+        .withCompletionHandler((ctx, request) -> CompleteResult.of(new CompleteResult.Completion(
+                languages.stream().filter(l -> l.startsWith(request.argument().value())).toList())));
+
+    McpSyncResourceTemplate logs = McpSyncResourceTemplate.of(ResourceTemplate.builder("file:///logs/{date}", "Daily log").build())
+        .withCompletionHandler((ctx, request) -> CompleteResult.of(new CompleteResult.Completion(logDates())));
+    ```
+
+=== "Async"
+
+    ```java
+    McpAsyncPrompt review = McpAsyncPrompt.of(definition, handler)
+        .withCompletionHandler((ctx, request) -> Mono.just(CompleteResult.of(new CompleteResult.Completion(
+                languages.stream().filter(l -> l.startsWith(request.argument().value())).toList()))));
+
+    McpAsyncResourceTemplate logs = McpAsyncResourceTemplate.of(ResourceTemplate.builder("file:///logs/{date}", "Daily log").build())
+        .withCompletionHandler((ctx, request) -> Mono.just(CompleteResult.of(new CompleteResult.Completion(logDates()))));
+    ```
 
 A prompt repository returns such a prompt from `find`. A resource repository returns such a template from
 `findTemplate(ctx, uriTemplate)`, which is looked up by the exact `uriTemplate` string the client sends in a
 `ref/resource` reference. Either repository opts in by returning `true` from `supportsCompletion()`:
 
-```java
-class Prompts implements McpSyncPromptRepository {
-    // list, find ...
+=== "Sync"
 
-    @Override
-    public boolean supportsCompletion() {
-        return true;
+    ```java
+    class Prompts implements McpSyncPromptRepository {
+        // list, find ...
+
+        @Override
+        public boolean supportsCompletion() {
+            return true;
+        }
     }
-}
-```
+    ```
+
+=== "Async"
+
+    ```java
+    class Prompts implements McpAsyncPromptRepository {
+        // list, find ...
+
+        @Override
+        public boolean supportsCompletion() {
+            return true;
+        }
+    }
+    ```
 
 The server then serves `completion/complete` and advertises `completions`, sending `ref/prompt` requests to the
 prompts feature and `ref/resource` requests to the resources feature. A [custom feature](#custom-features)
@@ -404,12 +591,7 @@ the feature; where its code runs depends on the transport:
 An async repository returns `Mono`s: `list` returns `Mono<ToolsPage>`, `find` returns `Mono<McpAsyncTool>`
 (empty if there is no such tool), and handlers return `Mono<McpAsyncResponse<...>>`.
 
-```java
-McpAsyncTool echo = McpAsyncTool.of(echoDefinition,
-        (ctx, request) -> Mono.just(McpAsyncResponse.result(CallToolResult.builder()
-            .addContent(TextContent.builder((String) request.arguments().get("text")).build())
-            .build())));
-```
+The examples on this page have a Sync and an Async tab. Choosing one switches all of them.
 
 ## Request Context
 
@@ -434,17 +616,31 @@ A handler answers with `McpSyncResponse.result(...)` for a single JSON response,
 `McpSyncResponse.streaming(...)` to send notifications before the result. The streaming body runs once the
 transport has opened the response stream and receives an `McpSyncNotifier`:
 
-```java
-(ctx, request) -> McpSyncResponse.streaming(notifier -> {
-    for (int i = 1; i <= 10; i++) {
-        processChunk(i);
-        notifier.progress(i * 10, 100.0, "Processed chunk " + i);
-    }
-    return CallToolResult.builder()
-        .addContent(TextContent.builder("Done").build())
-        .build();
-})
-```
+=== "Sync"
+
+    ```java
+    (ctx, request) -> McpSyncResponse.streaming(notifier -> {
+        for (int i = 1; i <= 10; i++) {
+            processChunk(i);
+            notifier.progress(i * 10, 100.0, "Processed chunk " + i);
+        }
+        return CallToolResult.builder()
+            .addContent(TextContent.builder("Done").build())
+            .build();
+    })
+    ```
+
+=== "Async"
+
+    ```java
+    (ctx, request) -> Mono.just(McpAsyncResponse.streaming(notifier ->
+        Flux.range(1, 10)
+            .concatMap(i -> processChunk(i)
+                .then(notifier.progress(i * 10, 100.0, "Processed chunk " + i)))
+            .then(Mono.fromSupplier(() -> CallToolResult.builder()
+                .addContent(TextContent.builder("Done").build())
+                .build()))))
+    ```
 
 `progress` is a no-op when the request carries no progress token, or when the value does not increase.
 `notify(method, params)` sends any other request-scoped notification. The async equivalent is
@@ -459,11 +655,21 @@ A tool, resource or prompt that only works with clients declaring certain capabi
 rejects calls from other clients with error `-32021` (missing required client capability), listing what is
 missing, without running the handler:
 
-```java
-ClientCapabilities needsSampling = ClientCapabilities.builder().sampling().build();
+=== "Sync"
 
-McpSyncTool summarize = McpSyncTool.of(summarizeDefinition, needsSampling, handler);
-```
+    ```java
+    ClientCapabilities needsSampling = ClientCapabilities.builder().sampling().build();
+
+    McpSyncTool summarize = McpSyncTool.of(summarizeDefinition, needsSampling, handler);
+    ```
+
+=== "Async"
+
+    ```java
+    ClientCapabilities needsSampling = ClientCapabilities.builder().sampling().build();
+
+    McpAsyncTool summarize = McpAsyncTool.of(summarizeDefinition, needsSampling, handler);
+    ```
 
 `McpSyncResource.of(...)` and `McpSyncPrompt.of(...)` take the same optional argument.
 
@@ -474,24 +680,69 @@ The 2026-07-28 revision has no server-to-client requests. Instead, a `tools/call
 (elicitation, sampling, roots), each under a key you choose. The client fulfils them and retries the original
 request with the answers in `inputResponses`, keyed the same way.
 
-```java
-(ctx, request) -> {
-    ElicitResult answer = InputResponses.get(
-            request.inputResponses(), "user_name", ElicitResult.class, jsonMapper);
-    if (answer == null || answer.action() != ElicitResult.Action.ACCEPT) {
-        return McpSyncResponse.result(InputRequiredResult.builder()
-            .elicit("user_name", ElicitFormRequest.builder("What is your name?", Map.of(
-                    "type", "object",
-                    "properties", Map.of("name", Map.of("type", "string")),
-                    "required", List.of("name")))
-                .build())
+```mermaid
+sequenceDiagram
+    participant Client as MCP client
+    participant Server as McpServer
+    participant Handler as Your handler
+
+    Client->>Server: tools/call
+    Server->>Handler: request without inputResponses
+    Handler-->>Server: InputRequiredResult (input requests, requestState)
+    Note over Server: seals requestState
+    Server-->>Client: input_required
+    Note over Client: asks the user
+    Client->>Server: tools/call with inputResponses and requestState
+    Note over Server: opens requestState
+    Server->>Handler: request with inputResponses and requestState
+    Handler-->>Server: CallToolResult
+    Server-->>Client: complete result
+```
+
+The handler runs once per round and keeps nothing in memory between rounds. Whatever it needs to remember
+travels in `requestState` (see [Carrying State Across Rounds](#carrying-state-across-rounds)).
+
+=== "Sync"
+
+    ```java
+    (ctx, request) -> {
+        ElicitResult answer = InputResponses.get(
+                request.inputResponses(), "user_name", ElicitResult.class, jsonMapper);
+        if (answer == null || answer.action() != ElicitResult.Action.ACCEPT) {
+            return McpSyncResponse.result(InputRequiredResult.builder()
+                .elicit("user_name", ElicitFormRequest.builder("What is your name?", Map.of(
+                        "type", "object",
+                        "properties", Map.of("name", Map.of("type", "string")),
+                        "required", List.of("name")))
+                    .build())
+                .build());
+        }
+        return McpSyncResponse.result(CallToolResult.builder()
+            .addContent(TextContent.builder("Hello, " + answer.content().get("name") + "!").build())
             .build());
     }
-    return McpSyncResponse.result(CallToolResult.builder()
-        .addContent(TextContent.builder("Hello, " + answer.content().get("name") + "!").build())
-        .build());
-}
-```
+    ```
+
+=== "Async"
+
+    ```java
+    (ctx, request) -> {
+        ElicitResult answer = InputResponses.get(
+                request.inputResponses(), "user_name", ElicitResult.class, jsonMapper);
+        if (answer == null || answer.action() != ElicitResult.Action.ACCEPT) {
+            return Mono.just(McpAsyncResponse.result(InputRequiredResult.builder()
+                .elicit("user_name", ElicitFormRequest.builder("What is your name?", Map.of(
+                        "type", "object",
+                        "properties", Map.of("name", Map.of("type", "string")),
+                        "required", List.of("name")))
+                    .build())
+                .build()));
+        }
+        return Mono.just(McpAsyncResponse.result(CallToolResult.builder()
+            .addContent(TextContent.builder("Hello, " + answer.content().get("name") + "!").build())
+            .build()));
+    }
+    ```
 
 `InputRequiredResult.builder()` offers `elicit(key, ElicitFormRequest)`, `elicitUrl(key, message, url)`,
 `createMessage(key, CreateMessageRequest)` and `listRoots(key)`. `InputResponses.get(...)` converts a response
@@ -507,12 +758,23 @@ capability as [required](#required-client-capabilities) so that other clients ar
 A handler that needs to remember something between rounds puts it in `requestState(String)`. The client
 returns it unchanged with the retry, and the handler reads it from `request.requestState()`:
 
-```java
-return McpSyncResponse.result(InputRequiredResult.builder()
-    .elicit("step2", ElicitFormRequest.builder("What is your favorite color?", colorSchema).build())
-    .requestState("round-2:" + name)
-    .build());
-```
+=== "Sync"
+
+    ```java
+    return McpSyncResponse.result(InputRequiredResult.builder()
+        .elicit("step2", ElicitFormRequest.builder("What is your favorite color?", colorSchema).build())
+        .requestState("round-2:" + name)
+        .build());
+    ```
+
+=== "Async"
+
+    ```java
+    return Mono.just(McpAsyncResponse.result(InputRequiredResult.builder()
+        .elicit("step2", ElicitFormRequest.builder("What is your favorite color?", colorSchema).build())
+        .requestState("round-2:" + name)
+        .build()));
+    ```
 
 ### Securing `requestState`
 
@@ -689,10 +951,8 @@ record TaskChanged(String taskId) implements ServerChange {
 
 ## Not Yet Supported
 
-- A modern client. Use the conformance suite or another SDK's client to exercise the server.
 - Tasks.
 - Logging, which the 2026-07-28 revision deprecates. The modern server never sends log messages.
-- Spring WebMVC and WebFlux transports. Spring AI's transports target the classic server.
 
 For a larger working example, see the
 [modern conformance server](https://github.com/modelcontextprotocol/java-sdk/tree/main/conformance-tests/server-servlet-modern),

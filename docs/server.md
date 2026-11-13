@@ -21,12 +21,12 @@ The MCP Server is a foundational component in the Model Context Protocol (MCP) a
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides STDIO, SSE, and Streamable HTTP server transport implementations without requiring external web frameworks.
 
-    Spring-specific transport implementations (`mcp-spring-webflux`, `mcp-spring-webmvc`) are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and are no longer shipped by this SDK.
-    See the [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) documentation for Spring-based server setup.
+    Spring-specific transport implementations (`mcp-spring-webflux`, `mcp-spring-webmvc`) are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and are no longer shipped by this SDK.
+    See the [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) documentation for Spring-based server setup.
 
 !!! note "2026-07-28 specification"
-    This page covers the classic server, which implements the 2025-11-25 specification and earlier revisions.
-    A stateless server for the 2026-07-28 revision is available as a preview; see
+    This page covers the legacy server, which implements the 2025-11-25 specification and earlier revisions.
+    A stateless server for the 2026-07-28 revision is also available; see
     [MCP Server (2026-07-28)](server-modern.md).
 
 The server supports both synchronous and asynchronous APIs, allowing for flexible integration in different application contexts.
@@ -178,7 +178,7 @@ Key features:
 
 === "Streamable HTTP WebFlux (external)"
 
-    Creates WebFlux-based Streamable HTTP server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    Creates WebFlux-based Streamable HTTP server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -208,7 +208,7 @@ Key features:
 
 === "Streamable HTTP WebMvc (external)"
 
-    Creates WebMvc-based Streamable HTTP server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    Creates WebMvc-based Streamable HTTP server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -230,7 +230,7 @@ Key features:
     }
     ```
 
-### SSE HTTP (Legacy)
+### SSE HTTP (Deprecated)
 
 === "SSE Servlet"
 
@@ -271,7 +271,7 @@ Key features:
 
 === "SSE WebFlux (external)"
 
-    Creates WebFlux-based SSE server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    Creates WebFlux-based SSE server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -297,7 +297,7 @@ Key features:
 
 === "SSE WebMvc (external)"
 
-    Creates WebMvc-based SSE server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    Creates WebMvc-based SSE server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -359,7 +359,7 @@ var capabilities = ServerCapabilities.builder()
 
 ### Tool Specification
 
-The Model Context Protocol allows servers to [expose tools](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/tools/) that can be invoked by language models.
+The Model Context Protocol allows servers to [expose tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) that can be invoked by language models.
 The Java SDK allows implementing Tool Specifications with their handler functions.
 Tools enable AI models to perform calculations, access external APIs, query databases, and manipulate files.
 
@@ -681,7 +681,7 @@ var resourceTemplateSpec = new McpServerFeatures.SyncResourceTemplateSpecificati
 
 ### Prompt Specification
 
-As part of the [Prompting capabilities](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/prompts/), MCP provides a standardized way for servers to expose prompt templates to clients.
+As part of the [Prompting capabilities](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts), MCP provides a standardized way for servers to expose prompt templates to clients.
 The Prompt Specification is a structured template for AI model interactions that enables consistent message formatting, parameter substitution, context injection, response formatting, and instruction templating.
 
 === "Sync"
@@ -846,7 +846,7 @@ Completions can be registered for both `PromptReference` and `ResourceReference`
 
 ### Using Sampling from a Server
 
-To use [Sampling capabilities](https://spec.modelcontextprotocol.io/specification/2024-11-05/client/sampling/), connect to a client that supports sampling.
+To use [Sampling capabilities](https://modelcontextprotocol.io/specification/2025-11-25/client/sampling), connect to a client that supports sampling.
 No special server configuration is needed, but verify client sampling support before making requests.
 Learn about [client sampling support](client.md#sampling-support).
 

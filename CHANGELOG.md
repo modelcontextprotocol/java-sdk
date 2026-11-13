@@ -19,11 +19,17 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 ## Unreleased (2.2.0)
 
-- Preview of a stateless server for the **2026-07-28** MCP specification revision, in
+- A stateless server for the **2026-07-28** MCP specification revision, in
   `io.modelcontextprotocol.modern`, with Servlet (Streamable HTTP) and STDIO transports. It supports
   `server/discover`, multi round-trip requests with sealed `requestState`, `subscriptions/listen`, caching
   hints, required client capabilities and SEP-2243 `Mcp-Param` header validation. The API may change in minor
   releases until 3.0. See [MCP Server (2026-07-28)](docs/server-modern.md).
+- A client for the **2026-07-28** MCP specification revision, in
+  `io.modelcontextprotocol.modern.client`, with Streamable HTTP (JDK `HttpClient`) and STDIO transports. It
+  needs no `initialize` handshake and supports multi round-trip requests with form and URL elicitation,
+  progress, `subscriptions/listen`, `server/discover` and SEP-2243 `Mcp-Param` headers. Sampling, roots and
+  logging are not supported. The API may change in minor releases until 3.0. See
+  [MCP Client (2026-07-28)](docs/client-modern.md).
 - Add `McpTransportContext.putAll(Map)`, returning a context that combines an
   existing context with additional entries, which take precedence.
 - `McpTransportContext` no longer compares contexts by their contents in
