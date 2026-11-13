@@ -109,6 +109,58 @@ class McpServerTests {
 	}
 
 	@Test
+	void legacyInitializeNamesSupportedVersions() {
+		McpServer server = baseBuilder().supportedVersions(List.of("2026-07-28", "2026-12-01")).build();
+		Map<String, Object> params = Map.of("protocolVersion", "2025-11-25", "capabilities", Map.of(), "clientInfo",
+				Map.of("name", "legacy-client", "version", "1.0.0"));
+
+		JSONRPCResponse response = respond(server, new JSONRPCRequest("initialize", 1, params)).block();
+
+		JSONRPCError error = response.error();
+		assertThat(error.code()).isEqualTo(ErrorCodes.UNSUPPORTED_PROTOCOL_VERSION);
+		assertThat(error.message()).contains("2025-11-25", "2026-07-28, 2026-12-01");
+		assertThat(error.data())
+			.isEqualTo(new McpSchema.UnsupportedProtocolVersionData(List.of("2026-07-28", "2026-12-01"), "2025-11-25"));
+	}
+
+	@Test
+	void legacyInitializeWithoutProtocolVersionNamesSupportedVersions() {
+		McpServer server = baseBuilder().build();
+
+		JSONRPCResponse response = respond(server, new JSONRPCRequest("initialize", 1, Map.of())).block();
+
+		JSONRPCError error = response.error();
+		assertThat(error.code()).isEqualTo(ErrorCodes.UNSUPPORTED_PROTOCOL_VERSION);
+		assertThat(error.message()).isEqualTo(
+				"Unsupported protocol version: this server does not support the initialize handshake; supported protocol versions: "
+						+ McpSchema.LATEST_PROTOCOL_VERSION);
+		assertThat(error.data())
+			.isEqualTo(new McpSchema.UnsupportedProtocolVersionData(List.of(McpSchema.LATEST_PROTOCOL_VERSION), ""));
+	}
+
+	@Test
+	void initializeWithBlankMetaVersionIsTreatedAsLegacy() {
+		McpServer server = baseBuilder().build();
+
+		JSONRPCResponse response = respond(server, request("initialize", meta(MetaKeys.PROTOCOL_VERSION, ""))).block();
+
+		JSONRPCError error = response.error();
+		assertThat(error.code()).isEqualTo(ErrorCodes.UNSUPPORTED_PROTOCOL_VERSION);
+		assertThat(error.message()).contains(McpSchema.LATEST_PROTOCOL_VERSION);
+		assertThat(error.data())
+			.isEqualTo(new McpSchema.UnsupportedProtocolVersionData(List.of(McpSchema.LATEST_PROTOCOL_VERSION), ""));
+	}
+
+	@Test
+	void initializeWithModernMetaIsMethodNotFound() {
+		McpServer server = baseBuilder().build();
+
+		StepVerifier.create(invoke(server, request("initialize", meta())))
+			.assertNext(invocation -> assertError(invocation, ErrorCodes.METHOD_NOT_FOUND))
+			.verifyComplete();
+	}
+
+	@Test
 	void malformedClientCapabilitiesIsInvalidParams() {
 		McpServer server = baseBuilder().feature(echoFeature("tools/call")).build();
 

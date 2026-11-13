@@ -413,6 +413,18 @@ public class HttpServletMcpTransport extends HttpServlet {
 	 * consistent with the body
 	 */
 	private String validateHeaders(HttpServletRequest request, JSONRPCRequest jsonRpcRequest) {
+		String metaVersion = protocolVersionFromMeta(jsonRpcRequest.params());
+		if (McpSchema.METHOD_INITIALIZE.equals(jsonRpcRequest.method())
+				&& (metaVersion == null || metaVersion.isBlank())) {
+			// A client on an initialization-based (legacy) version opens with initialize
+			// and sends none of these headers. Its request is left to the request
+			// manager, which knows the supported versions and names them in its
+			// rejection: answering "Missing required header" would leave that client with
+			// nothing actionable. Fall through to the server validation. A blank _meta
+			// version names no revision, so McpServer treats it as legacy too; it must be
+			// waived here as well, or it would fail on the headers first.
+			return null;
+		}
 		List<String> methodHeaders = Collections.list(request.getHeaders(Headers.MCP_METHOD));
 		if (methodHeaders.isEmpty()) {
 			return "Missing required header: Mcp-Method";

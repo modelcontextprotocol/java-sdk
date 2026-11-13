@@ -280,6 +280,32 @@ class StdioMcpTransportTests {
 	}
 
 	@Test
+	void legacyInitializeIsAnsweredWithSupportedVersions() throws Exception {
+		start(McpServer.builder().serverInfo(SERVER_INFO).jsonMapper(this.jsonMapper).build());
+
+		sendRaw("""
+				{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25",\
+				"capabilities":{},"clientInfo":{"name":"legacy-client","version":"1.0.0"}}}""");
+
+		String response = readLineWithTimeout();
+		assertThatJson(response).isEqualTo(json("""
+				{
+				  "jsonrpc": "2.0",
+				  "id": 1,
+				  "error": {
+				    "code": %d,
+				    "message": "${json-unit.any-string}",
+				    "data": {
+				      "supported": ["2026-07-28"],
+				      "requested": "2025-11-25"
+				    }
+				  }
+				}
+				""".formatted(ErrorCodes.UNSUPPORTED_PROTOCOL_VERSION)));
+		assertThatJson(response).inPath("$.error.message").asString().contains("2026-07-28");
+	}
+
+	@Test
 	void invalidJsonProducesParseError() throws Exception {
 		McpRequestManager manager = managerOf((transportContext, request) -> Mono
 			.just(McpTransportResponse.result(JSONRPCResponse.result(request.id(), Map.of()))));

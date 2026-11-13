@@ -403,6 +403,64 @@ class HttpServletMcpTransportIntegrationTests {
 	}
 
 	@Test
+	void legacyInitializeIsAnsweredWithSupportedVersions() throws Exception {
+		// What a 2025-era Streamable HTTP client sends: no Mcp-* headers, no _meta.
+		HttpRequest request = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + ENDPOINT))
+			.header("Content-Type", "application/json")
+			.header("Accept", "application/json, text/event-stream")
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25",\
+					"capabilities":{},"clientInfo":{"name":"legacy-client","version":"1.0.0"}}}"""))
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThatJson(response.body()).inPath("$.error.code").isEqualTo(ErrorCodes.UNSUPPORTED_PROTOCOL_VERSION);
+		assertThatJson(response.body()).inPath("$.error.message")
+			.asString()
+			.contains(McpSchema.LATEST_PROTOCOL_VERSION);
+		assertThatJson(response.body()).inPath("$.error.data").isEqualTo("""
+				{"supported": ["%s"], "requested": "2025-11-25"}""".formatted(McpSchema.LATEST_PROTOCOL_VERSION));
+	}
+
+	@Test
+	void initializeWithBlankMetaVersionIsAnsweredWithSupportedVersions() throws Exception {
+		// A blank _meta version names no revision: no header is required, and the server
+		// rejects it like a legacy initialize.
+		HttpRequest request = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + ENDPOINT))
+			.header("Content-Type", "application/json")
+			.header("Accept", "application/json, text/event-stream")
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"jsonrpc":"2.0","id":1,"method":"initialize",\
+					"params":{"_meta":{"io.modelcontextprotocol/protocolVersion":""}}}"""))
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThatJson(response.body()).inPath("$.error.code").isEqualTo(ErrorCodes.UNSUPPORTED_PROTOCOL_VERSION);
+		assertThatJson(response.body()).inPath("$.error.data").isEqualTo("""
+				{"supported": ["%s"], "requested": ""}""".formatted(McpSchema.LATEST_PROTOCOL_VERSION));
+	}
+
+	@Test
+	void initializeWithModernMetaStillRequiresHeaders() throws Exception {
+		Map<String, Object> body = Map.of("jsonrpc", "2.0", "id", 1, "method", "initialize", "params",
+				Map.of("_meta", meta()));
+		HttpRequest request = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + ENDPOINT))
+			.header("Content-Type", "application/json")
+			.header("Accept", "application/json, text/event-stream")
+			.POST(HttpRequest.BodyPublishers.ofString(JSON_MAPPER.writeValueAsString(body)))
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThat(errorCode(response)).isEqualTo(ErrorCodes.HEADER_MISMATCH);
+	}
+
+	@Test
 	void headerMismatchIsRejected() throws Exception {
 		Map<String, Object> params = new HashMap<>();
 		params.put("_meta", meta());
