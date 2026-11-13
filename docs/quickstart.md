@@ -21,7 +21,7 @@ Import the BOM so that all SDK modules use the same version and the dependencies
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-bom</artifactId>
-                <version>2.1.0</version>
+                <version>2.2.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -33,7 +33,7 @@ Import the BOM so that all SDK modules use the same version and the dependencies
 
     ```groovy
     dependencies {
-        implementation platform("io.modelcontextprotocol.sdk:mcp-bom:2.1.0")
+        implementation platform("io.modelcontextprotocol.sdk:mcp-bom:2.2.0")
     }
     ```
 
