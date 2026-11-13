@@ -77,7 +77,11 @@ public class McpSyncServerExchange {
 	 * @see <a href=
 	 * "https://spec.modelcontextprotocol.io/specification/client/sampling/">Sampling
 	 * Specification</a>
+	 * @deprecated Sampling is deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28.
+	 * Servers should integrate directly with LLM provider APIs instead.
 	 */
+	@Deprecated
 	public McpSchema.CreateMessageResult createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
 		return this.exchange.createMessage(createMessageRequest).block();
 	}
@@ -103,7 +107,12 @@ public class McpSyncServerExchange {
 	/**
 	 * Retrieves the list of all roots provided by the client.
 	 * @return The list of roots result.
+	 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28. Pass
+	 * directories or files to servers via tool parameters, resource URIs, or server
+	 * configuration instead.
 	 */
+	@Deprecated
 	public McpSchema.ListRootsResult listRoots() {
 		return this.exchange.listRoots().block();
 	}
@@ -112,7 +121,12 @@ public class McpSyncServerExchange {
 	 * Retrieves a paginated list of roots provided by the client.
 	 * @param cursor Optional pagination cursor from a previous list request
 	 * @return The list of roots result
+	 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28. Pass
+	 * directories or files to servers via tool parameters, resource URIs, or server
+	 * configuration instead.
 	 */
+	@Deprecated
 	public McpSchema.ListRootsResult listRoots(String cursor) {
 		return this.exchange.listRoots(cursor).block();
 	}
@@ -121,7 +135,11 @@ public class McpSyncServerExchange {
 	 * Send a logging message notification to the client. Messages below the current
 	 * minimum logging level will be filtered out.
 	 * @param loggingMessageNotification The logging message to send
+	 * @deprecated Logging is deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28.
+	 * Servers should log to stderr (stdio transport) or use OpenTelemetry instead.
 	 */
+	@Deprecated
 	public void loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 		this.exchange.loggingNotification(loggingMessageNotification).block();
 	}

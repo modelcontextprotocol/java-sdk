@@ -658,17 +658,21 @@ missing, without running the handler:
 === "Sync"
 
     ```java
-    ClientCapabilities needsSampling = ClientCapabilities.builder().sampling().build();
+    ClientCapabilities needsForms = ClientCapabilities.builder()
+        .elicitation(new ClientCapabilities.Elicitation(new ClientCapabilities.Elicitation.Form(), null))
+        .build();
 
-    McpSyncTool summarize = McpSyncTool.of(summarizeDefinition, needsSampling, handler);
+    McpSyncTool greet = McpSyncTool.of(greetDefinition, needsForms, handler);
     ```
 
 === "Async"
 
     ```java
-    ClientCapabilities needsSampling = ClientCapabilities.builder().sampling().build();
+    ClientCapabilities needsForms = ClientCapabilities.builder()
+        .elicitation(new ClientCapabilities.Elicitation(new ClientCapabilities.Elicitation.Form(), null))
+        .build();
 
-    McpAsyncTool summarize = McpAsyncTool.of(summarizeDefinition, needsSampling, handler);
+    McpAsyncTool greet = McpAsyncTool.of(greetDefinition, needsForms, handler);
     ```
 
 `McpSyncResource.of(...)` and `McpSyncPrompt.of(...)` take the same optional argument.
@@ -748,6 +752,9 @@ travels in `requestState` (see [Carrying State Across Rounds](#carrying-state-ac
 `createMessage(key, CreateMessageRequest)` and `listRoots(key)`. `InputResponses.get(...)` converts a response
 to a type of your choice, such as `ElicitResult`, `CreateMessageResult` or `ListRootsResult`; it returns `null`
 when there is no response under the key and answers malformed responses with an invalid-params error.
+`createMessage` and `listRoots` are deprecated, because the 2026-07-28 revision deprecates sampling and roots
+([SEP-2577](https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging)). Prefer elicitation,
+or call an LLM provider API directly from the server.
 
 A handler may only request input the client declared it can provide. Requesting anything else is a server bug
 and is answered with an internal error. Either check `ctx.clientCapabilities()` before asking, or declare the

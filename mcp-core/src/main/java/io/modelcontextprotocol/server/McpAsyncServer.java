@@ -131,6 +131,7 @@ public class McpAsyncServer {
 	 * @param features The MCP server supported features.
 	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
 	 */
+	@SuppressWarnings("deprecation")
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
@@ -138,6 +139,9 @@ public class McpAsyncServer {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
+		// Logging is deprecated by MCP 2026-07-28 (SEP-2577) but is part of every
+		// protocol
+		// version this server negotiates, so the capability is still always advertised.
 		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
 		this.instructions = features.instructions();
 		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
@@ -163,6 +167,7 @@ public class McpAsyncServer {
 		});
 	}
 
+	@SuppressWarnings("deprecation")
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
@@ -170,6 +175,9 @@ public class McpAsyncServer {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
+		// Logging is deprecated by MCP 2026-07-28 (SEP-2577) but is part of every
+		// protocol
+		// version this server negotiates, so the capability is still always advertised.
 		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
 		this.instructions = features.instructions();
 		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
@@ -316,6 +324,9 @@ public class McpAsyncServer {
 		this.mcpTransportProvider.close();
 	}
 
+	// Roots are deprecated by MCP 2026-07-28 (SEP-2577) but still supported for clients
+	// that declare them.
+	@SuppressWarnings("deprecation")
 	private McpNotificationHandler asyncRootsListChangedNotificationHandler(
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
 		return (exchange, params) -> exchange.listRoots()

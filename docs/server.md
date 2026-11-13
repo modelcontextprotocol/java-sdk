@@ -846,6 +846,9 @@ Completions can be registered for both `PromptReference` and `ResourceReference`
 
 ### Using Sampling from a Server
 
+!!! warning "Deprecated"
+    Sampling is deprecated as of MCP protocol version 2026-07-28 ([SEP-2577](https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging)) and may be removed from a protocol revision released on or after 2027-07-28. It still works unchanged in this SDK, and the methods that initiate it are marked `@Deprecated`. Servers should integrate directly with LLM provider APIs instead. See the [deprecated features registry](https://modelcontextprotocol.io/specification/2026-07-28/deprecated).
+
 To use [Sampling capabilities](https://modelcontextprotocol.io/specification/2025-11-25/client/sampling), connect to a client that supports sampling.
 No special server configuration is needed, but verify client sampling support before making requests.
 Learn about [client sampling support](client.md#sampling-support).
@@ -1096,6 +1099,9 @@ var tool = SyncToolSpecification.builder()
 The async equivalent, `McpAsyncServerExchange.ping()`, returns a `Mono<Object>` that completes when the client responds. Ping requests are subject to the same `requestTimeout` configured on the server builder.
 
 ### Logging Support
+
+!!! warning "Deprecated"
+    MCP logging is deprecated as of MCP protocol version 2026-07-28 ([SEP-2577](https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging)) and may be removed from a protocol revision released on or after 2027-07-28. It still works unchanged in this SDK, and the methods that initiate it are marked `@Deprecated`. Servers should log to stderr (stdio transport) or use [OpenTelemetry](https://opentelemetry.io/) instead. See the [deprecated features registry](https://modelcontextprotocol.io/specification/2026-07-28/deprecated).
 
 The server provides structured logging capabilities that allow sending log messages to clients with different severity levels.
 Log notifications can only be sent from within an existing client session, such as tools, resources, and prompts calls.

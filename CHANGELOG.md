@@ -36,6 +36,16 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
   `equals` and `hashCode`. With `putAll`, transports can layer their own entries
   over the context a user's extractor returns, and comparing contexts was never
   a goal; read entries via `get(String)` instead.
+- Deprecate the roots, sampling and logging APIs that initiate these features, following
+  [SEP-2577](https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging), which
+  deprecates them as of the 2026-07-28 specification revision. This covers `McpSyncClient`/`McpAsyncClient`
+  (`addRoot`, `removeRoot`, `rootsListChangedNotification`, `setLoggingLevel`), the server exchanges
+  (`createMessage`, `listRoots`, `loggingNotification`), and the `roots`, `sampling` and `logging` capability
+  builder methods. In the 2026-07-28 API it also covers `InputRequiredResult.builder()`'s `createMessage` and
+  `listRoots`, and `MetaKeys.LOG_LEVEL`. The builder methods that register handlers for these features
+  (`roots`, `sampling` and `loggingConsumer(s)` on the client, `rootsChangeHandler(s)` on the server) are not
+  deprecated, since the specification requires implementations to keep handling them for peers that still use
+  them. Behavior and the wire format are unchanged.
 
 ## 2.0.1 — 2026-08-19
 

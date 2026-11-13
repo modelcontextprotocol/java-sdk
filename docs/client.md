@@ -247,6 +247,9 @@ var capabilities = ClientCapabilities.builder()
 
 ### Roots Support
 
+!!! warning "Deprecated"
+    Roots are deprecated as of MCP protocol version 2026-07-28 ([SEP-2577](https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging)) and may be removed from a protocol revision released on or after 2027-07-28. They still work unchanged in this SDK, and the methods that initiate them are marked `@Deprecated`. Pass directories or files to servers via tool parameters, resource URIs, or server configuration instead. See the [deprecated features registry](https://modelcontextprotocol.io/specification/2026-07-28/deprecated).
+
 Roots define the boundaries of where servers can operate within the filesystem:
 
 ```java
@@ -267,6 +270,9 @@ The roots capability allows servers to:
 - Understand which directories and files they have access to
 
 ### Sampling Support
+
+!!! warning "Deprecated"
+    Sampling is deprecated as of MCP protocol version 2026-07-28 ([SEP-2577](https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging)) and may be removed from a protocol revision released on or after 2027-07-28. It still works unchanged in this SDK, and the methods that initiate it are marked `@Deprecated`. Servers should integrate directly with LLM provider APIs instead. See the [deprecated features registry](https://modelcontextprotocol.io/specification/2026-07-28/deprecated).
 
 Sampling enables servers to request LLM interactions ("completions" or "generations") through the client:
 
@@ -386,6 +392,9 @@ server.sendElicitationComplete(exchange.sessionId(),
 ```
 
 ### Logging Support
+
+!!! warning "Deprecated"
+    MCP logging is deprecated as of MCP protocol version 2026-07-28 ([SEP-2577](https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging)) and may be removed from a protocol revision released on or after 2027-07-28. It still works unchanged in this SDK, and the methods that initiate it are marked `@Deprecated`. Servers should log to stderr (stdio transport) or use [OpenTelemetry](https://opentelemetry.io/) instead. See the [deprecated features registry](https://modelcontextprotocol.io/specification/2026-07-28/deprecated).
 
 The client can register a logging consumer to receive log messages from the server and set the minimum logging level to filter messages:
 

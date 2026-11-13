@@ -23,6 +23,9 @@ final class RequiredCapabilities {
 		return missing != null ? McpException.missingClientCapability(missing) : null;
 	}
 
+	// Roots and sampling are deprecated by MCP 2026-07-28 (SEP-2577), but a feature may
+	// still require them, so a missing one must still be reported.
+	@SuppressWarnings("deprecation")
 	private static ClientCapabilities missing(ClientCapabilities required, ClientCapabilities declared) {
 		boolean roots = required.supportsRoots() && !declared.supportsRoots();
 		boolean sampling = required.supportsSampling() && !declared.supportsSampling();

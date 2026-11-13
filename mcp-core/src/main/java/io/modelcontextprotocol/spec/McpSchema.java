@@ -739,11 +739,25 @@ public final class McpSchema {
 				return this;
 			}
 
+			/**
+			 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28
+			 * (SEP-2577) and may be removed from a protocol revision released on or after
+			 * 2027-07-28. Pass directories or files to servers via tool parameters,
+			 * resource URIs, or server configuration instead.
+			 */
+			@Deprecated
 			public Builder roots(Boolean listChanged) {
 				this.roots = new RootCapabilities(listChanged);
 				return this;
 			}
 
+			/**
+			 * @deprecated Sampling is deprecated as of MCP protocol version 2026-07-28
+			 * (SEP-2577) and may be removed from a protocol revision released on or after
+			 * 2027-07-28. Servers should integrate directly with LLM provider APIs
+			 * instead.
+			 */
+			@Deprecated
 			public Builder sampling() {
 				this.sampling = new Sampling();
 				return this;
@@ -983,6 +997,13 @@ public final class McpSchema {
 				return this;
 			}
 
+			/**
+			 * @deprecated Logging is deprecated as of MCP protocol version 2026-07-28
+			 * (SEP-2577) and may be removed from a protocol revision released on or after
+			 * 2027-07-28. Servers should log to stderr (stdio transport) or use
+			 * OpenTelemetry instead.
+			 */
+			@Deprecated
 			public Builder logging() {
 				this.logging = new LoggingCapabilities();
 				return this;

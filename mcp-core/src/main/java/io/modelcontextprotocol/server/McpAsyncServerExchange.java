@@ -137,7 +137,11 @@ public class McpAsyncServerExchange {
 	 * @see <a href=
 	 * "https://spec.modelcontextprotocol.io/specification/client/sampling/">Sampling
 	 * Specification</a>
+	 * @deprecated Sampling is deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28.
+	 * Servers should integrate directly with LLM provider APIs instead.
 	 */
+	@Deprecated
 	public Mono<McpSchema.CreateMessageResult> createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
 		if (this.clientCapabilities == null) {
 			return Mono
@@ -202,7 +206,12 @@ public class McpAsyncServerExchange {
 	/**
 	 * Retrieves the list of all roots provided by the client.
 	 * @return A Mono that emits the list of roots result.
+	 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28. Pass
+	 * directories or files to servers via tool parameters, resource URIs, or server
+	 * configuration instead.
 	 */
+	@Deprecated
 	public Mono<McpSchema.ListRootsResult> listRoots() {
 
 		// @formatter:off
@@ -223,7 +232,12 @@ public class McpAsyncServerExchange {
 	 * Retrieves a paginated list of roots provided by the client.
 	 * @param cursor Optional pagination cursor from a previous list request
 	 * @return A Mono that emits the list of roots result containing
+	 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28. Pass
+	 * directories or files to servers via tool parameters, resource URIs, or server
+	 * configuration instead.
 	 */
+	@Deprecated
 	public Mono<McpSchema.ListRootsResult> listRoots(String cursor) {
 		return this.session.sendRequest(McpSchema.METHOD_ROOTS_LIST, new McpSchema.PaginatedRequest(cursor),
 				LIST_ROOTS_RESULT_TYPE_REF);
@@ -234,7 +248,11 @@ public class McpAsyncServerExchange {
 	 * minimum logging level will be filtered out.
 	 * @param loggingMessageNotification The logging message to send
 	 * @return A Mono that completes when the notification has been sent
+	 * @deprecated Logging is deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28.
+	 * Servers should log to stderr (stdio transport) or use OpenTelemetry instead.
 	 */
+	@Deprecated
 	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 
 		if (loggingMessageNotification == null) {
