@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.modern.server;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +50,7 @@ import static io.modelcontextprotocol.modern.server.ModernTestFixtures.meta;
 import static io.modelcontextprotocol.modern.server.ModernTestFixtures.respond;
 import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.InstanceOfAssertFactories.MAP;
 import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 
@@ -339,7 +341,177 @@ class SubscriptionsFeatureTests {
 			.verify(Duration.ofSeconds(5));
 	}
 
+	@Test
+	void restrictionNarrowsResourceSubscriptionsAndOnlyThoseAreForwarded() {
+		McpChangeFeed feed = new McpChangeFeed();
+		McpServer server = resourcesServerBuilder(true).subscriptions(feed)
+			.restrictSubscriptions((ctx, requested, honoured) -> Mono
+				.just(honoured.with(SubscriptionFilter.RESOURCE_SUBSCRIPTIONS, List.of("test://mine"))))
+			.build();
+
+		var listen = (McpTransportResponse.Streaming) listenWith(server,
+				Map.of("resourceSubscriptions", List.of("test://mine", "test://theirs")));
+
+		StepVerifier.create(listen.messages())
+			.assertNext(msg -> assertThat(
+					acknowledgedNotifications((JSONRPCNotification) msg).resourceSubscriptionsOrEmpty())
+				.containsExactly("test://mine"))
+			.then(() -> {
+				feed.broadcast(new ServerChange.ResourceUpdated("test://theirs"));
+				feed.broadcast(new ServerChange.ResourceUpdated("test://mine"));
+			})
+			.assertNext(msg -> assertThat(((JSONRPCNotification) msg).params()).asInstanceOf(MAP)
+				.containsEntry("uri", "test://mine"))
+			.then(server::closeGracefully)
+			.expectNextMatches(JSONRPCResponse.class::isInstance)
+			.verifyComplete();
+	}
+
+	@Test
+	void restrictionSeesTheCallerTheRequestedFilterAndWhatTheServerHonours() {
+		List<Object> seen = new ArrayList<>();
+		McpServer server = resourcesServerBuilder(true).subscriptions(new McpChangeFeed())
+			.restrictSubscriptions((ctx, requested, honoured) -> {
+				seen.add(ctx.transportContext().get("principal"));
+				seen.add(requested);
+				seen.add(honoured);
+				return Mono.just(honoured);
+			})
+			.build();
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("notifications", Map.of("resourceSubscriptions", List.of("test://a"), "toolsListChanged", true));
+		server
+			.handle(McpTransportContext.create(Map.of("principal", "alice")),
+					new JSONRPCRequest("subscriptions/listen", 1, params))
+			.block();
+		server.closeGracefully();
+
+		assertThat(seen).containsExactly("alice",
+				SubscriptionFilter.of(Map.of("resourceSubscriptions", List.of("test://a"), "toolsListChanged", true)),
+				SubscriptionFilter.of(Map.of("resourceSubscriptions", List.of("test://a"))));
+	}
+
+	@Test
+	void restrictionCannotWidenWhatTheServerHonours() {
+		McpServer server = resourcesServerBuilder(true).subscriptions(new McpChangeFeed())
+			.restrictSubscriptions((ctx, requested, honoured) -> Mono.just(SubscriptionFilter.of(Map.of(
+					// Requested and honoured, kept.
+					"resourcesListChanged", true,
+					// One requested and honoured URI, kept, and one never requested.
+					"resourceSubscriptions", List.of("test://a", "test://unrequested"),
+					// Requested, but the server has no tools to honour it for.
+					"toolsListChanged", true,
+					// Never requested.
+					"promptsListChanged", true, "unrequested", true))))
+			.build();
+
+		var listen = (McpTransportResponse.Streaming) listenWith(server, Map.of("resourcesListChanged", true,
+				"resourceSubscriptions", List.of("test://a"), "toolsListChanged", true));
+
+		StepVerifier.create(listen.messages())
+			.assertNext(
+					msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg)).isEqualTo(SubscriptionFilter
+						.of(Map.of("resourcesListChanged", true, "resourceSubscriptions", List.of("test://a")))))
+			.then(server::closeGracefully)
+			.expectNextMatches(JSONRPCResponse.class::isInstance)
+			.verifyComplete();
+	}
+
+	@Test
+	void restrictionCannotRestoreWhatAFeatureNarrowed() {
+		McpServer server = McpServer.builder()
+			.serverInfo(SERVER_INFO)
+			.feature(new TasksExtension(List.of("t-1"), false))
+			.subscriptions(new McpChangeFeed())
+			.restrictSubscriptions((ctx, requested, honoured) -> Mono.just(requested))
+			.build();
+
+		var listen = (McpTransportResponse.Streaming) listenForTasks(server, Map.of("taskIds", List.of("t-1", "t-2")));
+
+		StepVerifier.create(listen.messages())
+			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg))
+				.isEqualTo(SubscriptionFilter.of(Map.of("taskIds", List.of("t-1")))))
+			.then(server::closeGracefully)
+			.expectNextMatches(JSONRPCResponse.class::isInstance)
+			.verifyComplete();
+	}
+
+	@Test
+	void restrictionCompletingEmptyHonoursNothing() {
+		McpServer server = resourcesServerBuilder(true).subscriptions(new McpChangeFeed())
+			.restrictSubscriptions((ctx, requested, honoured) -> Mono.empty())
+			.build();
+
+		var listen = (McpTransportResponse.Streaming) listenWith(server,
+				Map.of("resourcesListChanged", true, "resourceSubscriptions", List.of("test://a")));
+
+		StepVerifier.create(listen.messages())
+			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg))
+				.isEqualTo(SubscriptionFilter.EMPTY))
+			.then(server::closeGracefully)
+			.expectNextMatches(JSONRPCResponse.class::isInstance)
+			.verifyComplete();
+	}
+
+	@Test
+	void restrictionIsNotCalledWhenNothingIsHonoured() {
+		McpServer server = resourcesServerBuilder(true).subscriptions(new McpChangeFeed())
+			.restrictSubscriptions((ctx, requested, honoured) -> {
+				throw new AssertionError("restriction called for " + honoured);
+			})
+			.build();
+
+		// The server has no tools to honour toolsListChanged for.
+		var listen = (McpTransportResponse.Streaming) listenWith(server, Map.of("toolsListChanged", true));
+
+		StepVerifier.create(listen.messages())
+			.assertNext(msg -> assertThat(acknowledgedNotifications((JSONRPCNotification) msg))
+				.isEqualTo(SubscriptionFilter.EMPTY))
+			.then(server::closeGracefully)
+			.expectNextMatches(JSONRPCResponse.class::isInstance)
+			.verifyComplete();
+	}
+
+	static Stream<SubscriptionRestriction> rejectingRestrictions() {
+		return Stream.of((ctx, requested, honoured) -> Mono.error(McpException.invalidParams("not permitted")),
+				(ctx, requested, honoured) -> {
+					throw McpException.invalidParams("not permitted");
+				});
+	}
+
+	@ParameterizedTest
+	@MethodSource("rejectingRestrictions")
+	void restrictionRejectingTheFilterAnswersBeforeAnyStreamOpens(SubscriptionRestriction restriction) {
+		McpServer server = resourcesServerBuilder(true).subscriptions(new McpChangeFeed())
+			.restrictSubscriptions(restriction)
+			.build();
+
+		McpTransportResponse response = listenWith(server, Map.of("resourceSubscriptions", List.of("test://a")));
+
+		assertThat(response).asInstanceOf(type(McpTransportResponse.Error.class))
+			.extracting(error -> error.response().error())
+			.returns(ErrorCodes.INVALID_PARAMS, JSONRPCError::code)
+			.returns("not permitted", JSONRPCError::message);
+	}
+
+	private static McpTransportResponse listenWith(McpServer server, Map<String, Object> filter) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("_meta", meta());
+		params.put("notifications", filter);
+		return server.handle(McpTransportContext.EMPTY, new JSONRPCRequest("subscriptions/listen", 1, params)).block();
+	}
+
 	private static McpServer resourcesServer(boolean supportsSubscribe, McpChangePublisher publisher) {
+		McpServer.Builder builder = resourcesServerBuilder(supportsSubscribe);
+		if (publisher != null) {
+			builder.subscriptions(publisher);
+		}
+		return builder.build();
+	}
+
+	private static McpServer.Builder resourcesServerBuilder(boolean supportsSubscribe) {
 		McpAsyncResourceRepository repository = new McpAsyncResourceRepository() {
 			@Override
 			public Mono<ResourcesPage> list(McpRequestContext ctx, String cursor) {
@@ -356,13 +528,9 @@ class SubscriptionsFeatureTests {
 				return supportsSubscribe;
 			}
 		};
-		McpServer.Builder builder = McpServer.builder()
+		return McpServer.builder()
 			.serverInfo(SERVER_INFO)
 			.feature(ResourcesFeature.ofAsync(repository, McpJsonDefaults.getMapper(), 0L, CacheScope.PRIVATE));
-		if (publisher != null) {
-			builder.subscriptions(publisher);
-		}
-		return builder.build();
 	}
 
 	@SuppressWarnings("unchecked")

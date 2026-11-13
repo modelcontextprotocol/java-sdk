@@ -382,6 +382,8 @@ public final class McpServer implements McpRequestManager {
 
 		private McpChangePublisher changePublisher;
 
+		private SubscriptionRestriction subscriptionRestriction = (ctx, requested, honoured) -> Mono.just(honoured);
+
 		private Builder() {
 		}
 
@@ -425,6 +427,20 @@ public final class McpServer implements McpRequestManager {
 		public Builder subscriptions(McpChangePublisher publisher) {
 			Assert.notNull(publisher, "publisher must not be null");
 			this.changePublisher = publisher;
+			return this;
+		}
+
+		/**
+		 * Narrows, per request, the notifications {@code subscriptions/listen} agrees to
+		 * honour, for example to keep a caller from watching another principal's
+		 * resources. Only applies when {@link #subscriptions} is registered. Defaults to
+		 * honouring everything the server supports.
+		 * <p>
+		 * The restriction can only narrow the default honoured subscriptions.
+		 */
+		public Builder restrictSubscriptions(SubscriptionRestriction restriction) {
+			Assert.notNull(restriction, "restriction must not be null");
+			this.subscriptionRestriction = restriction;
 			return this;
 		}
 
@@ -479,7 +495,7 @@ public final class McpServer implements McpRequestManager {
 			SubscriptionsFeature subscriptionsFeature = null;
 			if (this.changePublisher != null) {
 				subscriptionsFeature = new SubscriptionsFeature(this.changePublisher, mapper, allFeatures,
-						capabilitiesBuilder.hasTools(), capabilitiesBuilder.hasPrompts(),
+						this.subscriptionRestriction, capabilitiesBuilder.hasTools(), capabilitiesBuilder.hasPrompts(),
 						capabilitiesBuilder.hasResources(), capabilitiesBuilder.hasResourcesSubscribe());
 				subscriptionsFeature.capabilities(capabilitiesBuilder);
 				allFeatures.add(subscriptionsFeature);
