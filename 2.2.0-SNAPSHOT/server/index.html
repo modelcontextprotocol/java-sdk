@@ -2488,6 +2488,10 @@ The first argument is <code>McpSyncServerExchange</code>/<code>McpAsyncServerExc
 </div>
 </div>
 <h3 id="using-sampling-from-a-server">Using Sampling from a Server<a class="headerlink" href="#using-sampling-from-a-server" title="Permanent link">&para;</a></h3>
+<div class="admonition warning">
+<p class="admonition-title">Deprecated</p>
+<p>Sampling is deprecated as of MCP protocol version 2026-07-28 (<a href="https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging">SEP-2577</a>) and may be removed from a protocol revision released on or after 2027-07-28. It still works unchanged in this SDK, and the methods that initiate it are marked <code>@Deprecated</code>. Servers should integrate directly with LLM provider APIs instead. See the <a href="https://modelcontextprotocol.io/specification/2026-07-28/deprecated">deprecated features registry</a>.</p>
+</div>
 <p>To use <a href="https://modelcontextprotocol.io/specification/2025-11-25/client/sampling">Sampling capabilities</a>, connect to a client that supports sampling.
 No special server configuration is needed, but verify client sampling support before making requests.
 Learn about <a href="../client/#sampling-support">client sampling support</a>.</p>
@@ -2718,6 +2722,10 @@ Learn about <a href="../client/#sampling-support">client sampling support</a>.</
 </span></code></pre></div>
 <p>The async equivalent, <code>McpAsyncServerExchange.ping()</code>, returns a <code>Mono&lt;Object&gt;</code> that completes when the client responds. Ping requests are subject to the same <code>requestTimeout</code> configured on the server builder.</p>
 <h3 id="logging-support">Logging Support<a class="headerlink" href="#logging-support" title="Permanent link">&para;</a></h3>
+<div class="admonition warning">
+<p class="admonition-title">Deprecated</p>
+<p>MCP logging is deprecated as of MCP protocol version 2026-07-28 (<a href="https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging">SEP-2577</a>) and may be removed from a protocol revision released on or after 2027-07-28. It still works unchanged in this SDK, and the methods that initiate it are marked <code>@Deprecated</code>. Servers should log to stderr (stdio transport) or use <a href="https://opentelemetry.io/">OpenTelemetry</a> instead. See the <a href="https://modelcontextprotocol.io/specification/2026-07-28/deprecated">deprecated features registry</a>.</p>
+</div>
 <p>The server provides structured logging capabilities that allow sending log messages to clients with different severity levels.
 Log notifications can only be sent from within an existing client session, such as tools, resources, and prompts calls.</p>
 <p>The server can send log messages using the <code>McpAsyncServerExchange</code>/<code>McpSyncServerExchange</code> object in the tool/resource/prompt handler function:</p>

@@ -1753,6 +1753,10 @@ A client for the stateless 2026-07-28 revision is also available; see
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
 </span></code></pre></div>
 <h3 id="roots-support">Roots Support<a class="headerlink" href="#roots-support" title="Permanent link">&para;</a></h3>
+<div class="admonition warning">
+<p class="admonition-title">Deprecated</p>
+<p>Roots are deprecated as of MCP protocol version 2026-07-28 (<a href="https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging">SEP-2577</a>) and may be removed from a protocol revision released on or after 2027-07-28. They still work unchanged in this SDK, and the methods that initiate them are marked <code>@Deprecated</code>. Pass directories or files to servers via tool parameters, resource URIs, or server configuration instead. See the <a href="https://modelcontextprotocol.io/specification/2026-07-28/deprecated">deprecated features registry</a>.</p>
+</div>
 <p>Roots define the boundaries of where servers can operate within the filesystem:</p>
 <div class="highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1">// Add a root dynamically</span>
 </span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">client</span><span class="p">.</span><span class="na">addRoot</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">Root</span><span class="p">(</span><span class="s">"file:///path"</span><span class="p">,</span><span class="w"> </span><span class="s">"description"</span><span class="p">));</span>
@@ -1770,6 +1774,10 @@ A client for the stateless 2026-07-28 revision is also available; see
 <li>Understand which directories and files they have access to</li>
 </ul>
 <h3 id="sampling-support">Sampling Support<a class="headerlink" href="#sampling-support" title="Permanent link">&para;</a></h3>
+<div class="admonition warning">
+<p class="admonition-title">Deprecated</p>
+<p>Sampling is deprecated as of MCP protocol version 2026-07-28 (<a href="https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging">SEP-2577</a>) and may be removed from a protocol revision released on or after 2027-07-28. It still works unchanged in this SDK, and the methods that initiate it are marked <code>@Deprecated</code>. Servers should integrate directly with LLM provider APIs instead. See the <a href="https://modelcontextprotocol.io/specification/2026-07-28/deprecated">deprecated features registry</a>.</p>
+</div>
 <p>Sampling enables servers to request LLM interactions ("completions" or "generations") through the client:</p>
 <div class="highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1">// Configure sampling handler</span>
 </span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">Function</span><span class="o">&lt;</span><span class="n">CreateMessageRequest</span><span class="p">,</span><span class="w"> </span><span class="n">CreateMessageResult</span><span class="o">&gt;</span><span class="w"> </span><span class="n">samplingHandler</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">request</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
@@ -1866,6 +1874,10 @@ A client for the stateless 2026-07-28 revision is also available; see
 </span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="n">McpSchema</span><span class="p">.</span><span class="na">ElicitationCompleteNotification</span><span class="p">(</span><span class="s">"oauth-123"</span><span class="p">));</span>
 </span></code></pre></div>
 <h3 id="logging-support">Logging Support<a class="headerlink" href="#logging-support" title="Permanent link">&para;</a></h3>
+<div class="admonition warning">
+<p class="admonition-title">Deprecated</p>
+<p>MCP logging is deprecated as of MCP protocol version 2026-07-28 (<a href="https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging">SEP-2577</a>) and may be removed from a protocol revision released on or after 2027-07-28. It still works unchanged in this SDK, and the methods that initiate it are marked <code>@Deprecated</code>. Servers should log to stderr (stdio transport) or use <a href="https://opentelemetry.io/">OpenTelemetry</a> instead. See the <a href="https://modelcontextprotocol.io/specification/2026-07-28/deprecated">deprecated features registry</a>.</p>
+</div>
 <p>The client can register a logging consumer to receive log messages from the server and set the minimum logging level to filter messages:</p>
 <div class="highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="kd">var</span><span class="w"> </span><span class="n">mcpClient</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">McpClient</span><span class="p">.</span><span class="na">sync</span><span class="p">(</span><span class="n">transport</span><span class="p">)</span>
 </span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="w">        </span><span class="p">.</span><span class="na">loggingConsumer</span><span class="p">(</span><span class="n">notification</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
