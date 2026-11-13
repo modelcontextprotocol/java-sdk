@@ -133,6 +133,14 @@ public final class McpServer implements McpRequestManager {
 			return invalidParams(id, "params is malformed");
 		}
 		Map<String, Object> meta = asMetaMap(paramsMap.get("_meta"));
+		if (McpSchema.METHOD_INITIALIZE.equals(request.method()) && !hasModernVersionClaim(meta)) {
+			// Legacy client: tries to initialize and doesn't pass version header. We
+			// reject early to return the correct error and not a header-validation error.
+			// If there is a modern version header, it's an invalid INITIALIZE request
+			// from a modern client: let it fall through, it will be rejected with
+			// METHOD_NOT_FOUND
+			return rejectLegacyInitialize(id, paramsMap);
+		}
 		if (meta == null) {
 			return invalidParams(id, "params._meta is required");
 		}
@@ -306,6 +314,40 @@ public final class McpServer implements McpRequestManager {
 	private static JSONRPCResponse bug(McpRequestContext ctx, String problem) {
 		logger.warn("Request {} ({}): {}", ctx.requestId(), ctx.method(), problem);
 		return JSONRPCResponse.error(ctx.requestId(), new JSONRPCError(ErrorCodes.INTERNAL_ERROR, "Internal error"));
+	}
+
+	/**
+	 * Answers the {@code initialize} handshake of a client on an initialization-based
+	 * (legacy) protocol version. The server broadcasts to name its supported version(s)
+	 * in the error response.
+	 * <p>
+	 * This runs before any {@code params}/{@code _meta} validation: a legacy
+	 * {@code initialize} carries neither, and would otherwise be answered with an error
+	 * about the missing {@code _meta} instead.
+	 *
+	 * @see <a href=
+	 * "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation">Protocol
+	 * Version Negotiation</a>
+	 */
+	private Mono<McpTransportResponse> rejectLegacyInitialize(Object id, Map<String, Object> params) {
+		// The legacy handshake names the client's version in params.protocolVersion. When
+		// it is missing, "requested" is sent as an empty string: the schema requires the
+		// field, and an empty value doesn't pretend the client asked for any version.
+		String requested = params.get("protocolVersion") instanceof String version ? version : "";
+		String message = "Unsupported protocol version" + (requested.isEmpty() ? "" : " " + requested)
+				+ ": this server does not support the initialize handshake; supported protocol versions: "
+				+ String.join(", ", this.supportedVersions);
+		return error(id, new JSONRPCError(ErrorCodes.UNSUPPORTED_PROTOCOL_VERSION, message,
+				new UnsupportedProtocolVersionData(this.supportedVersions, requested)));
+	}
+
+	/**
+	 * Whether {@code params._meta} names a protocol version, i.e. the request claims to
+	 * follow a per-request-metadata revision rather than the legacy handshake.
+	 */
+	private static boolean hasModernVersionClaim(Map<String, Object> meta) {
+		return meta != null && meta.get(MetaKeys.PROTOCOL_VERSION) instanceof String protocolVersion
+				&& !protocolVersion.isBlank();
 	}
 
 	private static Mono<McpTransportResponse> error(Object id, JSONRPCError error) {

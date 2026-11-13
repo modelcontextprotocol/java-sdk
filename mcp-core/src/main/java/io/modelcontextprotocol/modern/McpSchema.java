@@ -53,6 +53,15 @@ public final class McpSchema {
 
 	public static final String METHOD_SERVER_DISCOVER = "server/discover";
 
+	/**
+	 * The handshake that opens a connection in the initialization-based (legacy) protocol
+	 * versions.
+	 * @deprecated This is only used to recognize legacy client requests so they can be
+	 * rejected with an appropriate error message.
+	 */
+	@Deprecated
+	public static final String METHOD_INITIALIZE = "initialize";
+
 	public static final String METHOD_TOOLS_LIST = "tools/list";
 
 	public static final String METHOD_TOOLS_CALL = "tools/call";
