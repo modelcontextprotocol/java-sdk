@@ -20,7 +20,7 @@ import java.util.Set;
 import io.modelcontextprotocol.modern.McpHttp.Headers;
 import io.modelcontextprotocol.modern.server.McpParamHeaders;
 import io.modelcontextprotocol.server.transport.HeaderAccessor;
-import reactor.util.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Strict decoder for MCP header values such as {@code Mcp-Name} and
@@ -50,8 +50,7 @@ public final class McpHeaderDecoder {
 	 * @param raw the header value as received
 	 * @return the decoded value, or {@code null} if the value is malformed
 	 */
-	@Nullable
-	public static String decodeValue(String raw) {
+	@Nullable public static String decodeValue(String raw) {
 		if (raw.length() >= Headers.BASE64_VALUE_PREFIX.length() + Headers.BASE64_VALUE_SUFFIX.length()
 				&& raw.startsWith(Headers.BASE64_VALUE_PREFIX) && raw.endsWith(Headers.BASE64_VALUE_SUFFIX)) {
 			String encoded = raw.substring(Headers.BASE64_VALUE_PREFIX.length(),

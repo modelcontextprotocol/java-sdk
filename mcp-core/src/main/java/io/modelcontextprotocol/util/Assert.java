@@ -6,7 +6,7 @@ package io.modelcontextprotocol.util;
 
 import java.util.Collection;
 
-import reactor.util.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Assertion utility class that assists in validating arguments.

@@ -4,7 +4,7 @@
 
 package io.modelcontextprotocol.spec;
 
-import reactor.util.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Exception thrown when trying to use an {@link McpTransportSession} that has been
