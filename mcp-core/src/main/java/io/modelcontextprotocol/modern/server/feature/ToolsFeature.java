@@ -153,7 +153,7 @@ public final class ToolsFeature implements McpFeature {
 		}
 		// Failing rather than skipping, so a transport that forgets the headers can't
 		// silently disable validation.
-		if (!(headers instanceof McpHeaders paramHeaders)) {
+		if (!(headers instanceof McpHeaders mcpHeaders)) {
 			logger.warn(
 					"Cannot validate Mcp-Param headers for tool '{}': transport context key '{}' is {}. The transport "
 							+ "must map it to an McpHeaders, or to McpHeaders.NOT_MIRRORED if it has no headers",
@@ -161,8 +161,7 @@ public final class ToolsFeature implements McpFeature {
 					(headers == null) ? "missing" : "a " + headers.getClass().getName());
 			throw new McpException(ErrorCodes.INTERNAL_ERROR, "Internal error");
 		}
-		ParamHeaderValidator.Result result = ParamHeaderValidator.validate(annotations.valid(), arguments,
-				paramHeaders);
+		ParamHeaderValidator.Result result = ParamHeaderValidator.validate(annotations.valid(), arguments, mcpHeaders);
 		if (result instanceof ParamHeaderValidator.Invalid invalid) {
 			throw new McpException(ErrorCodes.HEADER_MISMATCH, invalid.problem());
 		}

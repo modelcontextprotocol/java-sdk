@@ -9,19 +9,26 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
+import io.modelcontextprotocol.modern.McpHttp.Headers;
 import io.modelcontextprotocol.util.Assert;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The request headers a client mirrors from the JSON-RPC body: the
- * {@code Mcp-Param-{Name}} headers of a {@code tools/call} request, which mirror the
- * arguments a tool annotates with {@code x-mcp-header}.
+ * The request headers a client mirrors from the JSON-RPC body:
+ * <ul>
+ * <li>{@code Mcp-Name}, which mirrors the tool or prompt name or the resource URI, and
+ * for methods defined outside the core specification, such as {@code tasks/get}, the
+ * parameter that method designates;</li>
+ * <li>the {@code Mcp-Param-{Name}} headers of a {@code tools/call} request, which mirror
+ * the arguments a tool annotates with {@code x-mcp-header}.</li>
+ * </ul>
  * <p>
  * An HTTP transport decodes the headers, for instance with
- * {@code McpHeaderDecoder.paramHeaders}, and adds them to the transport context under
- * {@link #TRANSPORT_CONTEXT_KEY}. A transport that has no headers, such as stdio, maps
- * the key to {@link #NOT_MIRRORED} instead. The tools feature validates the headers
- * against the arguments, and fails the call as an internal error when the key is missing.
+ * {@code McpHeaderDecoder.headers}, and adds them to the transport context of every
+ * request under {@link #TRANSPORT_CONTEXT_KEY}. A transport that has no headers, such as
+ * stdio, maps the key to {@link #NOT_MIRRORED} instead. The tools feature validates the
+ * {@code Mcp-Param-{Name}} headers against the arguments, and fails the call as an
+ * internal error when the key is missing.
  * <p>
  * Headers are looked up ignoring case.
  *
@@ -36,11 +43,6 @@ public final class McpHeaders {
 	 * of a request.
 	 */
 	public static final String TRANSPORT_CONTEXT_KEY = McpHeaders.class.getName();
-
-	/**
-	 * The prefix of every {@code Mcp-Param-{Name}} header name.
-	 */
-	public static final String PARAM_PREFIX = "Mcp-Param-";
 
 	/**
 	 * Marks a transport that never mirrors the body into headers, such as stdio, so
@@ -82,7 +84,7 @@ public final class McpHeaders {
 
 	private static String paramHeaderName(String name) {
 		Assert.notNull(name, "name must not be null");
-		return PARAM_PREFIX + name;
+		return Headers.MCP_PARAM_PREFIX + name;
 	}
 
 	private static String normalize(String headerName) {
@@ -102,17 +104,41 @@ public final class McpHeaders {
 		}
 
 		/**
-		 * Adds an {@code Mcp-Param-{Name}} header. A name added more than once, ignoring
-		 * case, is malformed, because a header sent more than once has no single value to
-		 * compare.
-		 * @param name the {@code {Name}} part of {@code Mcp-Param-{Name}}, in any case
-		 * @param value the decoded value, or {@code null} if the header was sent but
-		 * couldn't be decoded
+		 * Adds a header by its full name, such as {@code Mcp-Name}. A header added more
+		 * than once, ignoring case, is malformed, because a header sent more than once
+		 * has no single value to compare. The name is not checked: callers are expected
+		 * to add only the headers a client mirrors from the body.
+		 * <p>
+		 * A {@code null} value marks the header as malformed: it was sent, but has no
+		 * single usable value, for instance because it couldn't be decoded or carried
+		 * several values. Don't add a header that wasn't sent, so that
+		 * {@link McpHeaders#get(String)} returns {@code null} for it: passing the result
+		 * of a lookup that returns {@code null} for absent headers, such as
+		 * {@code HttpServletRequest.getHeader}, would report it as malformed instead of
+		 * missing.
+		 * @param name the full name of the header, in any case
+		 * @param value the decoded value, or {@code null} if the header was sent but is
+		 * malformed
 		 * @return this builder
 		 */
-		public Builder param(String name, @Nullable String value) {
-			String headerName = paramHeaderName(name);
-			return add((value != null) ? McpHeader.of(headerName, value) : McpHeader.malformed(headerName));
+		public Builder header(String name, @Nullable String value) {
+			var header = (value != null) ? McpHeader.of(name, value) : McpHeader.malformed(name);
+			return add(header);
+		}
+
+		/**
+		 * Adds an {@code Mcp-Param-{Name}} header. A paramName added more than once,
+		 * ignoring case, is malformed, because a header sent more than once has no single
+		 * value to compare. As with {@link #header(String, String)}, a {@code null} value
+		 * marks the header as malformed, and a header that wasn't sent must not be added.
+		 * @param paramName the {@code {Name}} part of {@code Mcp-Param-{Name}}, in any
+		 * case
+		 * @param value the decoded value, or {@code null} if the header was sent but is
+		 * malformed
+		 * @return this builder
+		 */
+		public Builder paramHeader(String paramName, @Nullable String value) {
+			return header(paramHeaderName(paramName), value);
 		}
 
 		// A header added again, ignoring case, becomes malformed and keeps the name it

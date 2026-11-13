@@ -50,8 +50,8 @@ public class StdioMcpTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(StdioMcpTransport.class);
 
-	// Stdio has no headers, so Mcp-Param-* headers are never mirrored and the tools
-	// feature skips their validation.
+	// Stdio has no headers, so nothing is mirrored (neither Mcp-Name nor Mcp-Param-*)
+	// and features skip header validation.
 	private static final McpTransportContext TRANSPORT_CONTEXT = McpTransportContext
 		.create(Map.of(McpHeaders.TRANSPORT_CONTEXT_KEY, McpHeaders.NOT_MIRRORED));
 

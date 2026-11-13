@@ -62,7 +62,7 @@ class ToolsFeatureParamHeadersTests {
 
 	@Test
 	void matchingHeaderIsAccepted() {
-		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.param("Region", "eu-west1")),
+		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.paramHeader("Region", "eu-west1")),
 				Map.of("region", "eu-west1"));
 
 		assertAccepted(response);
@@ -78,7 +78,7 @@ class ToolsFeatureParamHeadersTests {
 
 	@Test
 	void mismatchedHeaderIsRejected() {
-		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.param("Region", "us-east1")),
+		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.paramHeader("Region", "us-east1")),
 				Map.of("region", "eu-west1"));
 
 		assertRejected(response, "Mcp-Param-Region header does not match argument 'region'");
@@ -86,7 +86,7 @@ class ToolsFeatureParamHeadersTests {
 
 	@Test
 	void comparisonIsCaseSensitive() {
-		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.param("Region", "EU-West1")),
+		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.paramHeader("Region", "EU-West1")),
 				Map.of("region", "eu-west1"));
 
 		assertRejected(response, "Mcp-Param-Region header does not match argument 'region'");
@@ -94,7 +94,7 @@ class ToolsFeatureParamHeadersTests {
 
 	@Test
 	void malformedHeaderIsRejected() {
-		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.param("Region", null)),
+		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.paramHeader("Region", null)),
 				Map.of("region", "eu-west1"));
 
 		assertRejected(response, "Mcp-Param-Region header is malformed");
@@ -102,7 +102,7 @@ class ToolsFeatureParamHeadersTests {
 
 	@Test
 	void headerForAnAbsentArgumentIsRejected() {
-		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.param("Region", "eu-west1")), Map.of());
+		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.paramHeader("Region", "eu-west1")), Map.of());
 
 		assertRejected(response, "Mcp-Param-Region header present but argument 'region' is absent");
 	}
@@ -112,14 +112,14 @@ class ToolsFeatureParamHeadersTests {
 		Map<String, Object> arguments = new HashMap<>();
 		arguments.put("region", null);
 
-		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.param("Region", "eu-west1")), arguments);
+		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.paramHeader("Region", "eu-west1")), arguments);
 
 		assertRejected(response, "Mcp-Param-Region header present but argument 'region' is absent");
 	}
 
 	@Test
 	void malformedHeaderForAnAbsentArgumentIsRejected() {
-		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.param("Region", null)), Map.of());
+		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.paramHeader("Region", null)), Map.of());
 
 		assertRejected(response, "Mcp-Param-Region header present but argument 'region' is absent");
 	}
@@ -127,7 +127,7 @@ class ToolsFeatureParamHeadersTests {
 	@Test
 	void headerForMissingArgumentsIsRejected() {
 		JSONRPCResponse response = respond(server(REGION_SCHEMA, PERMISSIVE_VALIDATOR),
-				headers(h -> h.param("Region", "eu-west1")),
+				headers(h -> h.paramHeader("Region", "eu-west1")),
 				new JSONRPCRequest("tools/call", 1, Map.of("_meta", meta(), "name", "forecast")));
 
 		assertRejected(response, "Mcp-Param-Region header present but argument 'region' is absent");
@@ -154,8 +154,8 @@ class ToolsFeatureParamHeadersTests {
 
 	@Test
 	void undeclaredHeadersAreIgnored() {
-		JSONRPCResponse response = call(REGION_SCHEMA,
-				headers(h -> h.param("Region", "eu-west1").param("Tenant", "acme").param("Zone", null)),
+		JSONRPCResponse response = call(REGION_SCHEMA, headers(
+				h -> h.paramHeader("Region", "eu-west1").paramHeader("Tenant", "acme").paramHeader("Zone", null)),
 				Map.of("region", "eu-west1"));
 
 		assertAccepted(response);
@@ -163,7 +163,7 @@ class ToolsFeatureParamHeadersTests {
 
 	@Test
 	void headerNameIsMatchedIgnoringCase() {
-		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.param("region", "eu-west1")),
+		JSONRPCResponse response = call(REGION_SCHEMA, headers(h -> h.paramHeader("region", "eu-west1")),
 				Map.of("region", "eu-west1"));
 
 		assertAccepted(response);
@@ -181,7 +181,8 @@ class ToolsFeatureParamHeadersTests {
 				}
 				""";
 
-		JSONRPCResponse response = call(schema, headers(h -> h.param("Region", "us-east1").param("Zone", null)),
+		JSONRPCResponse response = call(schema,
+				headers(h -> h.paramHeader("Region", "us-east1").paramHeader("Zone", null)),
 				Map.of("region", "eu-west1", "zone", "a"));
 
 		assertRejected(response, "Mcp-Param-Zone header is malformed");
@@ -194,7 +195,7 @@ class ToolsFeatureParamHeadersTests {
 				? ValidationResponse.asInvalid("rejected") : ValidationResponse.asValid(null);
 
 		JSONRPCResponse response = respond(server(REGION_SCHEMA, rejectingInput),
-				headers(h -> h.param("Region", "us-east1")), callForecast(Map.of("region", "eu-west1")));
+				headers(h -> h.paramHeader("Region", "us-east1")), callForecast(Map.of("region", "eu-west1")));
 
 		assertRejected(response, "Mcp-Param-Region header does not match argument 'region'");
 	}
@@ -238,7 +239,8 @@ class ToolsFeatureParamHeadersTests {
 				}
 				""";
 
-		JSONRPCResponse response = call(schema, headers(h -> h.param("Region", "us-east1").param("Zone", null)),
+		JSONRPCResponse response = call(schema,
+				headers(h -> h.paramHeader("Region", "us-east1").paramHeader("Zone", null)),
 				Map.of("region", "eu-west1"));
 
 		assertAccepted(response);
@@ -267,35 +269,39 @@ class ToolsFeatureParamHeadersTests {
 
 		@Test
 		void integerHeaderMatchesAnIntegralDoubleArgument() {
-			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.param("Level", "42")), Map.of("level", 42.0));
+			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.paramHeader("Level", "42")),
+					Map.of("level", 42.0));
 
 			assertAccepted(response);
 		}
 
 		@Test
 		void integerHeaderMatchesAnExponentArgument() {
-			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.param("Level", "1000")), Map.of("level", 1e3));
+			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.paramHeader("Level", "1000")),
+					Map.of("level", 1e3));
 
 			assertAccepted(response);
 		}
 
 		@Test
 		void exponentHeaderIsRejected() {
-			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.param("Level", "1e3")), Map.of("level", 1000));
+			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.paramHeader("Level", "1e3")),
+					Map.of("level", 1000));
 
 			assertRejected(response, "Mcp-Param-Level header does not match argument 'level'");
 		}
 
 		@Test
 		void decimalHeaderMatchesAnIntegerArgument() {
-			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.param("Level", "42.0")), Map.of("level", 42));
+			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.paramHeader("Level", "42.0")),
+					Map.of("level", 42));
 
 			assertAccepted(response);
 		}
 
 		@Test
 		void longBeyondTheSafeRangeMatchesItsExactHeader() {
-			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.param("Level", "1152921504606846976")),
+			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.paramHeader("Level", "1152921504606846976")),
 					Map.of("level", 1L << 60));
 
 			assertAccepted(response);
@@ -303,7 +309,7 @@ class ToolsFeatureParamHeadersTests {
 
 		@Test
 		void longBeyondTheSafeRangeIsComparedExactly() {
-			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.param("Level", "1152921504606846977")),
+			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.paramHeader("Level", "1152921504606846977")),
 					Map.of("level", 1L << 60));
 
 			assertRejected(response, "Mcp-Param-Level header does not match argument 'level'");
@@ -312,7 +318,7 @@ class ToolsFeatureParamHeadersTests {
 		@Test
 		void bigIntegerMatchesItsExactHeader() {
 			JSONRPCResponse response = call(LEVEL_SCHEMA,
-					headers(h -> h.param("Level", "-123456789012345678901234567890")),
+					headers(h -> h.paramHeader("Level", "-123456789012345678901234567890")),
 					Map.of("level", new BigInteger("-123456789012345678901234567890")));
 
 			assertAccepted(response);
@@ -320,21 +326,23 @@ class ToolsFeatureParamHeadersTests {
 
 		@Test
 		void mismatchedIntegerHeaderIsRejected() {
-			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.param("Level", "43")), Map.of("level", 42));
+			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.paramHeader("Level", "43")),
+					Map.of("level", 42));
 
 			assertRejected(response, "Mcp-Param-Level header does not match argument 'level'");
 		}
 
 		@Test
 		void integerAnnotationComparesAStringArgumentAsAString() {
-			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.param("Level", "42")), Map.of("level", "42"));
+			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.paramHeader("Level", "42")),
+					Map.of("level", "42"));
 
 			assertAccepted(response);
 		}
 
 		@Test
 		void integerAnnotationDoesNotCompareAStringArgumentNumerically() {
-			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.param("Level", "42")),
+			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.paramHeader("Level", "42")),
 					Map.of("level", "42.0"));
 
 			assertRejected(response, "Mcp-Param-Level header does not match argument 'level'");
@@ -343,8 +351,8 @@ class ToolsFeatureParamHeadersTests {
 		@ParameterizedTest
 		@ValueSource(booleans = { true, false })
 		void booleanHeaderMatchesItsArgument(boolean verbose) {
-			JSONRPCResponse response = call(VERBOSE_SCHEMA, headers(h -> h.param("Verbose", String.valueOf(verbose))),
-					Map.of("verbose", verbose));
+			JSONRPCResponse response = call(VERBOSE_SCHEMA,
+					headers(h -> h.paramHeader("Verbose", String.valueOf(verbose))), Map.of("verbose", verbose));
 
 			assertAccepted(response);
 		}
@@ -352,7 +360,7 @@ class ToolsFeatureParamHeadersTests {
 		@ParameterizedTest
 		@ValueSource(strings = { "True", "TRUE", "1" })
 		void otherBooleanSpellingsAreRejected(String header) {
-			JSONRPCResponse response = call(VERBOSE_SCHEMA, headers(h -> h.param("Verbose", header)),
+			JSONRPCResponse response = call(VERBOSE_SCHEMA, headers(h -> h.paramHeader("Verbose", header)),
 					Map.of("verbose", true));
 
 			assertRejected(response, "Mcp-Param-Verbose header does not match argument 'verbose'");
@@ -361,7 +369,7 @@ class ToolsFeatureParamHeadersTests {
 		@ParameterizedTest
 		@MethodSource("objectAndArrayArguments")
 		void objectOrArrayArgumentWithAHeaderIsRejected(Object argument) {
-			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.param("Level", "42")),
+			JSONRPCResponse response = call(LEVEL_SCHEMA, headers(h -> h.paramHeader("Level", "42")),
 					Map.of("level", argument));
 
 			assertRejected(response, "Mcp-Param-Level header does not match argument 'level'");
@@ -401,7 +409,7 @@ class ToolsFeatureParamHeadersTests {
 
 		@Test
 		void nestedArgumentWithMatchingHeaderIsAccepted() {
-			JSONRPCResponse response = call(LOCATION_SCHEMA, headers(h -> h.param("Region", "eu-west1")),
+			JSONRPCResponse response = call(LOCATION_SCHEMA, headers(h -> h.paramHeader("Region", "eu-west1")),
 					Map.of("location", Map.of("region", "eu-west1")));
 
 			assertAccepted(response);
@@ -409,7 +417,7 @@ class ToolsFeatureParamHeadersTests {
 
 		@Test
 		void nestedArgumentWithMismatchedHeaderIsRejectedWithADottedPath() {
-			JSONRPCResponse response = call(LOCATION_SCHEMA, headers(h -> h.param("Region", "us-east1")),
+			JSONRPCResponse response = call(LOCATION_SCHEMA, headers(h -> h.paramHeader("Region", "us-east1")),
 					Map.of("location", Map.of("region", "eu-west1")));
 
 			assertRejected(response, "Mcp-Param-Region header does not match argument 'location.region'");
@@ -444,7 +452,7 @@ class ToolsFeatureParamHeadersTests {
 					}
 					""";
 
-			JSONRPCResponse response = call(schema, headers(h -> h.param("Region", "us-east1")),
+			JSONRPCResponse response = call(schema, headers(h -> h.paramHeader("Region", "us-east1")),
 					Map.of("request", Map.of("location", Map.of("region", "eu-west1"))));
 
 			assertRejected(response, "Mcp-Param-Region header does not match argument 'request.location.region'");
@@ -468,8 +476,8 @@ class ToolsFeatureParamHeadersTests {
 					}
 					""";
 
-			JSONRPCResponse response = call(schema,
-					headers(h -> h.param("Zone", "a").param("Region", "eu-west1").param("Tenant", "other")),
+			JSONRPCResponse response = call(schema, headers(
+					h -> h.paramHeader("Zone", "a").paramHeader("Region", "eu-west1").paramHeader("Tenant", "other")),
 					Map.of("location", Map.of("zone", "a", "region", "eu-west1"), "tenant", "acme"));
 
 			assertRejected(response, "Mcp-Param-Tenant header does not match argument 'tenant'");
@@ -485,7 +493,8 @@ class ToolsFeatureParamHeadersTests {
 
 		@Test
 		void headerForAMissingIntermediateObjectIsRejected() {
-			JSONRPCResponse response = call(LOCATION_SCHEMA, headers(h -> h.param("Region", "eu-west1")), Map.of());
+			JSONRPCResponse response = call(LOCATION_SCHEMA, headers(h -> h.paramHeader("Region", "eu-west1")),
+					Map.of());
 
 			assertRejected(response, "Mcp-Param-Region header present but argument 'location.region' is absent");
 		}
@@ -495,7 +504,8 @@ class ToolsFeatureParamHeadersTests {
 			Map<String, Object> arguments = new HashMap<>();
 			arguments.put("location", null);
 
-			JSONRPCResponse response = call(LOCATION_SCHEMA, headers(h -> h.param("Region", "eu-west1")), arguments);
+			JSONRPCResponse response = call(LOCATION_SCHEMA, headers(h -> h.paramHeader("Region", "eu-west1")),
+					arguments);
 
 			assertRejected(response, "Mcp-Param-Region header present but argument 'location.region' is absent");
 		}
@@ -510,7 +520,7 @@ class ToolsFeatureParamHeadersTests {
 
 		@Test
 		void headerForANonObjectIntermediateValueIsRejected() {
-			JSONRPCResponse response = call(LOCATION_SCHEMA, headers(h -> h.param("Region", "eu-west1")),
+			JSONRPCResponse response = call(LOCATION_SCHEMA, headers(h -> h.paramHeader("Region", "eu-west1")),
 					Map.of("location", List.of(Map.of("region", "eu-west1"))));
 
 			assertRejected(response, "Mcp-Param-Region header present but argument 'location.region' is absent");
@@ -542,15 +552,17 @@ class ToolsFeatureParamHeadersTests {
 			String schema = withInvalid("{ \"type\": \"number\", \"x-mcp-header\": \"Score\" }");
 			Map<String, Object> arguments = Map.of("region", "eu-west1", "bad", 1);
 
-			assertAccepted(call(schema, headers(h -> h.param("Region", "eu-west1")), arguments));
+			assertAccepted(call(schema, headers(h -> h.paramHeader("Region", "eu-west1")), arguments));
 			ToolsFeatureParamHeadersTests.this.called.set(false);
-			assertAccepted(call(schema, headers(h -> h.param("Region", "eu-west1").param("Score", "2")), arguments));
+			assertAccepted(call(schema, headers(h -> h.paramHeader("Region", "eu-west1").paramHeader("Score", "2")),
+					arguments));
 			ToolsFeatureParamHeadersTests.this.called.set(false);
-			assertAccepted(call(schema, headers(h -> h.param("Region", "eu-west1").param("Score", null)), arguments));
+			assertAccepted(call(schema, headers(h -> h.paramHeader("Region", "eu-west1").paramHeader("Score", null)),
+					arguments));
 			ToolsFeatureParamHeadersTests.this.called.set(false);
-			assertRejected(call(schema, headers(h -> h.param("Region", "us-east1").param("Score", "1")), arguments),
-					"Mcp-Param-Region header does not match argument 'region'");
-			assertRejected(call(schema, headers(h -> h.param("Score", "1")), arguments),
+			assertRejected(call(schema, headers(h -> h.paramHeader("Region", "us-east1").paramHeader("Score", "1")),
+					arguments), "Mcp-Param-Region header does not match argument 'region'");
+			assertRejected(call(schema, headers(h -> h.paramHeader("Score", "1")), arguments),
 					"Missing required header: Mcp-Param-Region");
 		}
 
@@ -566,7 +578,7 @@ class ToolsFeatureParamHeadersTests {
 					}
 					""";
 
-			assertAccepted(call(schema, headers(h -> h.param("Score", "2")), Map.of("score", 1)));
+			assertAccepted(call(schema, headers(h -> h.paramHeader("Score", "2")), Map.of("score", 1)));
 		}
 
 		@Test
