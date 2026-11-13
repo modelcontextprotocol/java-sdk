@@ -14,6 +14,8 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.IntStream;
@@ -82,6 +84,12 @@ public class StdioClientTransport implements McpClientTransport {
 
 	private volatile boolean isClosing = false;
 
+	/** Whether the server process has been started by {@link #connect(Function)} */
+	private final AtomicBoolean started = new AtomicBoolean(false);
+
+	/** Handler of the messages received from the server process */
+	private final AtomicReference<Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>>> inboundMessageHandler = new AtomicReference<>();
+
 	// visible for tests
 	private Consumer<String> stdErrorHandler = error -> logger.info("STDERR Message received: {}", error);
 
@@ -134,8 +142,17 @@ public class StdioClientTransport implements McpClientTransport {
 	@Override
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 		return Mono.<Void>fromRunnable(() -> {
+			// A client session connects again when it re-initializes, for instance after
+			// a
+			// failed initialization: hand it the messages of the already running server
+			// rather than starting another one.
+			this.inboundMessageHandler.set(handler);
+			if (!this.started.compareAndSet(false, true)) {
+				logger.debug("MCP server already started, replacing the inbound message handler");
+				return;
+			}
 			logger.info("MCP server starting.");
-			handleIncomingMessages(handler);
+			handleIncomingMessages();
 			handleIncomingErrors();
 
 			// Prepare command and environment
@@ -242,10 +259,10 @@ public class StdioClientTransport implements McpClientTransport {
 		});
 	}
 
-	private void handleIncomingMessages(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> inboundMessageHandler) {
+	private void handleIncomingMessages() {
 		this.inboundSink.asFlux()
 			.flatMap(message -> Mono.just(message)
-				.transform(inboundMessageHandler)
+				.transform(this.inboundMessageHandler.get())
 				.contextWrite(ctx -> ctx.put("observation", "myObservation")))
 			.subscribe();
 	}
