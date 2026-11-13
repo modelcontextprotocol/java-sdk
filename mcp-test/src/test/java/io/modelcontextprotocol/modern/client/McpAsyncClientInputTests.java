@@ -49,6 +49,7 @@ import reactor.core.publisher.Sinks;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 /**
  * {@link McpAsyncClient} answering the modern server's input requests.
@@ -267,7 +268,9 @@ class McpAsyncClientInputTests {
 		assertThatThrownBy(() -> client.tool("everything").call().block(TIMEOUT))
 			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("dialog closed");
-		assertThat(consentCancelled).isTrue();
+		// Cancellation runs asynchronously. Under high load (e.g. CI), the signal may not
+		// be instantaneous
+		await().atMost(TIMEOUT).pollDelay(Duration.ZERO).untilTrue(consentCancelled);
 		assertThat(this.transport.requests()).hasSize(1);
 	}
 
