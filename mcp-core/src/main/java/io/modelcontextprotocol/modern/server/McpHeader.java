@@ -50,7 +50,8 @@ public final class McpHeader {
 	}
 
 	/**
-	 * The header name, in the case it was received.
+	 * The header name, such as {@code Mcp-Name} or {@code Mcp-Param-Region}. Header names
+	 * are case-insensitive, so compare it ignoring case.
 	 * @return the header name
 	 */
 	public String name() {

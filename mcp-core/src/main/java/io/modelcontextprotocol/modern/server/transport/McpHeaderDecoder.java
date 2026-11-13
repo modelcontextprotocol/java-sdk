@@ -88,13 +88,16 @@ public final class McpHeaderDecoder {
 	}
 
 	/**
-	 * Collects the {@code Mcp-Param-{Name}} headers of a request.
+	 * Collects the {@code Mcp-Name} and {@code Mcp-Param-{Name}} headers of a request.
 	 * <p>
-	 * Headers are selected by their {@code Mcp-Param-} prefix, ignoring case. A name that
-	 * carries more than one value, including names that differ only in case, is
+	 * {@code Mcp-Name} is selected by its exact name and {@code Mcp-Param-{Name}} by its
+	 * prefix, both ignoring case, so {@code Mcp-Param-Mcp-Name} is a param header. A name
+	 * that carries more than one value, including names that differ only in case, is
 	 * malformed. Every other value is decoded with {@link #decodeValue(String)}, and
 	 * marked malformed when it can't be decoded. Rejecting a malformed header is left to
-	 * the tools feature, because only a header that the called tool declares may cause a
+	 * whoever compares it with the body: the transport for the methods it validates, and
+	 * the feature handling the method otherwise. For instance, only a
+	 * {@code Mcp-Param-{Name}} header that the called tool declares may cause a
 	 * rejection.
 	 * <p>
 	 * As with {@link #decodeValue(String)}, the accessor must return values with their
@@ -102,23 +105,30 @@ public final class McpHeaderDecoder {
 	 * @param headers the request headers
 	 * @return the decoded headers
 	 */
-	public static McpHeaders paramHeaders(HeaderAccessor headers) {
+	public static McpHeaders headers(HeaderAccessor headers) {
 		// The accessor may be case-sensitive, so values are gathered under every name
 		// that differs only in case.
 		Map<String, Set<String>> names = new LinkedHashMap<>();
 		for (String name : headers.getHeaderNames()) {
-			if (name.regionMatches(true, 0, McpHeaders.PARAM_PREFIX, 0, McpHeaders.PARAM_PREFIX.length())) {
+			if (name.equalsIgnoreCase(Headers.MCP_NAME)
+					|| name.regionMatches(true, 0, Headers.MCP_PARAM_PREFIX, 0, Headers.MCP_PARAM_PREFIX.length())) {
 				names.computeIfAbsent(name.toLowerCase(Locale.ROOT), k -> new LinkedHashSet<>()).add(name);
 			}
 		}
 		McpHeaders.Builder builder = McpHeaders.builder();
 		for (Set<String> variants : names.values()) {
-			String paramName = variants.iterator().next().substring(McpHeaders.PARAM_PREFIX.length());
 			List<String> values = new ArrayList<>();
 			for (String name : variants) {
 				values.addAll(headers.getHeader(name));
 			}
-			builder.param(paramName, values.size() == 1 ? decodeValue(values.get(0)) : null);
+			String decoded = values.size() == 1 ? decodeValue(values.get(0)) : null;
+			String headerName = variants.iterator().next();
+			if (headerName.equalsIgnoreCase(Headers.MCP_NAME)) {
+				builder.header(Headers.MCP_NAME, decoded);
+			}
+			else {
+				builder.paramHeader(headerName.substring(Headers.MCP_PARAM_PREFIX.length()), decoded);
+			}
 		}
 		return builder.build();
 	}

@@ -21,12 +21,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.modern.McpException;
+import io.modelcontextprotocol.modern.McpHttp;
 import io.modelcontextprotocol.modern.McpSchema;
 import io.modelcontextprotocol.modern.McpSchema.CallToolOutcome;
 import io.modelcontextprotocol.modern.McpSchema.CallToolRequest;
@@ -38,6 +40,7 @@ import io.modelcontextprotocol.modern.McpSchema.TextContent;
 import io.modelcontextprotocol.modern.McpSchema.Tool;
 import io.modelcontextprotocol.modern.server.McpRequestContext;
 import io.modelcontextprotocol.modern.server.McpAsyncResponse;
+import io.modelcontextprotocol.modern.server.McpHeader;
 import io.modelcontextprotocol.modern.server.McpHeaders;
 import io.modelcontextprotocol.modern.server.McpServer;
 import io.modelcontextprotocol.modern.server.feature.McpAsyncToolRepository;
@@ -53,6 +56,7 @@ import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -95,6 +99,12 @@ class HttpServletMcpTransportIntegrationTests {
 
 	private static final CountDownLatch LISTEN_CANCELLED = new CountDownLatch(1);
 
+	/**
+	 * What the last tools/list or tools/call found under
+	 * {@link McpHeaders#TRANSPORT_CONTEXT_KEY}.
+	 */
+	private static final AtomicReference<Object> RECEIVED_HEADERS = new AtomicReference<>();
+
 	private static CallToolResult text(String text) {
 		return CallToolResult.builder().addContent(TextContent.builder(text).build()).build();
 	}
@@ -104,11 +114,13 @@ class HttpServletMcpTransportIntegrationTests {
 		McpAsyncToolRepository repo = new McpAsyncToolRepository() {
 			@Override
 			public Mono<ToolsPage> list(McpRequestContext ctx, String cursor) {
+				RECEIVED_HEADERS.set(ctx.transportContext().get(McpHeaders.TRANSPORT_CONTEXT_KEY));
 				return Mono.just(ToolsPage.of(List.of(ECHO_TOOL)));
 			}
 
 			@Override
 			public Mono<McpAsyncTool> find(McpRequestContext ctx, String name) {
+				RECEIVED_HEADERS.set(ctx.transportContext().get(McpHeaders.TRANSPORT_CONTEXT_KEY));
 				if ("region".equals(name)) {
 					return Mono.just(McpAsyncTool.of(REGION_TOOL, this::call));
 				}
@@ -175,6 +187,11 @@ class HttpServletMcpTransportIntegrationTests {
 			tomcat.stop();
 			tomcat.destroy();
 		}
+	}
+
+	@BeforeEach
+	void forgetReceivedHeaders() {
+		RECEIVED_HEADERS.set(null);
 	}
 
 	private static HttpRequest.Builder post(String method, Map<String, Object> params) throws IOException {
@@ -571,6 +588,18 @@ class HttpServletMcpTransportIntegrationTests {
 	}
 
 	@Test
+	void mcpNameIsCheckedAgainstTheNameOfAToolCall() throws Exception {
+		HttpRequest request = post("tools/call", Map.of("_meta", meta(), "name", "echo")).header("Mcp-Name", "other")
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(400);
+		assertThatJson(response.body()).inPath("$.error.code").isEqualTo(ErrorCodes.HEADER_MISMATCH);
+		assertThatJson(response.body()).inPath("$.error.message")
+			.isEqualTo("Mcp-Name header does not match request name/uri");
+	}
+
+	@Test
 	void mcpNameIsCheckedAgainstTheUriOfAResourceRead() throws Exception {
 		Map<String, Object> params = new HashMap<>();
 		params.put("_meta", meta());
@@ -593,6 +622,85 @@ class HttpServletMcpTransportIntegrationTests {
 
 		assertThat(response.statusCode()).isEqualTo(400);
 		assertThat(errorCode(response)).isEqualTo(ErrorCodes.HEADER_MISMATCH);
+	}
+
+	@Test
+	void mcpNameIsForwardedForAMethodTheTransportDoesNotValidate() throws Exception {
+		// Stands in for a method such as tasks/get, whose feature compares Mcp-Name with
+		// a parameter itself.
+		HttpRequest request = post("tools/list", Map.of("_meta", meta())).header("Mcp-Name", "task-123").build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(receivedHeaders().get(McpHttp.Headers.MCP_NAME)).isEqualTo(McpHeader.of("Mcp-Name", "task-123"));
+	}
+
+	@Test
+	void base64McpNameIsForwardedDecoded() throws Exception {
+		HttpRequest request = post("tools/list", Map.of("_meta", meta())).header("Mcp-Name", "=?base64?SGVsbG8=?=")
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(receivedHeaders().get(McpHttp.Headers.MCP_NAME).value()).isEqualTo("Hello");
+	}
+
+	@Test
+	void missingMcpNameIsForwardedAsAbsent() throws Exception {
+		HttpRequest request = post("tools/list", Map.of("_meta", meta())).build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(receivedHeaders()).isNotSameAs(McpHeaders.NOT_MIRRORED);
+		assertThat(receivedHeaders().get(McpHttp.Headers.MCP_NAME)).isNull();
+	}
+
+	@Test
+	void undecodableMcpNameIsForwardedAsMalformedForAMethodTheTransportDoesNotValidate() throws Exception {
+		HttpRequest request = post("tools/list", Map.of("_meta", meta())).header("Mcp-Name", "=?base64?not*base64?=")
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(receivedHeaders().get(McpHttp.Headers.MCP_NAME).isMalformed()).isTrue();
+	}
+
+	@Test
+	void repeatedMcpNameIsForwardedAsMalformedForAMethodTheTransportDoesNotValidate() throws Exception {
+		HttpRequest request = post("tools/list", Map.of("_meta", meta())).header("Mcp-Name", "task-123")
+			.header("mcp-name", "task-456")
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(receivedHeaders().get(McpHttp.Headers.MCP_NAME).isMalformed()).isTrue();
+	}
+
+	@Test
+	void validatedMcpNameIsForwardedToTheFeature() throws Exception {
+		HttpRequest request = post("tools/call", Map.of("_meta", meta(), "name", "echo")).header("Mcp-Name", "echo")
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(receivedHeaders().get(McpHttp.Headers.MCP_NAME)).isEqualTo(McpHeader.of("Mcp-Name", "echo"));
+	}
+
+	@Test
+	void contextExtractorCannotReplaceTheForwardedHeaders() throws Exception {
+		HttpRequest request = post("tools/list", Map.of("_meta", meta())).header("Mcp-Name", "task-123")
+			.header(FORGE_NOT_MIRRORED, "true")
+			.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(receivedHeaders()).isNotSameAs(McpHeaders.NOT_MIRRORED);
+		assertThat(receivedHeaders().get(McpHttp.Headers.MCP_NAME).value()).isEqualTo("task-123");
+	}
+
+	private static McpHeaders receivedHeaders() {
+		assertThat(RECEIVED_HEADERS.get()).isInstanceOf(McpHeaders.class);
+		return (McpHeaders) RECEIVED_HEADERS.get();
 	}
 
 	private static HttpRequest.Builder callRegion(String region) throws IOException {

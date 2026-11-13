@@ -50,13 +50,13 @@ final class MockMcpClientTransport implements McpClientTransport {
 		return request.withRoundTimeout(Flux.deferContextual(ctx -> {
 			this.requests.add(request);
 			McpTransportContext context = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
-			McpHeaders paramHeaders = McpHeaders.NOT_MIRRORED;
+			McpHeaders mcpHeaders = McpHeaders.NOT_MIRRORED;
 			if (this.mirrorsToolParams) {
 				McpHeaders.Builder builder = McpHeaders.builder();
-				request.paramHeaders().forEach(builder::param);
-				paramHeaders = builder.build();
+				request.paramHeaders().forEach(builder::paramHeader);
+				mcpHeaders = builder.build();
 			}
-			context = context.putAll(Map.of(McpHeaders.TRANSPORT_CONTEXT_KEY, paramHeaders));
+			context = context.putAll(Map.of(McpHeaders.TRANSPORT_CONTEXT_KEY, mcpHeaders));
 			JSONRPCRequest received = (JSONRPCRequest) overTheWire(request.message());
 			return this.server.handle(context, received).flatMapMany(response -> {
 				if (response instanceof McpTransportResponse.Result result) {

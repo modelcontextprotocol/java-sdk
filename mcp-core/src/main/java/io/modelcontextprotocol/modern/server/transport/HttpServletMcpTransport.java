@@ -248,11 +248,10 @@ public class HttpServletMcpTransport extends HttpServlet {
 			return;
 		}
 
-		if (McpSchema.METHOD_TOOLS_CALL.equals(jsonRpcRequest.method())) {
-			// Added after the user's extractor ran, so this entry always wins.
-			var mcpParamHeaders = McpHeaderDecoder.paramHeaders(headerAccessor(request));
-			transportContext = transportContext.putAll(Map.of(McpHeaders.TRANSPORT_CONTEXT_KEY, mcpParamHeaders));
-		}
+		// Extract headers on every request, because extensions may mirror a parameter
+		// into Mcp-Name. Added after the user's extractor ran, so this entry always wins.
+		var mcpHeaders = McpHeaderDecoder.headers(headerAccessor(request));
+		transportContext = transportContext.putAll(Map.of(McpHeaders.TRANSPORT_CONTEXT_KEY, mcpHeaders));
 
 		boolean listen = McpSchema.METHOD_SUBSCRIPTIONS_LISTEN.equals(jsonRpcRequest.method());
 		McpTransportResponse transportResponse = (listen ? this.requestManager.handle(transportContext, jsonRpcRequest)

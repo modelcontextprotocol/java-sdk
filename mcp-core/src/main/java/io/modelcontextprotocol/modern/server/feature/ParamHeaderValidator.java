@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import io.modelcontextprotocol.modern.McpHttp.Headers;
 import io.modelcontextprotocol.modern.ToolParamHeaderAnnotations.Annotation;
 import io.modelcontextprotocol.modern.ToolParamHeaderAnnotations.Type;
 import io.modelcontextprotocol.modern.server.McpHeader;
@@ -126,7 +127,7 @@ final class ParamHeaderValidator {
 	}
 
 	private static String header(Annotation annotation) {
-		return McpHeaders.PARAM_PREFIX + annotation.name();
+		return Headers.MCP_PARAM_PREFIX + annotation.name();
 	}
 
 	private static String describe(McpHeaders headers, String name) {
