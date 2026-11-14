@@ -7,16 +7,6 @@
     ]
   },
   {
-    "version": "2.2.0-SNAPSHOT",
-    "title": "2.2.0-SNAPSHOT",
-    "aliases": []
-  },
-  {
-    "version": "2.2.0-M2",
-    "title": "2.2.0-M2",
-    "aliases": []
-  },
-  {
     "version": "2.2.0",
     "title": "2.2.0",
     "aliases": [
@@ -26,11 +16,6 @@
   {
     "version": "0.18.5-SNAPSHOT",
     "title": "0.18.5-SNAPSHOT",
-    "aliases": []
-  },
-  {
-    "version": "v2.2.0-M2",
-    "title": "v2.2.0-M2",
     "aliases": []
   },
   {
