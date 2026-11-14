@@ -17,6 +17,13 @@
     "aliases": []
   },
   {
+    "version": "2.2.0",
+    "title": "2.2.0",
+    "aliases": [
+      "latest"
+    ]
+  },
+  {
     "version": "0.18.5-SNAPSHOT",
     "title": "0.18.5-SNAPSHOT",
     "aliases": []
@@ -24,9 +31,7 @@
   {
     "version": "v2.2.0-M2",
     "title": "v2.2.0-M2",
-    "aliases": [
-      "latest"
-    ]
+    "aliases": []
   },
   {
     "version": "v2.1.0",
