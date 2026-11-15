@@ -504,7 +504,12 @@ public class McpAsyncClient {
 	 * Adds a new root to the client's root list.
 	 * @param root The root to add.
 	 * @return A Mono that completes when the root is added and notifications are sent.
+	 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28. Pass
+	 * directories or files to servers via tool parameters, resource URIs, or server
+	 * configuration instead.
 	 */
+	@Deprecated
 	public Mono<Void> addRoot(Root root) {
 
 		if (root == null) {
@@ -523,7 +528,7 @@ public class McpAsyncClient {
 
 		logger.debug("Added root: {}", root);
 
-		if (this.clientCapabilities.roots().listChanged()) {
+		if (Boolean.TRUE.equals(this.clientCapabilities.roots().listChanged())) {
 			if (this.isInitialized()) {
 				return this.rootsListChangedNotification();
 			}
@@ -536,7 +541,12 @@ public class McpAsyncClient {
 	 * Removes a root from the client's root list.
 	 * @param rootUri The URI of the root to remove.
 	 * @return A Mono that completes when the root is removed and notifications are sent.
+	 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28. Pass
+	 * directories or files to servers via tool parameters, resource URIs, or server
+	 * configuration instead.
 	 */
+	@Deprecated
 	public Mono<Void> removeRoot(String rootUri) {
 
 		if (rootUri == null) {
@@ -551,7 +561,7 @@ public class McpAsyncClient {
 
 		if (removed != null) {
 			logger.debug("Removed Root: {}", rootUri);
-			if (this.clientCapabilities.roots().listChanged()) {
+			if (Boolean.TRUE.equals(this.clientCapabilities.roots().listChanged())) {
 				if (this.isInitialized()) {
 					return this.rootsListChangedNotification();
 				}
@@ -567,7 +577,12 @@ public class McpAsyncClient {
 	 * methods automatically send the roots/list_changed notification if the client is in
 	 * an initialized state.
 	 * @return A Mono that completes when the notification is sent.
+	 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28. Pass
+	 * directories or files to servers via tool parameters, resource URIs, or server
+	 * configuration instead.
 	 */
+	@Deprecated
 	public Mono<Void> rootsListChangedNotification() {
 		return this.initializer.withInitialization("sending roots list changed notification",
 				init -> init.mcpSession().sendNotification(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED));
@@ -1064,9 +1079,10 @@ public class McpAsyncClient {
 				return pageFetcher.apply(next);
 			}).reduce(initialAccumulator.get(), accumulate).map(finalize);
 			if (this.paginationConfig.timeout() != null) {
-				return result.timeout(this.paginationConfig.timeout(), Mono.error(new McpPaginationException(
-						"Pagination timed out after " + this.paginationConfig.timeout()
-								+ ". Increase paginationTimeout if this is expected for the server.")));
+				return result.timeout(this.paginationConfig.timeout(),
+						Mono.error(new McpPaginationException(
+								"Pagination timed out after " + this.paginationConfig.timeout()
+										+ ". Increase paginationTimeout if this is expected for the server.")));
 			}
 			return result;
 		});
@@ -1186,7 +1202,11 @@ public class McpAsyncClient {
 	 * @param loggingLevel The minimum logging level to receive.
 	 * @return A Mono that completes when the logging level is set.
 	 * @see McpSchema.LoggingLevel
+	 * @deprecated Logging is deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28.
+	 * Servers should log to stderr (stdio transport) or use OpenTelemetry instead.
 	 */
+	@Deprecated
 	public Mono<Void> setLoggingLevel(LoggingLevel loggingLevel) {
 		if (loggingLevel == null) {
 			return Mono.error(new IllegalArgumentException("Logging level must not be null"));

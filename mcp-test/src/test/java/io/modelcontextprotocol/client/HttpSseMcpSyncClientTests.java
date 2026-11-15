@@ -47,7 +47,7 @@ class HttpSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 	@Override
 	protected McpClientTransport createMcpTransport() {
-		return HttpClientSseClientTransport.builder(host).httpRequestCustomizer(requestCustomizer).build();
+		return HttpClientSseClientTransport.builder(host).addHttpRequestCustomizer(requestCustomizer).build();
 	}
 
 	@BeforeAll

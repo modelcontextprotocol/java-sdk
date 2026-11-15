@@ -13,8 +13,8 @@ import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.modelcontextprotocol.client.McpClient;
@@ -52,15 +52,15 @@ class McpCompletionTests {
 
 	private static final String CUSTOM_MESSAGE_ENDPOINT = "/otherPath/mcp/message";
 
-	private static HttpServletSseServerTransportProvider mcpServerTransportProvider;
+	private HttpServletSseServerTransportProvider mcpServerTransportProvider;
 
-	private static Tomcat tomcat;
+	private Tomcat tomcat;
 
 	final McpClient.SyncSpec clientBuilder = McpClient
 		.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT).build());
 
-	@BeforeAll
-	public static void beforeAll() {
+	@BeforeEach
+	public void before() {
 		// Create and configure the transport provider
 		mcpServerTransportProvider = HttpServletSseServerTransportProvider.builder()
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
@@ -76,8 +76,8 @@ class McpCompletionTests {
 		}
 	}
 
-	@AfterAll
-	public static void afterAll() {
+	@AfterEach
+	public void after() {
 		if (mcpServerTransportProvider != null) {
 			mcpServerTransportProvider.closeGracefully().block();
 		}

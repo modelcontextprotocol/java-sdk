@@ -21,8 +21,13 @@ The MCP Server is a foundational component in the Model Context Protocol (MCP) a
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides STDIO, SSE, and Streamable HTTP server transport implementations without requiring external web frameworks.
 
-    Spring-specific transport implementations (`mcp-spring-webflux`, `mcp-spring-webmvc`) are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and are no longer shipped by this SDK.
-    See the [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) documentation for Spring-based server setup.
+    Spring-specific transport implementations (`mcp-spring-webflux`, `mcp-spring-webmvc`) are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and are no longer shipped by this SDK.
+    See the [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) documentation for Spring-based server setup.
+
+!!! note "2026-07-28 specification"
+    This page covers the legacy server, which implements the 2025-11-25 specification and earlier revisions.
+    A stateless server for the 2026-07-28 revision is also available; see
+    [MCP Server (2026-07-28)](server-modern.md).
 
 The server supports both synchronous and asynchronous APIs, allowing for flexible integration in different application contexts.
 
@@ -164,13 +169,16 @@ Key features:
 
     - Efficient bidirectional HTTP communication
     - Session management for multiple client connections
-    - Configurable keep-alive intervals
-    - Security validation support
+    - Keep-alive pings on sessions with an open stream, enabled by default every 30 minutes
+      (`keepAliveInterval`, `null` to disable)
+    - Eviction of idle sessions — no open stream and no request for a full interval — every
+      30 minutes by default (`sessionSweepInterval`, `null` to keep sessions until deleted)
+    - Origin and Host validation (opt-in, see [HTTP Transport Security](#http-transport-security))
     - Graceful shutdown support
 
 === "Streamable HTTP WebFlux (external)"
 
-    Creates WebFlux-based Streamable HTTP server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    Creates WebFlux-based Streamable HTTP server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -200,7 +208,7 @@ Key features:
 
 === "Streamable HTTP WebMvc (external)"
 
-    Creates WebMvc-based Streamable HTTP server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    Creates WebMvc-based Streamable HTTP server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -222,7 +230,7 @@ Key features:
     }
     ```
 
-### SSE HTTP (Legacy)
+### SSE HTTP (Deprecated)
 
 === "SSE Servlet"
 
@@ -258,11 +266,12 @@ Key features:
         - SSE endpoint (`/sse`) for server-to-client events
         - Message endpoint (configurable) for client-to-server requests
     - Error handling and response formatting
+    - Origin and Host validation (opt-in, see [HTTP Transport Security](#http-transport-security))
     - Graceful shutdown support
 
 === "SSE WebFlux (external)"
 
-    Creates WebFlux-based SSE server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    Creates WebFlux-based SSE server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -288,7 +297,7 @@ Key features:
 
 === "SSE WebMvc (external)"
 
-    Creates WebMvc-based SSE server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    Creates WebMvc-based SSE server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.1.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -314,6 +323,25 @@ Key features:
     - Support for traditional web applications
     - Synchronous operation handling
 
+### HTTP Transport Security
+
+!!! warning
+    HTTP transports do not validate the `Origin` or `Host` headers by default.
+
+To turn validation on, configure a `DefaultServerTransportSecurityValidator` with the allowed origins and hosts:
+
+```java
+HttpServletStreamableServerTransportProvider transportProvider =
+    HttpServletStreamableServerTransportProvider.builder()
+        .mcpEndpoint("/mcp")
+        .httpHeaderValidator(DefaultServerTransportSecurityValidator.builder()
+            .allowedOrigin("http://localhost:*")
+            .allowedHost("localhost:*")
+            .build())
+        .build();
+```
+
+The same `httpHeaderValidator(...)` method is available on the Stateless and SSE transport builders.
 
 ## Server Capabilities
 
@@ -331,7 +359,7 @@ var capabilities = ServerCapabilities.builder()
 
 ### Tool Specification
 
-The Model Context Protocol allows servers to [expose tools](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/tools/) that can be invoked by language models.
+The Model Context Protocol allows servers to [expose tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) that can be invoked by language models.
 The Java SDK allows implementing Tool Specifications with their handler functions.
 Tools enable AI models to perform calculations, access external APIs, query databases, and manipulate files.
 
@@ -653,7 +681,7 @@ var resourceTemplateSpec = new McpServerFeatures.SyncResourceTemplateSpecificati
 
 ### Prompt Specification
 
-As part of the [Prompting capabilities](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/prompts/), MCP provides a standardized way for servers to expose prompt templates to clients.
+As part of the [Prompting capabilities](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts), MCP provides a standardized way for servers to expose prompt templates to clients.
 The Prompt Specification is a structured template for AI model interactions that enables consistent message formatting, parameter substitution, context injection, response formatting, and instruction templating.
 
 === "Sync"
@@ -818,7 +846,10 @@ Completions can be registered for both `PromptReference` and `ResourceReference`
 
 ### Using Sampling from a Server
 
-To use [Sampling capabilities](https://spec.modelcontextprotocol.io/specification/2024-11-05/client/sampling/), connect to a client that supports sampling.
+!!! warning "Deprecated"
+    Sampling is deprecated as of MCP protocol version 2026-07-28 ([SEP-2577](https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging)) and may be removed from a protocol revision released on or after 2027-07-28. It still works unchanged in this SDK, and the methods that initiate it are marked `@Deprecated`. Servers should integrate directly with LLM provider APIs instead. See the [deprecated features registry](https://modelcontextprotocol.io/specification/2026-07-28/deprecated).
+
+To use [Sampling capabilities](https://modelcontextprotocol.io/specification/2025-11-25/client/sampling), connect to a client that supports sampling.
 No special server configuration is needed, but verify client sampling support before making requests.
 Learn about [client sampling support](client.md#sampling-support).
 
@@ -1068,6 +1099,9 @@ var tool = SyncToolSpecification.builder()
 The async equivalent, `McpAsyncServerExchange.ping()`, returns a `Mono<Object>` that completes when the client responds. Ping requests are subject to the same `requestTimeout` configured on the server builder.
 
 ### Logging Support
+
+!!! warning "Deprecated"
+    MCP logging is deprecated as of MCP protocol version 2026-07-28 ([SEP-2577](https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging)) and may be removed from a protocol revision released on or after 2027-07-28. It still works unchanged in this SDK, and the methods that initiate it are marked `@Deprecated`. Servers should log to stderr (stdio transport) or use [OpenTelemetry](https://opentelemetry.io/) instead. See the [deprecated features registry](https://modelcontextprotocol.io/specification/2026-07-28/deprecated).
 
 The server provides structured logging capabilities that allow sending log messages to clients with different severity levels.
 Log notifications can only be sent from within an existing client session, such as tools, resources, and prompts calls.

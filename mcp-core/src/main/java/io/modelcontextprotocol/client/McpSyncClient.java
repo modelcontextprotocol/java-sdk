@@ -192,21 +192,36 @@ public class McpSyncClient implements AutoCloseable {
 
 	/**
 	 * Send a roots/list_changed notification.
+	 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28. Pass
+	 * directories or files to servers via tool parameters, resource URIs, or server
+	 * configuration instead.
 	 */
+	@Deprecated
 	public void rootsListChangedNotification() {
 		withProvidedContext(this.delegate.rootsListChangedNotification()).block();
 	}
 
 	/**
 	 * Add a roots dynamically.
+	 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28. Pass
+	 * directories or files to servers via tool parameters, resource URIs, or server
+	 * configuration instead.
 	 */
+	@Deprecated
 	public void addRoot(McpSchema.Root root) {
 		this.delegate.addRoot(root).block();
 	}
 
 	/**
 	 * Remove a root dynamically.
+	 * @deprecated Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28. Pass
+	 * directories or files to servers via tool parameters, resource URIs, or server
+	 * configuration instead.
 	 */
+	@Deprecated
 	public void removeRoot(String rootUri) {
 		this.delegate.removeRoot(rootUri).block();
 	}
@@ -426,7 +441,11 @@ public class McpSyncClient implements AutoCloseable {
 	/**
 	 * Client can set the minimum logging level it wants to receive from the server.
 	 * @param loggingLevel the min logging level
+	 * @deprecated Logging is deprecated as of MCP protocol version 2026-07-28 (SEP-2577)
+	 * and may be removed from a protocol revision released on or after 2027-07-28.
+	 * Servers should log to stderr (stdio transport) or use OpenTelemetry instead.
 	 */
+	@Deprecated
 	public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
 		withProvidedContext(this.delegate.setLoggingLevel(loggingLevel)).block();
 

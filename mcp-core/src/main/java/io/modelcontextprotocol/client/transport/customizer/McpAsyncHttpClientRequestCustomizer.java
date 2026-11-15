@@ -12,7 +12,7 @@ import io.modelcontextprotocol.common.McpTransportContext;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Customize {@link HttpRequest.Builder} before executing the request, in either SSE or

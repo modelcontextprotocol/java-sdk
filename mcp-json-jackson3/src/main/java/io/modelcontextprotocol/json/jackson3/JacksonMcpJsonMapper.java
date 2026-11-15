@@ -87,13 +87,23 @@ public final class JacksonMcpJsonMapper implements McpJsonMapper {
 
 	@Override
 	public <T> T convertValue(Object fromValue, Class<T> type) {
-		return jsonMapper.convertValue(fromValue, type);
+		try {
+			return jsonMapper.convertValue(fromValue, type);
+		}
+		catch (JacksonException ex) {
+			throw new IllegalArgumentException(ex);
+		}
 	}
 
 	@Override
 	public <T> T convertValue(Object fromValue, TypeRef<T> type) {
 		JavaType javaType = jsonMapper.getTypeFactory().constructType(type.getType());
-		return jsonMapper.convertValue(fromValue, javaType);
+		try {
+			return jsonMapper.convertValue(fromValue, javaType);
+		}
+		catch (JacksonException ex) {
+			throw new IllegalArgumentException(ex);
+		}
 	}
 
 	@Override

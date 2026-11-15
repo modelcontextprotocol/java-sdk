@@ -559,4 +559,31 @@ class McpAsyncClientResponseHandlerTests {
 		asyncMcpClient.closeGracefully();
 	}
 
+	@Test
+	void testLoggingNotificationWithObjectData() throws IOException {
+		MockMcpClientTransport transport = initializationEnabledTransport();
+
+		List<McpSchema.LoggingMessageNotification> receivedNotifications = new ArrayList<>();
+
+		McpAsyncClient asyncMcpClient = McpClient.async(transport)
+			.loggingConsumer(notification -> Mono.fromRunnable(() -> receivedNotifications.add(notification)))
+			.build();
+
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
+
+		// Logging notification as sent by FastMCP servers, with an object as data
+		McpSchema.JSONRPCMessage notification = McpSchema.deserializeJsonRpcMessage(JSON_MAPPER, """
+				{"jsonrpc":"2.0","method":"notifications/message",
+				"params":{"level":"info","logger":"server","data":{"msg":"working","extra":null}}}""");
+		transport.simulateIncomingMessage(notification);
+
+		assertThat(receivedNotifications).singleElement().satisfies(received -> {
+			assertThat(received.level()).isEqualTo(McpSchema.LoggingLevel.INFO);
+			assertThat(received.logger()).isEqualTo("server");
+			assertThat(received.data()).isEqualTo("{msg=working, extra=null}");
+		});
+
+		asyncMcpClient.closeGracefully();
+	}
+
 }

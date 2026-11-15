@@ -17,6 +17,36 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 | 1.1.x  | [1.1.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v1.1.4) (2026-08-19) | 2025-06-18 | Security patches only |
 | 0.18.x | [0.18.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v0.18.4) (2026-08-19) | 2025-06-18 | Security patches only |
 
+## Unreleased (2.2.0)
+
+- A stateless server for the **2026-07-28** MCP specification revision, in
+  `io.modelcontextprotocol.modern`, with Servlet (Streamable HTTP) and STDIO transports. It supports
+  `server/discover`, multi round-trip requests with sealed `requestState`, `subscriptions/listen`, caching
+  hints, required client capabilities and SEP-2243 `Mcp-Param` header validation. The API may change in minor
+  releases until 3.0. See [MCP Server (2026-07-28)](docs/server-modern.md).
+- A client for the **2026-07-28** MCP specification revision, in
+  `io.modelcontextprotocol.modern.client`, with Streamable HTTP (JDK `HttpClient`) and STDIO transports. It
+  needs no `initialize` handshake and supports multi round-trip requests with form and URL elicitation,
+  progress, `subscriptions/listen`, `server/discover` and SEP-2243 `Mcp-Param` headers. Sampling, roots and
+  logging are not supported. The API may change in minor releases until 3.0. See
+  [MCP Client (2026-07-28)](docs/client-modern.md).
+- Add `McpTransportContext.putAll(Map)`, returning a context that combines an
+  existing context with additional entries, which take precedence.
+- `McpTransportContext` no longer compares contexts by their contents in
+  `equals` and `hashCode`. With `putAll`, transports can layer their own entries
+  over the context a user's extractor returns, and comparing contexts was never
+  a goal; read entries via `get(String)` instead.
+- Deprecate the roots, sampling and logging APIs that initiate these features, following
+  [SEP-2577](https://modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging), which
+  deprecates them as of the 2026-07-28 specification revision. This covers `McpSyncClient`/`McpAsyncClient`
+  (`addRoot`, `removeRoot`, `rootsListChangedNotification`, `setLoggingLevel`), the server exchanges
+  (`createMessage`, `listRoots`, `loggingNotification`), and the `roots`, `sampling` and `logging` capability
+  builder methods. In the 2026-07-28 API it also covers `InputRequiredResult.builder()`'s `createMessage` and
+  `listRoots`, and `MetaKeys.LOG_LEVEL`. The builder methods that register handlers for these features
+  (`roots`, `sampling` and `loggingConsumer(s)` on the client, `rootsChangeHandler(s)` on the server) are not
+  deprecated, since the specification requires implementations to keep handling them for peers that still use
+  them. Behavior and the wire format are unchanged.
+
 ## 2.0.1 — 2026-08-19
 
 - Bound STDIO and HTTP client/server reads to a configurable maximum size

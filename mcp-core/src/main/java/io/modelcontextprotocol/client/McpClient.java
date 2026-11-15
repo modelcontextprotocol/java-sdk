@@ -271,6 +271,10 @@ public interface McpClient {
 		 * Sets the root URIs that this client can access. Roots define the base URIs for
 		 * resources that the client can request from the server. For example, a root
 		 * might be "file://workspace" for accessing workspace files.
+		 * <p>
+		 * Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires clients to keep
+		 * answering {@code roots/list} for servers that still use roots.
 		 * @param roots A list of root definitions. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if roots is null
@@ -286,6 +290,10 @@ public interface McpClient {
 		/**
 		 * Sets the root URIs that this client can access, using a varargs parameter for
 		 * convenience. This is an alternative to {@link #roots(List)}.
+		 * <p>
+		 * Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires clients to keep
+		 * answering {@code roots/list} for servers that still use roots.
 		 * @param roots An array of root definitions. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if roots is null
@@ -303,6 +311,10 @@ public interface McpClient {
 		 * Sets a custom sampling handler for processing message creation requests. The
 		 * sampling handler can modify or validate messages before they are sent to the
 		 * server, enabling custom processing logic.
+		 * <p>
+		 * Sampling is deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires clients to keep
+		 * handling {@code sampling/createMessage} for servers that still use sampling.
 		 * @param samplingHandler A function that processes message requests and returns
 		 * results. Must not be null.
 		 * @return This builder instance for method chaining
@@ -409,6 +421,10 @@ public interface McpClient {
 		 * Adds a consumer to be notified when logging messages are received from the
 		 * server. This allows the client to react to log messages, such as warnings or
 		 * errors, that are sent by the server.
+		 * <p>
+		 * Logging is deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires clients to keep
+		 * handling log messages from servers that still send them.
 		 * @param loggingConsumer A consumer that receives logging messages. Must not be
 		 * null.
 		 * @return This builder instance for method chaining
@@ -423,6 +439,10 @@ public interface McpClient {
 		 * Adds multiple consumers to be notified when logging messages are received from
 		 * the server. This allows the client to react to log messages, such as warnings
 		 * or errors, that are sent by the server.
+		 * <p>
+		 * Logging is deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires clients to keep
+		 * handling log messages from servers that still send them.
 		 * @param loggingConsumers A list of consumers that receive logging messages. Must
 		 * not be null.
 		 * @return This builder instance for method chaining
@@ -741,6 +761,10 @@ public interface McpClient {
 		 * Sets the root URIs that this client can access. Roots define the base URIs for
 		 * resources that the client can request from the server. For example, a root
 		 * might be "file://workspace" for accessing workspace files.
+		 * <p>
+		 * Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires clients to keep
+		 * answering {@code roots/list} for servers that still use roots.
 		 * @param roots A list of root definitions. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if roots is null
@@ -756,6 +780,10 @@ public interface McpClient {
 		/**
 		 * Sets the root URIs that this client can access, using a varargs parameter for
 		 * convenience. This is an alternative to {@link #roots(List)}.
+		 * <p>
+		 * Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires clients to keep
+		 * answering {@code roots/list} for servers that still use roots.
 		 * @param roots An array of root definitions. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if roots is null
@@ -773,6 +801,10 @@ public interface McpClient {
 		 * Sets a custom sampling handler for processing message creation requests. The
 		 * sampling handler can modify or validate messages before they are sent to the
 		 * server, enabling custom processing logic.
+		 * <p>
+		 * Sampling is deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires clients to keep
+		 * handling {@code sampling/createMessage} for servers that still use sampling.
 		 * @param samplingHandler A function that processes message requests and returns
 		 * results. Must not be null.
 		 * @return This builder instance for method chaining
@@ -881,6 +913,10 @@ public interface McpClient {
 		 * Adds a consumer to be notified when logging messages are received from the
 		 * server. This allows the client to react to log messages, such as warnings or
 		 * errors, that are sent by the server.
+		 * <p>
+		 * Logging is deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires clients to keep
+		 * handling log messages from servers that still send them.
 		 * @param loggingConsumer A consumer that receives logging messages. Must not be
 		 * null.
 		 * @return This builder instance for method chaining
@@ -895,6 +931,10 @@ public interface McpClient {
 		 * Adds multiple consumers to be notified when logging messages are received from
 		 * the server. This allows the client to react to log messages, such as warnings
 		 * or errors, that are sent by the server.
+		 * <p>
+		 * Logging is deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires clients to keep
+		 * handling log messages from servers that still send them.
 		 * @param loggingConsumers A list of consumers that receive logging messages. Must
 		 * not be null.
 		 * @return This builder instance for method chaining

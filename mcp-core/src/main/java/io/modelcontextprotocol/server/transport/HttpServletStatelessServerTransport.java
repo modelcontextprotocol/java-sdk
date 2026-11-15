@@ -168,7 +168,13 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			return;
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request);
+		if (!HttpServletRequestUtils.isJsonContentType(request.getContentType())) {
+			this.responseError(response, HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE,
+					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Unsupported Media Type: Content-Type must be application/json")
+						.build());
+			return;
+		}
 
 		String accept = request.getHeader(ACCEPT);
 		if (accept == null || !(accept.contains(APPLICATION_JSON) && accept.contains(TEXT_EVENT_STREAM))) {
@@ -178,6 +184,8 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 						.build());
 			return;
 		}
+
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		try {
 			String body = HttpServletRequestUtils.readBody(request, this.requestMaxSize);

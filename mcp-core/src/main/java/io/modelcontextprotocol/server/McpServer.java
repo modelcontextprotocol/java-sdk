@@ -780,6 +780,10 @@ public interface McpServer {
 		 * Registers a consumer that will be notified when the list of roots changes. This
 		 * is useful for updating resource availability dynamically, such as when new
 		 * files are added or removed.
+		 * <p>
+		 * Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires servers to keep
+		 * handling roots for clients that still declare them.
 		 * @param handler The handler to register. Must not be null. The function's first
 		 * argument is an {@link McpAsyncServerExchange} upon which the server can
 		 * interact with the connected client. The second argument is the list of roots.
@@ -797,6 +801,10 @@ public interface McpServer {
 		 * Registers multiple consumers that will be notified when the list of roots
 		 * changes. This method is useful when multiple consumers need to be registered at
 		 * once.
+		 * <p>
+		 * Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires servers to keep
+		 * handling roots for clients that still declare them.
 		 * @param handlers The list of handlers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
@@ -813,6 +821,10 @@ public interface McpServer {
 		 * Registers multiple consumers that will be notified when the list of roots
 		 * changes using varargs. This method provides a convenient way to register
 		 * multiple consumers inline.
+		 * <p>
+		 * Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires servers to keep
+		 * handling roots for clients that still declare them.
 		 * @param handlers The handlers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
@@ -1422,6 +1434,10 @@ public interface McpServer {
 		 * Registers a consumer that will be notified when the list of roots changes. This
 		 * is useful for updating resource availability dynamically, such as when new
 		 * files are added or removed.
+		 * <p>
+		 * Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires servers to keep
+		 * handling roots for clients that still declare them.
 		 * @param handler The handler to register. Must not be null. The function's first
 		 * argument is an {@link McpSyncServerExchange} upon which the server can interact
 		 * with the connected client. The second argument is the list of roots.
@@ -1439,6 +1455,10 @@ public interface McpServer {
 		 * Registers multiple consumers that will be notified when the list of roots
 		 * changes. This method is useful when multiple consumers need to be registered at
 		 * once.
+		 * <p>
+		 * Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires servers to keep
+		 * handling roots for clients that still declare them.
 		 * @param handlers The list of handlers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
@@ -1455,6 +1475,10 @@ public interface McpServer {
 		 * Registers multiple consumers that will be notified when the list of roots
 		 * changes using varargs. This method provides a convenient way to register
 		 * multiple consumers inline.
+		 * <p>
+		 * Roots are deprecated as of MCP protocol version 2026-07-28 (SEP-2577). This
+		 * method is not deprecated because the specification requires servers to keep
+		 * handling roots for clients that still declare them.
 		 * @param handlers The handlers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null

@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.common;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import io.modelcontextprotocol.util.Assert;
@@ -18,7 +19,7 @@ class DefaultMcpTransportContext implements McpTransportContext {
 
 	private final Map<String, Object> metadata;
 
-	DefaultMcpTransportContext(Map<String, Object> metadata) {
+	DefaultMcpTransportContext(Map<String, ?> metadata) {
 		Assert.notNull(metadata, "The metadata cannot be null");
 		this.metadata = Map.copyOf(metadata);
 	}
@@ -29,17 +30,17 @@ class DefaultMcpTransportContext implements McpTransportContext {
 	}
 
 	@Override
-	public boolean equals(Object o) {
-		if (o == null || getClass() != o.getClass())
-			return false;
-
-		DefaultMcpTransportContext that = (DefaultMcpTransportContext) o;
-		return this.metadata.equals(that.metadata);
-	}
-
-	@Override
-	public int hashCode() {
-		return this.metadata.hashCode();
+	public McpTransportContext putAll(Map<String, ?> map) {
+		Assert.notNull(map, "The map cannot be null");
+		if (map.isEmpty()) {
+			return this;
+		}
+		if (this.metadata.isEmpty()) {
+			return new DefaultMcpTransportContext(map);
+		}
+		Map<String, Object> merged = new HashMap<>(this.metadata);
+		merged.putAll(map);
+		return new DefaultMcpTransportContext(merged);
 	}
 
 }

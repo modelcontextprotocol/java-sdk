@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 800" width="960" height="800" role="img"
+     aria-labelledby="title desc" font-family="'Open Sans', Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+  <title id="title">Legacy Java MCP client architecture</title>
+  <desc id="desc">A Java application on your computer talks to AI models and holds one Java MCP client per
+    server, each with its own session. Two clients reach remote MCP servers over Streamable HTTP or SSE. Three
+    clients reach local MCP servers over STDIO: one that searches the internet, one for local folders and one
+    for a SQLite database.</desc>
+
+  <rect x="0" y="0" width="960" height="800" fill="#ffffff"/>
+
+  <defs>
+    <marker id="blueEnd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4648a8"/>
+    </marker>
+    <marker id="blueStart" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 10 0 L 0 5 L 10 10 z" fill="#4648a8"/>
+    </marker>
+  </defs>
+
+  <!-- AI models -->
+  <rect x="350" y="20" width="260" height="64" fill="#ffffff" stroke="#4648a8"/>
+  <text x="480" y="60" text-anchor="middle" font-size="22" fill="#4648a8">AI Models</text>
+  <line x1="480" y1="86" x2="480" y2="150" stroke="#4648a8" stroke-width="1.5"
+        marker-start="url(#blueStart)" marker-end="url(#blueEnd)"/>
+
+  <!-- Your computer -->
+  <rect x="24" y="132" width="912" height="500" fill="none" stroke="#4648a8"/>
+  <text x="48" y="172" font-size="22" fill="#4648a8">Your Computer</text>
+
+  <rect x="370" y="152" width="220" height="64" fill="#7db249"/>
+  <text x="480" y="180" text-anchor="middle" font-size="15" fill="#ffffff">Java Gen AI</text>
+  <text x="480" y="200" text-anchor="middle" font-size="15" fill="#ffffff">Application</text>
+
+  <!-- Application to clients -->
+  <path d="M 480 216 V 246 M 110 246 H 834 M 110 246 V 270 M 280 246 V 270 M 494 246 V 270 M 664 246 V 270 M 834 246 V 270"
+        fill="none" stroke="#7db249" stroke-width="1.5"/>
+
+  <!-- One client per server -->
+  <g fill="#7db249">
+    <rect x="35" y="270" width="150" height="62"/>
+    <rect x="205" y="270" width="150" height="62"/>
+    <rect x="419" y="270" width="150" height="62"/>
+    <rect x="589" y="270" width="150" height="62"/>
+    <rect x="759" y="270" width="150" height="62"/>
+  </g>
+  <g text-anchor="middle" fill="#ffffff">
+    <text x="110" y="296" font-size="14">Java MCP Client</text>
+    <text x="110" y="315" font-size="11.5">one session</text>
+    <text x="280" y="296" font-size="14">Java MCP Client</text>
+    <text x="280" y="315" font-size="11.5">one session</text>
+    <text x="494" y="296" font-size="14">Java MCP Client</text>
+    <text x="494" y="315" font-size="11.5">one session</text>
+    <text x="664" y="296" font-size="14">Java MCP Client</text>
+    <text x="664" y="315" font-size="11.5">one session</text>
+    <text x="834" y="296" font-size="14">Java MCP Client</text>
+    <text x="834" y="315" font-size="11.5">one session</text>
+  </g>
+
+  <!-- Remote servers over HTTP -->
+  <path d="M 110 332 V 700 M 280 332 V 700" fill="none" stroke="#4648a8" stroke-width="1.5"/>
+  <g font-size="12" fill="#4648a8">
+    <text x="122" y="546">MCP Protocol</text>
+    <text x="122" y="563">(Streamable HTTP, SSE)</text>
+    <text x="292" y="546">MCP Protocol</text>
+    <text x="292" y="563">(Streamable HTTP, SSE)</text>
+  </g>
+
+  <rect x="35" y="700" width="150" height="62" fill="#4648a8"/>
+  <text x="110" y="726" text-anchor="middle" font-size="14" fill="#ffffff">MCP Server</text>
+  <text x="110" y="745" text-anchor="middle" font-size="12.5" fill="#ffffff">(remote 1)</text>
+
+  <rect x="205" y="700" width="150" height="62" fill="#4648a8"/>
+  <text x="280" y="726" text-anchor="middle" font-size="14" fill="#ffffff">MCP Server</text>
+  <text x="280" y="745" text-anchor="middle" font-size="12.5" fill="#ffffff">(remote N)</text>
+
+  <!-- Local servers over STDIO -->
+  <path d="M 494 332 V 420 M 664 332 V 420 M 834 332 V 420" fill="none" stroke="#4648a8" stroke-width="1.5"/>
+  <g font-size="12" fill="#4648a8">
+    <text x="504" y="372">MCP Protocol</text>
+    <text x="504" y="389">(STDIO)</text>
+    <text x="674" y="372">MCP Protocol</text>
+    <text x="674" y="389">(STDIO)</text>
+    <text x="844" y="372">MCP Protocol</text>
+    <text x="844" y="389">(STDIO)</text>
+  </g>
+
+  <g fill="#4648a8">
+    <rect x="419" y="420" width="150" height="62"/>
+    <rect x="589" y="420" width="150" height="62"/>
+    <rect x="759" y="420" width="150" height="62"/>
+  </g>
+  <g text-anchor="middle" fill="#ffffff">
+    <text x="494" y="446" font-size="14">MCP Server</text>
+    <text x="494" y="465" font-size="12.5">(Brave Search)</text>
+    <text x="664" y="446" font-size="14">MCP Server</text>
+    <text x="664" y="465" font-size="12.5">(Filesystem)</text>
+    <text x="834" y="446" font-size="14">MCP Server</text>
+    <text x="834" y="465" font-size="12.5">(SQLite)</text>
+  </g>
+
+  <!-- What the local servers reach -->
+  <line x1="494" y1="484" x2="494" y2="694" stroke="#4648a8" stroke-width="1.5"
+        marker-start="url(#blueStart)" marker-end="url(#blueEnd)"/>
+  <path d="M 432 772 a 28 28 0 0 1 4 -54 a 36 36 0 0 1 66 -12 a 30 30 0 0 1 52 16 a 26 26 0 0 1 2 50 z"
+        fill="#ffffff" stroke="#4648a8" stroke-width="1.5"/>
+  <text x="494" y="742" text-anchor="middle" font-size="14" fill="#4648a8">Search</text>
+  <text x="494" y="760" text-anchor="middle" font-size="14" fill="#4648a8">Internet</text>
+
+  <line x1="664" y1="484" x2="664" y2="518" stroke="#4648a8" stroke-width="1.5"
+        marker-start="url(#blueStart)" marker-end="url(#blueEnd)"/>
+  <rect x="596" y="520" width="126" height="54" fill="#4648a8"/>
+  <rect x="606" y="530" width="126" height="54" fill="#4648a8" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="669" y="562" text-anchor="middle" font-size="13" fill="#ffffff">Local Folders</text>
+
+  <line x1="834" y1="484" x2="834" y2="518" stroke="#4648a8" stroke-width="1.5"
+        marker-start="url(#blueStart)" marker-end="url(#blueEnd)"/>
+  <path d="M 772 534 V 584 A 62 12 0 0 0 896 584 V 534 Z" fill="#4648a8"/>
+  <ellipse cx="834" cy="534" rx="62" ry="12" fill="#4648a8" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="834" y="576" text-anchor="middle" font-size="13" fill="#ffffff">SQLite database</text>
+</svg>

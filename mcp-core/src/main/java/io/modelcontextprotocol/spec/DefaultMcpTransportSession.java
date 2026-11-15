@@ -78,6 +78,7 @@ public class DefaultMcpTransportSession implements McpTransportSession<Disposabl
 	@Override
 	public Mono<Void> closeGracefully() {
 		return Mono.from(this.onClose.apply(this.sessionId.get()))
+			.onErrorResume(error -> Mono.fromRunnable(this.openConnections::dispose).then(Mono.error(error)))
 			.then(Mono.fromRunnable(this.openConnections::dispose));
 	}
 

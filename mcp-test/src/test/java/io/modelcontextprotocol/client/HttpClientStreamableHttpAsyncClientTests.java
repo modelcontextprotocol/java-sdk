@@ -4,7 +4,11 @@
 
 package io.modelcontextprotocol.client;
 
+import java.util.List;
+import java.util.function.Consumer;
+
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -27,6 +31,12 @@ public class HttpClientStreamableHttpAsyncClientTests extends AbstractMcpAsyncCl
 	@Override
 	protected McpClientTransport createMcpTransport() {
 		return HttpClientStreamableHttpTransport.builder(host).build();
+	}
+
+	@Override
+	protected McpClientTransport createMcpTransport(
+			Consumer<List<McpAsyncHttpClientRequestCustomizer>> requestCustomizers) {
+		return HttpClientStreamableHttpTransport.builder(host).asyncHttpRequestCustomizers(requestCustomizers).build();
 	}
 
 	@BeforeAll

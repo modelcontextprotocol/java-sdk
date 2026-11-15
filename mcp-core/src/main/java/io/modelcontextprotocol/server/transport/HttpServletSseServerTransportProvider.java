@@ -300,16 +300,13 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			return;
 		}
 
-		response.setContentType("text/event-stream");
-		response.setCharacterEncoding(UTF_8);
-		response.setHeader("Cache-Control", "no-cache");
-		response.setHeader("Connection", "keep-alive");
-
 		String sessionId = UUID.randomUUID().toString();
 		AsyncContext asyncContext = request.startAsync();
 		asyncContext.setTimeout(0);
 
+		response.setCharacterEncoding(UTF_8);
 		PrintWriter writer = response.getWriter();
+		HttpServletResponseUtils.prepareSseResponse(response);
 
 		// Create a new session transport
 		HttpServletMcpSessionTransport sessionTransport = new HttpServletMcpSessionTransport(sessionId, asyncContext,
@@ -374,6 +371,14 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
+			return;
+		}
+
+		if (!HttpServletRequestUtils.isJsonContentType(request.getContentType())) {
+			this.responseError(response, HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE,
+					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Unsupported Media Type: Content-Type must be application/json")
+						.build());
 			return;
 		}
 
@@ -479,6 +484,16 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		if (writer.checkError()) {
 			throw new IOException("Client disconnected");
 		}
+	}
+
+	private void responseError(HttpServletResponse response, int httpCode, McpError mcpError) throws IOException {
+		response.setContentType(APPLICATION_JSON);
+		response.setCharacterEncoding(UTF_8);
+		response.setStatus(httpCode);
+		String jsonError = jsonMapper.writeValueAsString(mcpError);
+		PrintWriter writer = response.getWriter();
+		writer.write(jsonError);
+		writer.flush();
 	}
 
 	/**

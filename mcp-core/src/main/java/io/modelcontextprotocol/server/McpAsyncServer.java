@@ -131,6 +131,7 @@ public class McpAsyncServer {
 	 * @param features The MCP server supported features.
 	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
 	 */
+	@SuppressWarnings("deprecation")
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
@@ -138,6 +139,9 @@ public class McpAsyncServer {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
+		// Logging is deprecated by MCP 2026-07-28 (SEP-2577) but is part of every
+		// protocol
+		// version this server negotiates, so the capability is still always advertised.
 		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
 		this.instructions = features.instructions();
 		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
@@ -163,6 +167,7 @@ public class McpAsyncServer {
 		});
 	}
 
+	@SuppressWarnings("deprecation")
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
@@ -170,6 +175,9 @@ public class McpAsyncServer {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
+		// Logging is deprecated by MCP 2026-07-28 (SEP-2577) but is part of every
+		// protocol
+		// version this server negotiates, so the capability is still always advertised.
 		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
 		this.instructions = features.instructions();
 		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
@@ -316,6 +324,9 @@ public class McpAsyncServer {
 		this.mcpTransportProvider.close();
 	}
 
+	// Roots are deprecated by MCP 2026-07-28 (SEP-2577) but still supported for clients
+	// that declare them.
+	@SuppressWarnings("deprecation")
 	private McpNotificationHandler asyncRootsListChangedNotificationHandler(
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
 		return (exchange, params) -> exchange.listRoots()
@@ -371,7 +382,7 @@ public class McpAsyncServer {
 			this.tools.add(wrappedToolSpecification);
 			logger.debug("Added tool handler: {}", wrappedToolSpecification.tool().name());
 
-			if (this.serverCapabilities.tools().listChanged()) {
+			if (Boolean.TRUE.equals(this.serverCapabilities.tools().listChanged())) {
 				return notifyToolsListChanged();
 			}
 			return Mono.empty();
@@ -519,7 +530,7 @@ public class McpAsyncServer {
 		return Mono.defer(() -> {
 			if (this.tools.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName))) {
 				logger.debug("Removed tool handler: {}", toolName);
-				if (this.serverCapabilities.tools().listChanged()) {
+				if (Boolean.TRUE.equals(this.serverCapabilities.tools().listChanged())) {
 					return notifyToolsListChanged();
 				}
 			}
@@ -622,7 +633,7 @@ public class McpAsyncServer {
 			else {
 				logger.debug("Added resource handler: {}", resourceSpecification.resource().uri());
 			}
-			if (this.serverCapabilities.resources().listChanged()) {
+			if (Boolean.TRUE.equals(this.serverCapabilities.resources().listChanged())) {
 				return notifyResourcesListChanged();
 			}
 			return Mono.empty();
@@ -655,7 +666,7 @@ public class McpAsyncServer {
 			McpServerFeatures.AsyncResourceSpecification removed = this.resources.remove(resourceUri);
 			if (removed != null) {
 				logger.debug("Removed resource handler: {}", resourceUri);
-				if (this.serverCapabilities.resources().listChanged()) {
+				if (Boolean.TRUE.equals(this.serverCapabilities.resources().listChanged())) {
 					return notifyResourcesListChanged();
 				}
 				return Mono.empty();
@@ -691,7 +702,7 @@ public class McpAsyncServer {
 				logger.debug("Added resource template handler: {}",
 						resourceTemplateSpecification.resourceTemplate().uriTemplate());
 			}
-			if (this.serverCapabilities.resources().listChanged()) {
+			if (Boolean.TRUE.equals(this.serverCapabilities.resources().listChanged())) {
 				return notifyResourcesListChanged();
 			}
 			return Mono.empty();
@@ -723,6 +734,10 @@ public class McpAsyncServer {
 			McpServerFeatures.AsyncResourceTemplateSpecification removed = this.resourceTemplates.remove(uriTemplate);
 			if (removed != null) {
 				logger.debug("Removed resource template: {}", uriTemplate);
+				if (Boolean.TRUE.equals(this.serverCapabilities.resources().listChanged())) {
+					return notifyResourcesListChanged();
+				}
+				return Mono.empty();
 			}
 			else {
 				logger.warn("Failed to remove a resource template with URI '{}' (not found)", uriTemplate);
@@ -891,7 +906,7 @@ public class McpAsyncServer {
 			else {
 				logger.debug("Added prompt handler: {}", promptSpecification.prompt().name());
 			}
-			if (this.serverCapabilities.prompts().listChanged()) {
+			if (Boolean.TRUE.equals(this.serverCapabilities.prompts().listChanged())) {
 				return this.notifyPromptsListChanged();
 			}
 
@@ -925,7 +940,7 @@ public class McpAsyncServer {
 
 			if (removed != null) {
 				logger.debug("Removed prompt handler: {}", promptName);
-				if (this.serverCapabilities.prompts().listChanged()) {
+				if (Boolean.TRUE.equals(this.serverCapabilities.prompts().listChanged())) {
 					return this.notifyPromptsListChanged();
 				}
 				return Mono.empty();

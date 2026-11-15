@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -23,6 +24,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.spec.McpSchema.ElicitFormRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -66,6 +68,15 @@ public abstract class AbstractMcpAsyncClientTests {
 	private static final String ECHO_TEST_MESSAGE = "Hello MCP Spring AI!";
 
 	abstract protected McpClientTransport createMcpTransport();
+
+	// Creates a client transport that applies request customizers, in the order they
+	// appear in the list. Subclasses whose transport supports
+	// McpAsyncHttpClientRequestCustomizer should override this; tests relying on it are
+	// skipped otherwise.
+	protected McpClientTransport createMcpTransport(
+			Consumer<List<McpAsyncHttpClientRequestCustomizer>> requestCustomizers) {
+		return null;
+	}
 
 	protected Duration getRequestTimeout() {
 		return Duration.ofSeconds(14);
@@ -127,6 +138,30 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testRequestCustomizersAreAppliedInOrder() {
+		var invocations = new CopyOnWriteArrayList<String>();
+		Function<String, McpAsyncHttpClientRequestCustomizer> recording = name -> (builder, method, endpoint, body,
+				context) -> {
+			invocations.add(name);
+			return Mono.just(builder);
+		};
+
+		var transport = createMcpTransport(customizers -> {
+			customizers.add(recording.apply("second"));
+			customizers.add(recording.apply("third"));
+			customizers.add(0, recording.apply("first"));
+		});
+		assumeTrue(transport != null, "Transport does not support request customizers");
+
+		withClient(transport, mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize()).expectNextCount(1).verifyComplete();
+			// Later requests may run concurrently, e.g. the Streamable HTTP GET
+			// stream, so only check the first one.
+			assertThat(invocations).startsWith("first", "second", "third");
+		});
+	}
+
+	@Test
 	void testConstructorWithInvalidArguments() {
 		assertThatThrownBy(() -> McpClient.async(null).build()).isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Transport must not be null");
@@ -167,6 +202,26 @@ public abstract class AbstractMcpAsyncClientTests {
 					assertThat(firstTool.name()).isNotNull();
 					assertThat(firstTool.description()).isNotNull();
 				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllToolsCanBeResubscribed() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			Mono<McpSchema.ListToolsResult> listTools = mcpAsyncClient.listTools();
+
+			AtomicInteger firstSubscriptionSize = new AtomicInteger();
+			StepVerifier.create(mcpAsyncClient.initialize().then(listTools)).consumeNextWith(result -> {
+				firstSubscriptionSize.set(result.tools().size());
+				assertThat(result.tools()).isNotEmpty();
+			}).verifyComplete();
+
+			// The same Mono must be safe to subscribe again: every subscription has to
+			// start from an empty accumulator instead of appending to the previous
+			// result.
+			StepVerifier.create(listTools)
+				.consumeNextWith(result -> assertThat(result.tools()).hasSize(firstSubscriptionSize.get()))
 				.verifyComplete();
 		});
 	}
@@ -344,6 +399,26 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testListAllResourcesCanBeResubscribed() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			Mono<McpSchema.ListResourcesResult> listResources = mcpAsyncClient.listResources();
+
+			AtomicInteger firstSubscriptionSize = new AtomicInteger();
+			StepVerifier.create(mcpAsyncClient.initialize().then(listResources)).consumeNextWith(result -> {
+				firstSubscriptionSize.set(result.resources().size());
+				assertThat(result.resources()).isNotEmpty();
+			}).verifyComplete();
+
+			// The same Mono must be safe to subscribe again: every subscription has to
+			// start from an empty accumulator instead of appending to the previous
+			// result.
+			StepVerifier.create(listResources)
+				.consumeNextWith(result -> assertThat(result.resources()).hasSize(firstSubscriptionSize.get()))
+				.verifyComplete();
+		});
+	}
+
+	@Test
 	void testListAllResourcesReturnsImmutableList() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources()))
@@ -404,6 +479,26 @@ public abstract class AbstractMcpAsyncClientTests {
 						}
 					});
 				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllPromptsCanBeResubscribed() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			Mono<McpSchema.ListPromptsResult> listPrompts = mcpAsyncClient.listPrompts();
+
+			AtomicInteger firstSubscriptionSize = new AtomicInteger();
+			StepVerifier.create(mcpAsyncClient.initialize().then(listPrompts)).consumeNextWith(result -> {
+				firstSubscriptionSize.set(result.prompts().size());
+				assertThat(result.prompts()).isNotEmpty();
+			}).verifyComplete();
+
+			// The same Mono must be safe to subscribe again: every subscription has to
+			// start from an empty accumulator instead of appending to the previous
+			// result.
+			StepVerifier.create(listPrompts)
+				.consumeNextWith(result -> assertThat(result.prompts()).hasSize(firstSubscriptionSize.get()))
 				.verifyComplete();
 		});
 	}
@@ -597,6 +692,26 @@ public abstract class AbstractMcpAsyncClientTests {
 					assertThat(result).isNotNull();
 					assertThat(result.resourceTemplates()).isNotNull();
 				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllResourceTemplatesCanBeResubscribed() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates = mcpAsyncClient.listResourceTemplates();
+
+			AtomicInteger firstSubscriptionSize = new AtomicInteger();
+			StepVerifier.create(mcpAsyncClient.initialize().then(listResourceTemplates)).consumeNextWith(result -> {
+				firstSubscriptionSize.set(result.resourceTemplates().size());
+				assertThat(result.resourceTemplates()).isNotEmpty();
+			}).verifyComplete();
+
+			// The same Mono must be safe to subscribe again: every subscription has to
+			// start from an empty accumulator instead of appending to the previous
+			// result.
+			StepVerifier.create(listResourceTemplates)
+				.consumeNextWith(result -> assertThat(result.resourceTemplates()).hasSize(firstSubscriptionSize.get()))
 				.verifyComplete();
 		});
 	}

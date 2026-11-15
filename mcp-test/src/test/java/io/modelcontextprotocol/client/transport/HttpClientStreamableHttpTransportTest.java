@@ -24,11 +24,14 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -77,7 +80,7 @@ class HttpClientStreamableHttpTransportTest {
 		var mockRequestCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
 
 		var transport = HttpClientStreamableHttpTransport.builder(host)
-			.httpRequestCustomizer(mockRequestCustomizer)
+			.addHttpRequestCustomizer(mockRequestCustomizer)
 			.build();
 
 		withTransport(transport, (t) -> {
@@ -107,7 +110,7 @@ class HttpClientStreamableHttpTransportTest {
 			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
 
 		var transport = HttpClientStreamableHttpTransport.builder(host)
-			.asyncHttpRequestCustomizer(mockRequestCustomizer)
+			.addAsyncHttpRequestCustomizer(mockRequestCustomizer)
 			.build();
 
 		withTransport(transport, (t) -> {
@@ -127,6 +130,79 @@ class HttpClientStreamableHttpTransportTest {
 					"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"MCP Client\",\"version\":\"0.3.1\"}}}"),
 					eq(context));
 		});
+	}
+
+	@Test
+	void testRequestCustomizersAreAppliedInOrder() {
+		var first = mock(McpSyncHttpClientRequestCustomizer.class);
+		var second = mock(McpAsyncHttpClientRequestCustomizer.class);
+		when(second.customize(any(), any(), any(), any(), any()))
+			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
+		var third = mock(McpSyncHttpClientRequestCustomizer.class);
+
+		var transport = HttpClientStreamableHttpTransport.builder(host)
+			.addHttpRequestCustomizer(first)
+			.addAsyncHttpRequestCustomizer(second)
+			.addHttpRequestCustomizer(third)
+			.build();
+
+		withTransport(transport, (t) -> {
+			StepVerifier.create(t.sendMessage(initializeMessage())).verifyComplete();
+
+			var inOrder = inOrder(first, second, third);
+			inOrder.verify(first).customize(any(), eq("POST"), any(), any(), any());
+			inOrder.verify(second).customize(any(), eq("POST"), any(), any(), any());
+			inOrder.verify(third).customize(any(), eq("POST"), any(), any(), any());
+		});
+	}
+
+	@Test
+	@SuppressWarnings("deprecation")
+	void testRequestCustomizerSettersReplacePreviousCustomizers() {
+		var replacedSync = mock(McpSyncHttpClientRequestCustomizer.class);
+		var replacedAsync = mock(McpAsyncHttpClientRequestCustomizer.class);
+		var syncCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
+		var asyncCustomizer = mock(McpAsyncHttpClientRequestCustomizer.class);
+		when(asyncCustomizer.customize(any(), any(), any(), any(), any()))
+			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
+
+		var syncTransport = HttpClientStreamableHttpTransport.builder(host)
+			.addHttpRequestCustomizer(replacedSync)
+			.addAsyncHttpRequestCustomizer(replacedAsync)
+			.httpRequestCustomizer(syncCustomizer)
+			.build();
+		var asyncTransport = HttpClientStreamableHttpTransport.builder(host)
+			.addHttpRequestCustomizer(replacedSync)
+			.addAsyncHttpRequestCustomizer(replacedAsync)
+			.asyncHttpRequestCustomizer(asyncCustomizer)
+			.build();
+
+		withTransport(syncTransport, (t) -> StepVerifier.create(t.sendMessage(initializeMessage())).verifyComplete());
+		withTransport(asyncTransport, (t) -> StepVerifier.create(t.sendMessage(initializeMessage())).verifyComplete());
+
+		verify(syncCustomizer).customize(any(), eq("POST"), any(), any(), any());
+		verify(asyncCustomizer).customize(any(), eq("POST"), any(), any(), any());
+		verifyNoInteractions(replacedSync, replacedAsync);
+	}
+
+	@Test
+	void testNullRequestCustomizerIsRejected() {
+		var builder = HttpClientStreamableHttpTransport.builder(host);
+
+		assertThatIllegalArgumentException().isThrownBy(() -> builder.addHttpRequestCustomizer(null));
+		assertThatIllegalArgumentException().isThrownBy(() -> builder.addAsyncHttpRequestCustomizer(null));
+
+		builder.asyncHttpRequestCustomizers(customizers -> customizers.add(null));
+		assertThatIllegalArgumentException().isThrownBy(builder::build)
+			.withMessage("httpRequestCustomizers must not contain null elements");
+	}
+
+	private static McpSchema.JSONRPCRequest initializeMessage() {
+		var initializeRequest = McpSchema.InitializeRequest
+			.builder(ProtocolVersions.MCP_2025_11_25, McpSchema.ClientCapabilities.builder().roots(true).build(),
+					McpSchema.Implementation.builder("MCP Client", "0.3.1").build())
+			.build();
+		return new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id", initializeRequest);
 	}
 
 	@Test
