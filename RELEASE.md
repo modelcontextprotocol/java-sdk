@@ -48,7 +48,22 @@ git commit --signoff --message "Release version $RELEASE_VERSION"
 git tag --annotate "v$RELEASE_VERSION" --message "Release version $RELEASE_VERSION"
 ```
 
-Review the commit and the tag (`git show "v$RELEASE_VERSION"`), then prepare the next version:
+Review the commit and the tag (`git show "v$RELEASE_VERSION"`), then push it and release the
+version.
+
+> ⚠️ Take a good review before pushing!
+
+Push:
+
+```shell
+git push --tags origin HEAD
+```
+
+Then release from the "[Release to Maven Central](https://github.com/modelcontextprotocol/java-sdk/actions/workflows/maven-central-release.yml)" action. Click "Run workflow", choose the newly pushed tag, then "run workflow".
+Wait for the release to be done before updating the "next version". In case anything goes wrong, you
+can "add" to the release and update the tag.
+
+Once the release is done, update to the next version, review the commit, and push:
 
 ```shell
 # Update version in pom
@@ -58,16 +73,10 @@ git add pom.xml "**/pom.xml"
 git commit --signoff --message "Next development version"
 ```
 
-Review the commit (`git show`).
-
-> ⚠️ Take a good review before pushing!
-
-Then push it all:
+Review the commit (`git show`). Push:
 
 ```shell
-git push --tags origin HEAD
+git push origin HEAD
 ```
 
-Then release from the "[Release to Maven Central](https://github.com/modelcontextprotocol/java-sdk/actions/workflows/maven-central-release.yml)" action. Click "Run workflow", choose the newly pushed tag, then "run workflow".
-
-Create release notes.
+Lastly, create release notes.
