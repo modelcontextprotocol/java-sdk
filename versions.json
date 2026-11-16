@@ -7,15 +7,20 @@
   {
     "version": "2.2.0",
     "title": "2.2.0",
-    "aliases": [
-      "latest"
-    ]
+    "aliases": []
   },
   {
     "version": "0.18.6-SNAPSHOT",
     "title": "0.18.6-SNAPSHOT",
     "aliases": [
       "latest-snapshot"
+    ]
+  },
+  {
+    "version": "v2.2.0",
+    "title": "v2.2.0",
+    "aliases": [
+      "latest"
     ]
   },
   {

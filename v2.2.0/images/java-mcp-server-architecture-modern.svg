@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 510" width="900" height="510" role="img"
+     aria-labelledby="title desc" font-family="'Open Sans', Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+  <title id="title">Modern Java MCP server architecture</title>
+  <desc id="desc">Over Streamable HTTP, MCP clients in any language reach several identical server instances
+    through a load balancer that needs no sticky routing; each instance runs the Java MCP server with your
+    repositories and uses shared databases and backend applications. Over STDIO, a client process starts one
+    server process and talks to it through its standard streams.</desc>
+
+  <rect x="0" y="0" width="900" height="510" fill="#ffffff"/>
+
+  <!-- ===== Streamable HTTP ===== -->
+  <text x="264" y="30" text-anchor="middle" font-size="20" fill="#4648a8">MCP Server (Streamable HTTP)</text>
+
+  <!-- Clients -->
+  <rect x="20" y="52" width="156" height="50" fill="#7db249"/>
+  <text x="98" y="82" text-anchor="middle" font-size="14" fill="#ffffff">Java MCP Client</text>
+  <rect x="186" y="52" width="156" height="50" fill="#4648a8"/>
+  <text x="264" y="82" text-anchor="middle" font-size="14" fill="#ffffff">Python MCP Client</text>
+  <rect x="352" y="52" width="156" height="50" fill="#4648a8"/>
+  <text x="430" y="82" text-anchor="middle" font-size="14" fill="#ffffff">JavaScript MCP Client</text>
+
+  <path d="M 98 102 V 124 H 430 V 102 M 264 102 V 156" fill="none" stroke="#4648a8" stroke-width="1.5"/>
+  <text x="278" y="146" font-size="13" fill="#4648a8">MCP Protocol (Streamable HTTP)</text>
+
+  <!-- Load balancer -->
+  <rect x="144" y="156" width="240" height="50" fill="#ffffff" stroke="#4648a8"/>
+  <text x="264" y="177" text-anchor="middle" font-size="14" fill="#4648a8">Load balancer</text>
+  <text x="264" y="195" text-anchor="middle" font-size="11.5" fill="#4648a8">no sticky routing</text>
+
+  <path d="M 264 206 V 228 M 98 228 H 430 M 98 228 V 250 M 264 228 V 250 M 430 228 V 250"
+        fill="none" stroke="#4648a8" stroke-width="1.5"/>
+
+  <!-- Instances -->
+  <g>
+    <rect x="20" y="250" width="156" height="130" fill="none" stroke="#7db249"/>
+    <text x="98" y="268" text-anchor="middle" font-size="12" fill="#5f8f35">Instance 1</text>
+    <rect x="30" y="276" width="136" height="46" fill="#7db249"/>
+    <text x="98" y="296" text-anchor="middle" font-size="14" fill="#ffffff">Java MCP Server</text>
+    <text x="98" y="313" text-anchor="middle" font-size="11" fill="#ffffff">Servlet transport</text>
+    <rect x="30" y="328" width="136" height="40" fill="#4648a8"/>
+    <text x="98" y="353" text-anchor="middle" font-size="13" fill="#ffffff">Your repositories</text>
+  </g>
+  <g>
+    <rect x="186" y="250" width="156" height="130" fill="none" stroke="#7db249"/>
+    <text x="264" y="268" text-anchor="middle" font-size="12" fill="#5f8f35">Instance 2</text>
+    <rect x="196" y="276" width="136" height="46" fill="#7db249"/>
+    <text x="264" y="296" text-anchor="middle" font-size="14" fill="#ffffff">Java MCP Server</text>
+    <text x="264" y="313" text-anchor="middle" font-size="11" fill="#ffffff">Servlet transport</text>
+    <rect x="196" y="328" width="136" height="40" fill="#4648a8"/>
+    <text x="264" y="353" text-anchor="middle" font-size="13" fill="#ffffff">Your repositories</text>
+  </g>
+  <g>
+    <rect x="352" y="250" width="156" height="130" fill="none" stroke="#7db249"/>
+    <text x="430" y="268" text-anchor="middle" font-size="12" fill="#5f8f35">Instance N</text>
+    <rect x="362" y="276" width="136" height="46" fill="#7db249"/>
+    <text x="430" y="296" text-anchor="middle" font-size="14" fill="#ffffff">Java MCP Server</text>
+    <text x="430" y="313" text-anchor="middle" font-size="11" fill="#ffffff">Servlet transport</text>
+    <rect x="362" y="328" width="136" height="40" fill="#4648a8"/>
+    <text x="430" y="353" text-anchor="middle" font-size="13" fill="#ffffff">Your repositories</text>
+  </g>
+
+  <!-- Shared backends -->
+  <path d="M 98 380 V 402 H 430 V 380 M 264 380 V 402 M 170 402 V 426 M 370 402 V 430"
+        fill="none" stroke="#7db249" stroke-width="1.5"/>
+
+  <path d="M 110 432 V 472 A 60 12 0 0 0 230 472 V 432 Z" fill="#4648a8"/>
+  <ellipse cx="170" cy="432" rx="60" ry="12" fill="#4648a8" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="170" y="468" text-anchor="middle" font-size="14" fill="#ffffff">DBs</text>
+
+  <rect x="270" y="430" width="200" height="50" fill="#4648a8"/>
+  <text x="370" y="460" text-anchor="middle" font-size="13" fill="#ffffff">Your backend applications</text>
+
+  <!-- Divider -->
+  <line x1="556" y1="20" x2="556" y2="490" stroke="#4648a8" stroke-opacity="0.25" stroke-dasharray="4 5"/>
+
+  <!-- ===== STDIO ===== -->
+  <text x="730" y="30" text-anchor="middle" font-size="20" fill="#4648a8">MCP Server (STDIO)</text>
+
+  <rect x="620" y="52" width="220" height="154" fill="none" stroke="#4648a8"/>
+  <text x="730" y="72" text-anchor="middle" font-size="13" fill="#4648a8">Client process</text>
+  <rect x="650" y="82" width="160" height="38" fill="#ffffff" stroke="#7db249"/>
+  <text x="730" y="106" text-anchor="middle" font-size="13" fill="#5f8f35">LLM Application</text>
+  <line x1="730" y1="120" x2="730" y2="136" stroke="#7db249" stroke-width="1.5"/>
+  <rect x="650" y="136" width="160" height="56" fill="#7db249"/>
+  <text x="730" y="160" text-anchor="middle" font-size="14" fill="#ffffff">Java MCP Client</text>
+  <text x="730" y="178" text-anchor="middle" font-size="11" fill="#ffffff">STDIO transport</text>
+
+  <line x1="730" y1="206" x2="730" y2="250" stroke="#4648a8" stroke-width="1.5"/>
+  <text x="742" y="233" font-size="13" fill="#4648a8">MCP Protocol (STDIO)</text>
+
+  <rect x="620" y="250" width="220" height="130" fill="none" stroke="#7db249"/>
+  <text x="730" y="268" text-anchor="middle" font-size="12" fill="#5f8f35">Server process</text>
+  <rect x="650" y="276" width="160" height="46" fill="#7db249"/>
+  <text x="730" y="296" text-anchor="middle" font-size="14" fill="#ffffff">Java MCP Server</text>
+  <text x="730" y="313" text-anchor="middle" font-size="11" fill="#ffffff">STDIO transport</text>
+  <rect x="650" y="328" width="160" height="40" fill="#4648a8"/>
+  <text x="730" y="353" text-anchor="middle" font-size="13" fill="#ffffff">Your repositories</text>
+
+  <line x1="730" y1="380" x2="730" y2="430" stroke="#7db249" stroke-width="1.5"/>
+  <rect x="630" y="430" width="200" height="50" fill="#4648a8"/>
+  <text x="730" y="460" text-anchor="middle" font-size="13" fill="#ffffff">Your backend applications</text>
+</svg>
