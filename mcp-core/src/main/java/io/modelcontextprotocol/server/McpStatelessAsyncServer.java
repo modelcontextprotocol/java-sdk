@@ -764,8 +764,18 @@ public class McpStatelessAsyncServer {
 
 	private McpStatelessRequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
 		return (ctx, params) -> {
-			McpSchema.CompleteRequest request = jsonMapper.convertValue(params, new TypeRef<>() {
-			});
+			McpSchema.CompleteRequest request;
+			try {
+				request = jsonMapper.convertValue(params, new TypeRef<>() {
+				});
+			}
+			catch (IllegalArgumentException e) {
+				// ref and argument are required and have no default to fall back on
+				logger.debug("Malformed completion request", e);
+				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
+					.message("Invalid completion request: ref and argument are required")
+					.build());
+			}
 
 			if (request.ref() == null) {
 				return Mono.error(
