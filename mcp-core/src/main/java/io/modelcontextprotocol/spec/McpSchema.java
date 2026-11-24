@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
  * @author Surbhi Bansal
  * @author Anurag Pant
  * @author Dariusz Jędrzejczyk
+ * @author Yanming Zhou
  */
 public final class McpSchema {
 
@@ -605,6 +606,14 @@ public final class McpSchema {
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record RootCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
 
+			/**
+			 * @deprecated Use {@link #builder()} instead.
+			 */
+			@Deprecated
+			public RootCapabilities {
+
+			}
+
 			public static Builder builder() {
 				return new Builder();
 			}
@@ -862,6 +871,14 @@ public final class McpSchema {
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record PromptCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
 
+			/**
+			 * @deprecated Use {@link #builder()} instead.
+			 */
+			@Deprecated
+			public PromptCapabilities {
+
+			}
+
 			public static Builder builder() {
 				return new Builder();
 			}
@@ -893,6 +910,14 @@ public final class McpSchema {
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record ResourceCapabilities(@JsonProperty("subscribe") Boolean subscribe,
 				@JsonProperty("listChanged") Boolean listChanged) {
+
+			/**
+			 * @deprecated Use {@link #builder()} instead.
+			 */
+			@Deprecated
+			public ResourceCapabilities {
+
+			}
 
 			public static Builder builder() {
 				return new Builder();
@@ -930,6 +955,14 @@ public final class McpSchema {
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record ToolCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
+
+			/**
+			 * @deprecated Use {@link #builder()} instead.
+			 */
+			@Deprecated
+			public ToolCapabilities {
+
+			}
 
 			public static Builder builder() {
 				return new Builder();
@@ -1176,6 +1209,10 @@ public final class McpSchema {
 		@JsonProperty("sizes") List<String> sizes,
 		@JsonProperty("theme") String theme) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder(String)} instead.
+		 */
+		@Deprecated
 		public Icon {
 			Assert.notNull(src, "Icon src must not be null");
 		}
@@ -2413,6 +2450,10 @@ public final class McpSchema {
 		@JsonProperty("role") Role role,
 		@JsonProperty("content") Content content) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder(Role, Content)}.
+		 */
+		@Deprecated
 		public PromptMessage {
 			Assert.notNull(role, "role must not be null");
 			Assert.notNull(content, "content must not be null");
@@ -2759,6 +2800,14 @@ public final class McpSchema {
 		@JsonProperty("$defs") Map<String, Object> defs,
 		@JsonProperty("definitions") Map<String, Object> definitions) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
+		public JsonSchema {
+
+		}
+
 		public static Builder builder() {
 			return new Builder();
 		}
@@ -2834,6 +2883,14 @@ public final class McpSchema {
 		@JsonProperty("idempotentHint") Boolean idempotentHint,
 		@JsonProperty("openWorldHint") Boolean openWorldHint,
 		@JsonProperty("returnDirect") Boolean returnDirect) { // @formatter:on
+
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
+		public ToolAnnotations {
+
+		}
 
 		public static Builder builder() {
 			return new Builder();
@@ -3263,6 +3320,10 @@ public final class McpSchema {
 		@JsonProperty("structuredContent") Object structuredContent,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public CallToolResult {
 			Assert.notNull(content, "content must not be null");
 		}
@@ -3443,6 +3504,14 @@ public final class McpSchema {
 		@JsonProperty("speedPriority") Double speedPriority,
 		@JsonProperty("intelligencePriority") Double intelligencePriority) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
+		public ModelPreferences {
+
+		}
+
 		public static Builder builder() {
 			return new Builder();
 		}
@@ -3531,6 +3600,10 @@ public final class McpSchema {
 		@JsonProperty("role") Role role,
 		@JsonProperty("content") Content content) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder(Role, Content)} instead.
+		 */
+		@Deprecated
 		public SamplingMessage {
 			Assert.notNull(role, "role must not be null");
 			Assert.notNull(content, "content must not be null");
@@ -3617,6 +3690,10 @@ public final class McpSchema {
 		@JsonProperty("metadata") Map<String, Object> metadata,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder(List, int)} instead.
+		 */
+		@Deprecated
 		public CreateMessageRequest {
 			Assert.notNull(messages, "messages must not be null");
 			Assert.notNull(maxTokens, "maxTokens must not be null");
@@ -3859,6 +3936,10 @@ public final class McpSchema {
 		}
 
 		// backwards compatibility constructor
+		/**
+		 * @deprecated Use {@link #builder(Role, Content, String)} instead.
+		 */
+		@Deprecated
 		public CreateMessageResult(Role role, Content content, String model, StopReason stopReason) {
 			this(role, content, model, stopReason, null);
 		}
@@ -4007,6 +4088,10 @@ public final class McpSchema {
 		@JsonProperty("enumNames") List<String> enumNames,
 		@JsonProperty("default") String defaultValue) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public LegacyTitledEnumSchema {
 			Assert.notNull(enumValues, "enumValues must not be null");
 		}
@@ -4098,6 +4183,10 @@ public final class McpSchema {
 		@JsonProperty("enum") List<String> enumValues,
 		@JsonProperty("default") String defaultValue) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public UntitledSingleSelectEnumSchema {
 			Assert.notNull(enumValues, "enumValues must not be null");
 		}
@@ -4176,6 +4265,10 @@ public final class McpSchema {
 		@JsonProperty("oneOf") List<EnumSchemaOption> oneOf,
 		@JsonProperty("default") String defaultValue) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public TitledSingleSelectEnumSchema {
 			Assert.notEmpty(oneOf, "oneOf must not be empty");
 		}
@@ -4248,6 +4341,10 @@ public final class McpSchema {
 	public record UntitledMultiSelectItems( // @formatter:off
 		@JsonProperty("enum") List<String> enumValues) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public UntitledMultiSelectItems {
 			Assert.notNull(enumValues, "enumValues must not be null");
 		}
@@ -4308,6 +4405,10 @@ public final class McpSchema {
 		@JsonProperty("maxItems") Integer maxItems,
 		@JsonProperty("default") List<String> defaultValue) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public UntitledMultiSelectEnumSchema {
 			Assert.notNull(items, "items must not be null");
 		}
@@ -4397,6 +4498,10 @@ public final class McpSchema {
 	public record TitledMultiSelectItems( // @formatter:off
 		@JsonProperty("anyOf") List<EnumSchemaOption> anyOf) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public TitledMultiSelectItems {
 			Assert.notNull(anyOf, "anyOf must not be null");
 		}
@@ -4452,6 +4557,10 @@ public final class McpSchema {
 		@JsonProperty("maxItems") Integer maxItems,
 		@JsonProperty("default") List<String> defaultValue) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public TitledMultiSelectEnumSchema {
 			Assert.notNull(items, "items must not be null");
 		}
@@ -4543,6 +4652,14 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("default") Boolean defaultValue) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
+		public BooleanSchema {
+
+		}
+
 		@JsonProperty("type")
 		public String type() {
 			return "boolean";
@@ -4607,6 +4724,10 @@ public final class McpSchema {
 		@JsonProperty("maximum") Number maximum,
 		@JsonProperty("default") Number defaultValue) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public NumberSchema {
 			Assert.notNull(type, "type must not be null");
 		}
@@ -4688,6 +4809,14 @@ public final class McpSchema {
 		@JsonProperty("maxLength") Integer maxLength,
 		@JsonProperty("format") String format,
 		@JsonProperty("default") String defaultValue) { // @formatter:on
+
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
+		public StringSchema {
+
+		}
 
 		@JsonProperty("type")
 		public String type() {
@@ -4855,6 +4984,10 @@ public final class McpSchema {
 
 		public static final String MODE = "form";
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public ElicitFormRequest {
 			Assert.notNull(message, "message must not be null");
 			Assert.notNull(requestedSchema, "requestedSchema must not be null");
@@ -4980,6 +5113,10 @@ public final class McpSchema {
 
 		public static final String MODE = "url";
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public ElicitUrlRequest {
 			Assert.notNull(message, "message must not be null");
 			Assert.notNull(url, "url must not be null");
@@ -5104,6 +5241,10 @@ public final class McpSchema {
 		} // @formatter:on
 
 		// backwards compatibility constructor
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public ElicitResult(Action action, Map<String, Object> content) {
 			this(action, content, null);
 		}
@@ -5260,6 +5401,10 @@ public final class McpSchema {
 		@JsonProperty("message") String message,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Notification { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public ProgressNotification {
 			Assert.notNull(progressToken, "progressToken must not be null");
 			Assert.notNull(progress, "progress must not be null");
@@ -5421,6 +5566,10 @@ public final class McpSchema {
 		}
 
 		// backwards compatibility constructor
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public LoggingMessageNotification(LoggingLevel level, String logger, String data) {
 			this(level, logger, data, null);
 		}
@@ -5618,6 +5767,10 @@ public final class McpSchema {
 
 		public static final String TYPE = "ref/prompt";
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public PromptReference {
 			Assert.hasText(name, "name must not be null or empty");
 			if (type != null && !TYPE.equals(type)) {
@@ -5642,6 +5795,9 @@ public final class McpSchema {
 			this(type, name, null);
 		}
 
+		/**
+		 * @deprecated Use {@link #builder(String)} instead.
+		 */
 		public PromptReference(String name) {
 			this(TYPE, name, null);
 		}
@@ -5749,6 +5905,10 @@ public final class McpSchema {
 		@JsonProperty("_meta") Map<String, Object> meta,
 		@JsonProperty("context") CompleteContext context) implements Request { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder(CompleteReference, CompleteArgument)} instead.
+		 */
+		@Deprecated
 		public CompleteRequest {
 			Assert.notNull(ref, "ref must not be null");
 			Assert.notNull(argument, "argument must not be null");
@@ -5836,6 +5996,14 @@ public final class McpSchema {
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record CompleteContext(@JsonProperty("arguments") Map<String, String> arguments) {
+
+			/**
+			 * @deprecated Use {@link #builder()} instead.
+			 */
+			@Deprecated
+			public CompleteContext {
+
+			}
 
 			public static Builder builder() {
 				return new Builder();
@@ -5967,6 +6135,10 @@ public final class McpSchema {
 		@JsonProperty("text") String text,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder(String)} instead.
+		 */
+		@Deprecated
 		public TextContent {
 			Assert.notNull(text, "text must not be null");
 		}
@@ -6042,6 +6214,10 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder(String, String)} instead.
+		 */
+		@Deprecated
 		public ImageContent {
 			Assert.notNull(data, "data must not be null");
 			Assert.notNull(mimeType, "mimeType must not be null");
@@ -6127,6 +6303,10 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder(String, String)} instead.
+		 */
+		@Deprecated
 		public AudioContent {
 			Assert.notNull(data, "data must not be null");
 			Assert.notNull(mimeType, "mimeType must not be null");
@@ -6213,6 +6393,10 @@ public final class McpSchema {
 		@JsonProperty("resource") ResourceContents resource,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder(ResourceContents)} instead.
+		 */
+		@Deprecated
 		public EmbeddedResource {
 			Assert.notNull(resource, "resource must not be null");
 		}
@@ -6297,6 +6481,14 @@ public final class McpSchema {
 		@JsonProperty("size") Long size,
 		@JsonProperty("annotations") Annotations annotations,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Content, ResourceContent { // @formatter:on
+
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
+		public ResourceLink {
+
+		}
 
 		public static Builder builder() {
 			return new Builder();
@@ -6391,6 +6583,10 @@ public final class McpSchema {
 		@JsonProperty("name") String name,
 		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder(String)} instead.
+		 */
+		@Deprecated
 		public Root {
 			Assert.notNull(uri, "uri must not be null");
 		}
@@ -6405,6 +6601,10 @@ public final class McpSchema {
 			return new Root(uri, name, meta);
 		}
 
+		/**
+		 * @deprecated Use {@link #builder(String)} instead.
+		 */
+		@Deprecated
 		public Root(String uri, String name) {
 			this(uri, name, null);
 		}
@@ -6462,6 +6662,10 @@ public final class McpSchema {
 		@JsonProperty("nextCursor") String nextCursor,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder(List)} instead.
+		 */
+		@Deprecated
 		public ListRootsResult {
 			Assert.notNull(roots, "roots must not be null");
 		}
