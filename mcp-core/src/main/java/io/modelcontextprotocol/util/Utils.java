@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.util;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.Map;
 
@@ -76,9 +77,40 @@ public final class Utils {
 		if (endpointUri.isAbsolute() && !isUnderBaseUri(baseUrl, endpointUri)) {
 			throw new IllegalArgumentException("Absolute endpoint URL does not match the base URL.");
 		}
-		else {
-			return baseUrl.resolve(endpointUri);
+		else if (endpointUri.isAbsolute()) {
+			return endpointUri;
 		}
+
+		return baseUrlWithTrailingSlash(baseUrl).resolve(removeLeadingSlash(endpointUrl));
+	}
+
+	private static URI baseUrlWithTrailingSlash(URI baseUrl) {
+		String path = baseUrl.getPath();
+		if (path == null || path.isEmpty()) {
+			return createUriWithPath(baseUrl, "/");
+		}
+		if (path.endsWith("/")) {
+			return baseUrl;
+		}
+		return createUriWithPath(baseUrl, path + "/");
+	}
+
+	private static URI createUriWithPath(URI baseUrl, String path) {
+		try {
+			return new URI(baseUrl.getScheme(), baseUrl.getAuthority(), path, baseUrl.getQuery(),
+					baseUrl.getFragment());
+		}
+		catch (URISyntaxException ex) {
+			throw new IllegalArgumentException("Invalid base URL.", ex);
+		}
+	}
+
+	private static String removeLeadingSlash(String endpointUrl) {
+		String result = endpointUrl;
+		while (result.startsWith("/")) {
+			result = result.substring(1);
+		}
+		return result;
 	}
 
 	/**
