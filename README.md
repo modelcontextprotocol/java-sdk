@@ -198,7 +198,7 @@ MCP supports both clients (applications consuming MCP servers) and servers (appl
 
 * **Why**: MCP servers must restrict access to authenticated and authorized clients. Authorization needs differ across environments such as Spring Security, MicroProfile JWT, or custom solutions. Providing hooks avoids lock-in and leverages proven libraries.
 
-* **How we expose it**: Authorization is integrated into the server transport layer. The SDK does not include its own authorization system.
+* **How we expose it**: Authorization is integrated into the server transport layer. The SDK does not include its own authorization system. Because the SDK has no notion of an authenticated user, the session-based HTTP transports do not bind sessions to users; servers that authenticate users are responsible for that binding (see [Authentication and Session Binding](https://java.sdk.modelcontextprotocol.io/latest/server/#authentication-and-session-binding)).
 
 * **How it fits the SDK**: This keeps server-side security ecosystem-neutral, while ensuring applications can plug in their preferred authorization strategy.
 

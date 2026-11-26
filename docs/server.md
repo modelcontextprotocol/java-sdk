@@ -343,6 +343,40 @@ HttpServletStreamableServerTransportProvider transportProvider =
 
 The same `httpHeaderValidator(...)` method is available on the Stateless and SSE transport builders.
 
+#### Authentication and Session Binding
+
+The SDK does not authenticate or authorize requests. That belongs to the application, typically in a servlet
+filter or Spring Security in front of the transport. The transport has no notion of a user, so it cannot know
+which user created a session.
+
+!!! warning
+    The Streamable HTTP and SSE transports route each request to a session by its session ID alone: the
+    `Mcp-Session-Id` header for Streamable HTTP, the `sessionId` query parameter of the message endpoint for SSE.
+    On a server that authenticates requests, a user who holds a valid credential and obtains another user's
+    session ID can call tools in that session, take over its `GET` stream (and with it the notifications,
+    sampling and elicitation requests meant for the other user), or end it with `DELETE`.
+
+Session IDs are random UUIDs, but they can leak through logs, proxies or clients that share one session
+between users. The MCP [Security Best Practices](https://modelcontextprotocol.io/docs/2025-11-25/tutorials/security/security_best_practices#session-hijacking)
+state that servers **SHOULD** bind session IDs to user-specific information. If your server authenticates
+users, bind each session to the user who created it and reject requests from anyone else. The Stateless
+transport has no sessions, so this does not apply to it.
+
+For Streamable HTTP, a servlet filter placed after your authentication filter can do this. It records the
+user when the transport sets the `Mcp-Session-Id` header on the `initialize` response. On every later
+request, it compares the authenticated user with the recorded one. On a mismatch it answers `404`, the same
+status as for an unknown session, so the response does not reveal that the session exists.
+
+The deprecated SSE transport sends the session ID in the body of the SSE stream, not in a header, so such a
+filter cannot capture it. Use Streamable HTTP on servers that authenticate users.
+
+With session binding in place, a client that shares one MCP session between several users is refused for
+every user except the one who created the session. That is the intended result, because those users would
+otherwise share server-side session state. Such clients need one MCP session per user.
+
+In Spring applications, [MCP Security](https://github.com/spring-ai-community/mcp-security) provides opt-in
+session binding for the Spring AI transports.
+
 ## Server Capabilities
 
 The server can be configured with various capabilities:
