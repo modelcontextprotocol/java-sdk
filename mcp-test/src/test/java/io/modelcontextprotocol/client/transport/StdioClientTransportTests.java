@@ -6,12 +6,20 @@ package io.modelcontextprotocol.client.transport;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import reactor.test.StepVerifier;
 
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
@@ -61,6 +69,52 @@ class StdioClientTransportTests {
 				.pollInterval(Duration.ofMillis(100))
 				.untilAsserted(() -> assertThat(testErr.toString())
 					.contains("Inbound message exceeds the maximum allowed size"));
+		}
+		finally {
+			StepVerifier.create(transport.closeGracefully()).verifyComplete();
+		}
+	}
+
+	@Test
+	void shouldFailMalformedResponsesAndKeepProcessing(@TempDir Path tempDir) throws Exception {
+		// A server process that answers with two malformed responses and a line that
+		// is not JSON, followed by a valid response. It then stays alive until its
+		// stdin is closed.
+		Path serverOutput = tempDir.resolve("server-output.jsonl");
+		Files.write(serverOutput,
+				List.of("{\"id\":\"missing-jsonrpc\",\"result\":{}}",
+						"{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{},\"error\":{\"code\":-32000,\"message\":\"boom\"}}",
+						"this is not json", "{\"jsonrpc\":\"2.0\",\"id\":\"valid\",\"result\":{}}"));
+		ServerParameters params = ServerParameters.builder("sh")
+			.args("-c", "cat '" + serverOutput.toString().replace('\\', '/') + "'; cat > /dev/null")
+			.build();
+
+		List<JSONRPCMessage> received = new CopyOnWriteArrayList<>();
+		StdioClientTransport transport = new StdioClientTransport(params, JSON_MAPPER);
+		try {
+			StepVerifier.create(transport.connect(msg -> msg.doOnNext(received::add))).verifyComplete();
+
+			Awaitility.await()
+				.atMost(Duration.ofSeconds(5))
+				.pollInterval(Duration.ofMillis(100))
+				.untilAsserted(() -> assertThat(received).hasSize(3));
+
+			// each malformed response fails the request it answers
+			assertThat(received.get(0)).isInstanceOfSatisfying(JSONRPCResponse.class, response -> {
+				assertThat(response.id()).isEqualTo("missing-jsonrpc");
+				assertThat(response.result()).isNull();
+				assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+			});
+			assertThat(received.get(1)).isInstanceOfSatisfying(JSONRPCResponse.class, response -> {
+				assertThat(response.id()).isEqualTo(2);
+				assertThat(response.result()).isNull();
+				assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+			});
+			// the transport is still reading, so the valid response gets through
+			assertThat(received.get(2)).isInstanceOfSatisfying(JSONRPCResponse.class, response -> {
+				assertThat(response.id()).isEqualTo("valid");
+				assertThat(response.error()).isNull();
+			});
 		}
 		finally {
 			StepVerifier.create(transport.closeGracefully()).verifyComplete();
