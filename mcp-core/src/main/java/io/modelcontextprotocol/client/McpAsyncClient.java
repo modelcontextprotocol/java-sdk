@@ -436,7 +436,6 @@ public class McpAsyncClient {
 	 */
 	public void close() {
 		this.clientCache.clear();
-		this.toolsOutputSchemaCache.clear();
 		this.initializer.close();
 		this.transport.close();
 	}
@@ -448,7 +447,6 @@ public class McpAsyncClient {
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			this.clientCache.clear();
-			this.toolsOutputSchemaCache.clear();
 			return this.initializer.closeGracefully().then(transport.closeGracefully());
 		});
 	}
@@ -831,7 +829,6 @@ public class McpAsyncClient {
 		// TODO: params are not used yet
 		return params -> {
 			this.clientCache.clearTools();
-			this.toolsOutputSchemaCache.clear();
 			return this.listTools()
 				.flatMap(listToolsResult -> Flux.fromIterable(toolsChangeConsumers)
 					.flatMap(consumer -> consumer.apply(listToolsResult.tools()))
