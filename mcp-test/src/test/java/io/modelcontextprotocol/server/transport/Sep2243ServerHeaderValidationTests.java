@@ -8,11 +8,14 @@ import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.util.McpJsonMapperUtils;
 import jakarta.servlet.http.HttpServlet;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,23 +35,33 @@ class Sep2243ServerHeaderValidationTests {
 		return McpJsonMapperUtils.JSON_MAPPER.writeValueAsString(request).getBytes(StandardCharsets.UTF_8);
 	}
 
-	private static MockHttpServletRequest req(String uri, Map<String, String> headers) {
-		var req = new MockHttpServletRequest();
-		req.setMethod("POST");
-		req.setRequestURI(uri);
-		req.setContentType("application/json");
-		req.addHeader("Accept", ACCEPT);
-		headers.forEach(req::addHeader);
-		return req;
+	private record Response(int getStatus, String getContentAsString) {
 	}
 
-	private static MockHttpServletResponse invoke(HttpServlet servlet, String uri, Map<String, String> headers,
+	private static Response invoke(HttpServlet servlet, String uri, Map<String, String> headers, byte[] body)
+			throws Exception {
+		return invoke(servlet, "POST", uri, headers, body);
+	}
+
+	private static Response invoke(HttpServlet servlet, String method, String uri, Map<String, String> headers,
 			byte[] body) throws Exception {
-		var req = req(uri, headers);
-		req.setContent(body);
-		var resp = new MockHttpServletResponse();
-		servlet.service(req, resp);
-		return resp;
+		int port = TomcatTestUtil.findAvailablePort();
+		Tomcat tomcat = TomcatTestUtil.createTomcatServer("", port, servlet);
+		tomcat.start();
+		try {
+			var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + uri))
+				.method(method, HttpRequest.BodyPublishers.ofByteArray(body))
+				.header("Accept", ACCEPT)
+				.header("Content-Type", "application/json");
+			headers.forEach(request::header);
+			var response = HttpClient.newHttpClient()
+				.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+			return new Response(response.statusCode(), response.body());
+		}
+		finally {
+			tomcat.stop();
+			tomcat.destroy();
+		}
 	}
 
 	// --- Streamable servlet provider --------------------------------------------------
@@ -273,6 +286,24 @@ class Sep2243ServerHeaderValidationTests {
 		var resp = invoke(transport, "/mcp", Map.of(HttpHeaders.PROTOCOL_VERSION, "junk"), initializeBody());
 
 		assertThat(resp.getContentAsString()).doesNotContain("Unsupported protocol version");
+	}
+
+	@Test
+	void streamableRejectsUnsupportedProtocolVersionOnGet() throws Exception {
+		var provider = HttpServletStreamableServerTransportProvider.builder().mcpEndpoint("/mcp").build();
+		var resp = invoke(provider, "GET", "/mcp", Map.of(HttpHeaders.PROTOCOL_VERSION, "junk"), new byte[0]);
+
+		assertThat(resp.getStatus()).isEqualTo(400);
+		assertThat(resp.getContentAsString()).contains("Unsupported protocol version");
+	}
+
+	@Test
+	void streamableRejectsUnsupportedProtocolVersionOnDelete() throws Exception {
+		var provider = HttpServletStreamableServerTransportProvider.builder().mcpEndpoint("/mcp").build();
+		var resp = invoke(provider, "DELETE", "/mcp", Map.of(HttpHeaders.PROTOCOL_VERSION, "junk"), new byte[0]);
+
+		assertThat(resp.getStatus()).isEqualTo(400);
+		assertThat(resp.getContentAsString()).contains("Unsupported protocol version");
 	}
 
 }
