@@ -32,6 +32,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 class McpClientCacheTests {
 
 	@Test
+	void keyIsStableWhenNestedMetaIsMutatedAfterConstruction() {
+		List<Object> nestedList = new java.util.ArrayList<>(List.of("a"));
+		Map<String, Object> nestedMap = new HashMap<>(Map.of("list", nestedList));
+		Map<String, Object> meta = new HashMap<>(Map.of("nested", nestedMap));
+		var key = new McpClientCacheKey.ListTools("", meta);
+		int hashBefore = key.hashCode();
+
+		nestedList.add("b");
+		nestedMap.put("extra", 1);
+		meta.put("other", true);
+
+		assertThat(key.hashCode()).isEqualTo(hashBefore);
+		assertThat(key).isEqualTo(new McpClientCacheKey.ListTools("", Map.of("nested", Map.of("list", List.of("a")))));
+	}
+
+	@Test
 	void cacheDirectOperationsAndTtlExpiration() {
 		AtomicLong currentTime = new AtomicLong(1000L);
 		McpClientCache cache = new McpClientCache(

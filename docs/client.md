@@ -569,6 +569,10 @@ honor those decisions.
 - A response that arrives after the notification that invalidates it, which would otherwise pin a
   stale listing for the whole TTL.
 
+A cache hit is served without contacting the server and without checking the session state, so a
+cached listing can still be returned after the transport has dropped, until its TTL lapses or the
+client is re-initialized or closed.
+
 A TTL longer than 24 hours is capped at 24 hours, so a client can't be left serving a response the
 server has no way to invalidate.
 
