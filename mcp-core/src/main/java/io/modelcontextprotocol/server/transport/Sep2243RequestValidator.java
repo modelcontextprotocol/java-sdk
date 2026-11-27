@@ -1,5 +1,5 @@
 /*
- * Copyright 2026-2026 the original author or authors.
+ * Copyright 2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server.transport;
