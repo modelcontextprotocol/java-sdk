@@ -40,12 +40,21 @@ public record McpListCacheOptions(long ttlMs, McpSchema.CacheScope cacheScope) {
 	}
 
 	/**
+	 * The options to use for a listing that may be filtered per caller: a filtered
+	 * listing is always scoped {@code private}, whatever scope was configured.
+	 * @param filtered whether a per-request filter applies to the listing.
+	 */
+	McpListCacheOptions forListing(boolean filtered) {
+		return filtered && this.cacheScope != McpSchema.CacheScope.PRIVATE
+				? new McpListCacheOptions(this.ttlMs, McpSchema.CacheScope.PRIVATE) : this;
+	}
+
+	/**
 	 * @param ttl how long a client may reuse a listing. MUST NOT be null or negative.
 	 * @param cacheScope whether a shared cache may serve the listing to another
-	 * principal. Use {@link McpSchema.CacheScope#PUBLIC} only for a listing that is
-	 * identical for every caller: a per-request tool filter makes the listing
-	 * caller-specific, and {@code public} would let a gateway hand one principal's
-	 * filtered listing to another.
+	 * principal. Use {@link McpSchema.CacheScope#PUBLIC} only for listings that are
+	 * identical for every caller. {@code tools/list} is sent {@code private} regardless
+	 * when a tool filter is registered.
 	 */
 	public static McpListCacheOptions of(Duration ttl, McpSchema.CacheScope cacheScope) {
 		Assert.notNull(ttl, "ttl must not be null");

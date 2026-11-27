@@ -87,6 +87,10 @@ public class McpStatelessAsyncServer {
 	 */
 	private final McpListCacheOptions listCacheOptions;
 
+	// tools/list is filtered per caller whenever a tool filter is registered, so it is
+	// never scoped PUBLIC then, whatever listCache() configured.
+	private final McpListCacheOptions toolListCacheOptions;
+
 	McpStatelessAsyncServer(McpStatelessServerTransport mcpTransport, McpJsonMapper jsonMapper,
 			McpStatelessServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
@@ -106,6 +110,7 @@ public class McpStatelessAsyncServer {
 		this.validateToolInputs = validateToolInputs;
 		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
 		this.listCacheOptions = listCacheOptions != null ? listCacheOptions : McpListCacheOptions.NONE;
+		this.toolListCacheOptions = this.listCacheOptions.forListing(!features.toolFilters().isEmpty());
 
 		Map<String, McpStatelessRequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -433,11 +438,9 @@ public class McpStatelessAsyncServer {
 				.filterWhen(tool -> this.toolFilter.isVisible(ctx, tool)
 					.onErrorResume(error -> opaqueListFilterError(tool, error)))
 				.collectList()
-				// PRIVATE, not PUBLIC: the listing is filtered per caller, so a shared
-				// cache must never serve one principal's response to another.
 				.map(tools -> McpSchema.ListToolsResult.builder(tools)
-					.ttlMs(this.listCacheOptions.ttlMs())
-					.cacheScope(this.listCacheOptions.cacheScope())
+					.ttlMs(this.toolListCacheOptions.ttlMs())
+					.cacheScope(this.toolListCacheOptions.cacheScope())
 					.build());
 		};
 	}

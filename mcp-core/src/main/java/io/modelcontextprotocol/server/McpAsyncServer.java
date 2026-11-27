@@ -125,6 +125,10 @@ public class McpAsyncServer {
 	 */
 	private final McpListCacheOptions listCacheOptions;
 
+	// tools/list is filtered per caller whenever a tool filter is registered, so it is
+	// never scoped PUBLIC then, whatever listCache() configured.
+	private final McpListCacheOptions toolListCacheOptions;
+
 	private List<String> protocolVersions;
 
 	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
@@ -159,6 +163,7 @@ public class McpAsyncServer {
 		this.validateToolInputs = validateToolInputs;
 		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
 		this.listCacheOptions = listCacheOptions != null ? listCacheOptions : McpListCacheOptions.NONE;
+		this.toolListCacheOptions = this.listCacheOptions.forListing(!features.toolFilters().isEmpty());
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -196,6 +201,7 @@ public class McpAsyncServer {
 		this.validateToolInputs = validateToolInputs;
 		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
 		this.listCacheOptions = listCacheOptions != null ? listCacheOptions : McpListCacheOptions.NONE;
+		this.toolListCacheOptions = this.listCacheOptions.forListing(!features.toolFilters().isEmpty());
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -566,11 +572,9 @@ public class McpAsyncServer {
 				.filterWhen(tool -> this.toolFilter.isVisible(exchange.transportContext(), tool)
 					.onErrorResume(error -> opaqueListFilterError(tool, error)))
 				.collectList()
-				// PRIVATE, not PUBLIC: the listing is filtered per caller, so a shared
-				// cache must never serve one principal's response to another.
 				.map(tools -> McpSchema.ListToolsResult.builder(tools)
-					.ttlMs(this.listCacheOptions.ttlMs())
-					.cacheScope(this.listCacheOptions.cacheScope())
+					.ttlMs(this.toolListCacheOptions.ttlMs())
+					.cacheScope(this.toolListCacheOptions.cacheScope())
 					.build());
 		};
 	}

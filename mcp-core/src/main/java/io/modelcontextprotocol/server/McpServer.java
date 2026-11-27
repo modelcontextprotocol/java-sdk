@@ -452,9 +452,9 @@ public interface McpServer {
 		 * {@code resources/list} and {@code resources/templates/list} responses
 		 * (SEP-2549). Listings are not cached by default.
 		 * <p>
-		 * Keep the scope {@code private} whenever a listing varies per caller, which any
-		 * registered list filter makes true: with {@code public} a shared cache may serve
-		 * one principal's filtered listing to another.
+		 * A registered tool filter makes {@code tools/list} vary per caller, so that
+		 * listing is always sent with scope {@code private} whatever scope is configured
+		 * here; the other listings use the configured scope.
 		 * @param ttl how long a client may reuse a listing before re-fetching it. MUST
 		 * NOT be null or negative.
 		 * @param cacheScope whether a shared cache may serve the listing to another

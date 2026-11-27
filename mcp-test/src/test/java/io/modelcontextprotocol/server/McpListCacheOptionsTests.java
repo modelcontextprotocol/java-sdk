@@ -63,6 +63,15 @@ class McpListCacheOptionsTests {
 		assertThat(result.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
 	}
 
+	@Test
+	void keepsToolsListPrivateWhenAToolFilterIsRegistered() {
+		var result = listTools(spec -> spec.listCache(Duration.ofMinutes(5), McpSchema.CacheScope.PUBLIC)
+			.addToolFilter((context, tool) -> Mono.just(true)));
+
+		assertThat(result.ttlMs()).isEqualTo(Duration.ofMinutes(5).toMillis());
+		assertThat(result.cacheScope()).isEqualTo(McpSchema.CacheScope.PRIVATE);
+	}
+
 	/**
 	 * Drive one {@code tools/list} against a server built by {@code customizer} and
 	 * return the result it put on the wire.
